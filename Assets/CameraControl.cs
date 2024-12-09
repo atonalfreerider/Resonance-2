@@ -100,6 +100,7 @@ public class CameraControl : MonoBehaviour
 
         if (Keyboard.current.anyKey.isPressed)
         {
+            transform.LookAt(Vector3.zero);
             MovementUpdater.Invoke();
         }
     }
