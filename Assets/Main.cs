@@ -13,6 +13,8 @@ using Util;
 /// </summary>
 public class Main : MonoBehaviour
 {
+    public Material BloomMat;
+    
     static readonly int Color1 = Shader.PropertyToID("_Color");
     public string midiPath;
 
@@ -32,7 +34,6 @@ public class Main : MonoBehaviour
     LineRenderer chromaticLineRenderer;
 
     readonly Dictionary<ulong, Chord> chordLineRenderers = new();
-    Material chordMat;
 
     readonly string[] noteLabels = { "A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#" };
 
@@ -92,8 +93,6 @@ public class Main : MonoBehaviour
         GameObject chromGo = new("chromatic");
         chromGo.transform.SetParent(transform, false);
         chromaticLineRenderer = NewLineRenderer(chromGo, chromaticMat, .007f, true);
-
-        chordMat = new Material(Shader.Find("Unlit/Color"));
 
         SetUmbilic();
     }
@@ -225,7 +224,7 @@ public class Main : MonoBehaviour
 
             // draw thirds as simple lines
             GameObject chordGo = new("chord");
-            LineRenderer chordRend = NewLineRenderer(chordGo, chordMat, .015f, false);
+            LineRenderer chordRend = NewLineRenderer(chordGo, BloomMat, .015f, false);
             Chord newChord = chordGo.AddComponent<Chord>();
             newChord.Init(notes[key], notes[otherKey], chordRend);
             chordLineRenderers.Add(playKey, newChord);
@@ -242,7 +241,7 @@ public class Main : MonoBehaviour
 
             // draw fifths along umbilical
             GameObject chordGo = new("chord");
-            LineRenderer chordRend = NewLineRenderer(chordGo, chordMat, .02f, false);
+            LineRenderer chordRend = NewLineRenderer(chordGo, BloomMat, .02f, false);
 
             Chord newChord = chordGo.AddComponent<Chord>();
             newChord.Init(notes[key], notes[otherKey], chordRend);
