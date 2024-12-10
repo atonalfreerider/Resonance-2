@@ -25,17 +25,16 @@ public class Main : MonoBehaviour
     const float Rad = 1f;
     const int Sections = Tones / Sides;
 
-    readonly List<GameObject> pointGameObjects = new();
+    readonly List<Note> notes = new();
     readonly List<TextBox> noteTextLabels = new();
 
     LineRenderer fifthsLineRenderer;
     LineRenderer chromaticLineRenderer;
 
-    readonly Dictionary<ulong, LineRenderer> chordLineRenderers = new();
+    readonly Dictionary<ulong, Chord> chordLineRenderers = new();
     Material chordMat;
 
     readonly string[] noteLabels = { "A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#" };
-    readonly Dictionary<int, float> hertzTable = new();
 
     int currentKey = 0; // A
 
@@ -53,14 +52,15 @@ public class Main : MonoBehaviour
             {
                 int noteIndex = j * Tones + i;
                 GameObject pointGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Note newNote = pointGo.AddComponent<Note>();
                 pointGo.transform.SetParent(transform, false);
                 pointGo.transform.localScale =
                     Vector3.one * Mathf.Lerp(.03f, .005f, (float)(noteIndex) / (Tones * Octaves));
-                pointGameObjects.Add(pointGo);
+                notes.Add(newNote);
                 pointGo.name = $"{noteLabels[i]} {j}";
 
                 scaleToFifths.Add(noteIndex, next);
-                hertzTable.Add(noteIndex, ToHertz(noteIndex));
+                newNote.Hertz = ToHertz(noteIndex);
 
                 next += 5; // fifths
                 if (next >= Tones * (j + 1))
@@ -108,7 +108,7 @@ public class Main : MonoBehaviour
     void SetChromatic()
     {
         float stack = 0;
-        foreach (GameObject pointGo in pointGameObjects)
+        foreach (Note pointGo in notes)
         {
             pointGo.transform.localPosition = new Vector3(0, stack, 0);
             stack += .03f;
@@ -146,7 +146,7 @@ public class Main : MonoBehaviour
                 // interpolate octave points to centroid of torus
                 Vector3 centroid = Centroid(i);
 
-                pointGameObjects[next].transform.localPosition =
+                notes[next].transform.localPosition =
                     Vector3.Lerp(umbilicPosition, centroid, (float)j / Octaves);
 
                 if (j == 0)
@@ -161,23 +161,19 @@ public class Main : MonoBehaviour
     /// <summary>
     /// Takes input from keyboard or midi file
     /// </summary>
-    void PlayKeys(List<int> keys)
+    void PlayKeys(List<Tuple<int, float>> keysAndAmplitudes)
     {
-        foreach (GameObject pointGameObject in pointGameObjects)
-        {
-            pointGameObject.GetComponent<Renderer>().material.SetColor(Color1, Color.white);
-        }
-
         List<ulong> playingOctaves = new();
         List<ulong> playingThirds = new();
         List<ulong> playingFifths = new();
-        foreach (int key in keys)
+        foreach ((int key, float amp) in keysAndAmplitudes)
         {
-            pointGameObjects[key].GetComponent<Renderer>().material.SetColor(Color1, Color.red);
-
+            notes[key].CurrentAmp = amp;
+            
             int baseKey = key % Tones;
-            foreach (int otherKey in keys)
+            foreach (Tuple<int, float> otherKeyAndAmp in keysAndAmplitudes)
             {
+                int otherKey = otherKeyAndAmp.Item1;
                 ulong id = Szudzik.uintSzudzik2tupleCombine((uint)key, (uint)otherKey);
                 int compareKey = otherKey % Tones;
 
@@ -199,6 +195,18 @@ public class Main : MonoBehaviour
             }
         }
 
+        List<int> currentKeys = keysAndAmplitudes.Select(x => x.Item1).ToList();
+        int count = 0;
+        foreach (Note note in notes)
+        {
+            if (!currentKeys.Contains(count))
+            {
+                note.CurrentAmp = 0;
+            }
+
+            count++;
+        }
+
         List<ulong> playing = playingOctaves.Concat(playingThirds).Concat(playingFifths).ToList();
         List<ulong> offList = chordLineRenderers.Keys.Where(oldKey => !playing.Contains(oldKey)).ToList();
 
@@ -218,11 +226,11 @@ public class Main : MonoBehaviour
             // draw thirds as simple lines
             GameObject chordGo = new("chord");
             LineRenderer chordRend = NewLineRenderer(chordGo, chordMat, .015f, false);
-            chordLineRenderers.Add(playKey, chordRend);
+            Chord newChord = chordGo.AddComponent<Chord>();
+            newChord.Init(notes[key], notes[otherKey], chordRend);
+            chordLineRenderers.Add(playKey, newChord);
 
-            chordRend.positionCount = 2;
-            chordRend.SetPosition(0, pointGameObjects[key].transform.position);
-            chordRend.SetPosition(1, pointGameObjects[otherKey].transform.localPosition);
+            newChord.Line();
         }
 
         foreach (ulong playKey in playingFifths)
@@ -236,7 +244,9 @@ public class Main : MonoBehaviour
             GameObject chordGo = new("chord");
             LineRenderer chordRend = NewLineRenderer(chordGo, chordMat, .02f, false);
 
-            chordLineRenderers.Add(playKey, chordRend);
+            Chord newChord = chordGo.AddComponent<Chord>();
+            newChord.Init(notes[key], notes[otherKey], chordRend);
+            chordLineRenderers.Add(playKey, newChord);
 
             int min = Math.Min(scaleToFifths[key], scaleToFifths[otherKey]);
             float startT = (float)min / Tones;
@@ -266,9 +276,8 @@ public class Main : MonoBehaviour
                     t,
                     Mathf.PI));
             }
-
-            chordRend.positionCount = fifthLine.Count;
-            chordRend.SetPositions(fifthLine.ToArray());
+            
+            newChord.Fifth(fifthLine);
         }
     }
 
@@ -378,7 +387,7 @@ public class Main : MonoBehaviour
             currentKeys.Add(11);
         }
 
-        List<int> adjusted = new();
+        List<Tuple<int, float>> adjusted = new();
         foreach (int key in currentKeys)
         {
             int newKey = key + currentKey;
@@ -387,7 +396,7 @@ public class Main : MonoBehaviour
                 newKey -= 12;
             }
 
-            adjusted.Add(newKey);
+            adjusted.Add(new Tuple<int, float>(newKey, 1f)); // default 1 amplitude
         }
 
         if (adjusted.Any() || Keyboard.current.anyKey.wasReleasedThisFrame)
