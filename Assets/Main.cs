@@ -228,8 +228,6 @@ public class Main : MonoBehaviour
             Chord newChord = chordGo.AddComponent<Chord>();
             newChord.Init(notes[key], notes[otherKey], chordRend);
             chordLineRenderers.Add(playKey, newChord);
-
-            newChord.Line();
         }
 
         foreach (ulong playKey in playingFifths)
