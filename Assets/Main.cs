@@ -14,7 +14,7 @@ using Util;
 public class Main : MonoBehaviour
 {
     public Material BloomMat;
-    
+
     static readonly int Color1 = Shader.PropertyToID("_Color");
     public string midiPath;
 
@@ -23,14 +23,14 @@ public class Main : MonoBehaviour
     const int Tones = 12;
     const int Octaves = 8;
     const int Sides = 3;
-    const float EdgeLength = 0.67f;
+    const float EdgeLength = 1.2f;
     const float Rad = 1f;
     const int Sections = Tones / Sides;
 
     readonly List<Note> notes = new();
     readonly List<TextBox> noteTextLabels = new();
 
-    LineRenderer fifthsLineRenderer;
+    readonly List<LineRenderer> fifthsLineRenderer = new();
     LineRenderer chromaticLineRenderer;
 
     readonly Dictionary<ulong, Chord> chordLineRenderers = new();
@@ -39,12 +39,43 @@ public class Main : MonoBehaviour
 
     int currentKey = 0; // A
 
+    static Color darkGrey => new(0.2f, 0.2f, 0.2f);
+
+    readonly Color[] descendingFifthColors =
+    {
+        // order from key - 1, descending through fifths
+        // Major
+        Color.red,
+        // Transient
+        Color.yellow,
+        darkGrey,
+        darkGrey,
+        darkGrey,
+        Color.yellow,
+        Color.Lerp(Color.yellow, Color.green, 0.5f),
+        // Minor
+        Color.Lerp(Color.green, Color.blue, 0.5f),
+        Color.Lerp(Color.blue, Color.red, 0.5f),
+        Color.Lerp(Color.red, Color.yellow, 0.5f),
+        // Major
+        Color.green,
+        Color.blue
+    };
+
+    readonly Dictionary<int, int> fifthToColor = new();
     readonly Dictionary<int, int> scaleToFifths = new();
 
     CameraControl cameraControl;
 
     void Awake()
     {
+        int count = 7;
+        for (int i = Tones - 1; i >= 0; i--)
+        {
+            fifthToColor.Add(count, i);
+            count = Roll(count, -5);
+        }
+
         for (int j = 0; j < Octaves; j++)
         {
             // set the notes in 5th intervals evenly from 0 to 1 on the umbilical
@@ -78,13 +109,13 @@ public class Main : MonoBehaviour
             }
         }
 
-        Material fifthsMat = new(Shader.Find("Unlit/Color"))
+        for (int i = 0; i < Tones; i++)
         {
-            color = new Color(0.5f, 0.5f, 0.5f)
-        };
-        GameObject fifthsGo = new("fifths");
-        fifthsGo.transform.SetParent(transform, false);
-        fifthsLineRenderer = NewLineRenderer(fifthsGo, fifthsMat, .01f, true);
+            Material fifthsMat = new Material(Shader.Find("Legacy Shaders/Particles/Alpha Blended Premultiply"));
+            GameObject fifthsGo = new("fifths");
+            fifthsGo.transform.SetParent(transform, false);
+            fifthsLineRenderer.Add(NewLineRenderer(fifthsGo, fifthsMat, .01f, false));
+        }
 
         Material chromaticMat = new(Shader.Find("Unlit/Color"))
         {
@@ -116,21 +147,57 @@ public class Main : MonoBehaviour
 
     void SetUmbilic()
     {
-        List<Vector3> umbilicalList = new();
         List<Vector3> chromaticList = new();
+        const float resolution = 0.001f;
         const int ratio = Sides * 2 - 1;
-        for (float t = 0; t < 1; t += .001f)
+        for (float t = 0; t < 1; t += resolution)
         {
-            umbilicalList.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI)); // natural 3 roll
             chromaticList.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI, ratio)); // 5 roll
         }
 
-        fifthsLineRenderer.positionCount = umbilicalList.Count;
-        fifthsLineRenderer.SetPositions(umbilicalList.ToArray());
+        for (int i = 0; i < Tones; i++)
+        {
+            LineRenderer fifthsSegment = fifthsLineRenderer[i];
+            List<Vector3> subSection = new();
+            for (float t = (float)i / Tones; t < (float)(i + 1) / Tones; t += resolution)
+            {
+                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI)); // natural 3 roll
+            }
+
+            fifthsSegment.positionCount = subSection.Count;
+            fifthsSegment.SetPositions(subSection.ToArray());
+
+            float lerp = .2f;
+            if (i is 7 or 8 or 11)
+            {
+                lerp = .3f;
+            }
+
+            Color color = Color.Lerp(Color.black, descendingFifthColors[i], lerp);
+
+            Color endColor = color;
+            if (i == 1)
+            {
+                endColor = darkGrey;
+            }
+            else if (i == 5)
+            {
+                color = darkGrey;
+                endColor = Color.Lerp(Color.black, Color.yellow, lerp);
+            }
+
+            const float alpha = 1.0f;
+            Gradient gradient = new();
+            gradient.SetKeys(
+                new[] { new GradientColorKey(color, 0.0f), new GradientColorKey(endColor, 1.0f) },
+                new[] { new GradientAlphaKey(alpha, 0.0f), new GradientAlphaKey(alpha, 1.0f) }
+            );
+            fifthsSegment.colorGradient = gradient;
+        }
 
         chromaticLineRenderer.positionCount = chromaticList.Count;
         chromaticLineRenderer.SetPositions(chromaticList.ToArray());
-        //chromaticLineRenderer.gameObject.SetActive(false);
+        chromaticLineRenderer.gameObject.SetActive(false);
 
         for (int j = 0; j < Octaves; j++)
         {
@@ -162,13 +229,15 @@ public class Main : MonoBehaviour
     /// </summary>
     void PlayKeys(List<Tuple<int, float>> keysAndAmplitudes)
     {
+        // from the input, sort all notes into octaves, fifths, and thirds
         List<ulong> playingOctaves = new();
         List<ulong> playingThirds = new();
         List<ulong> playingFifths = new();
         foreach ((int key, float amp) in keysAndAmplitudes)
         {
+            // update the amplitude to the current value in all cases
             notes[key].CurrentAmp = amp;
-            
+
             int baseKey = key % Tones;
             foreach (Tuple<int, float> otherKeyAndAmp in keysAndAmplitudes)
             {
@@ -194,6 +263,7 @@ public class Main : MonoBehaviour
             }
         }
 
+        // set all other notes to zero amplitude
         List<int> currentKeys = keysAndAmplitudes.Select(x => x.Item1).ToList();
         int count = 0;
         foreach (Note note in notes)
@@ -206,6 +276,7 @@ public class Main : MonoBehaviour
             count++;
         }
 
+        // determine chords to switch off from last update
         List<ulong> playing = playingOctaves.Concat(playingThirds).Concat(playingFifths).ToList();
         List<ulong> offList = chordLineRenderers.Keys.Where(oldKey => !playing.Contains(oldKey)).ToList();
 
@@ -215,19 +286,73 @@ public class Main : MonoBehaviour
             chordLineRenderers.Remove(toRemove);
         }
 
+        // create new chords
         foreach (ulong playKey in playingThirds)
         {
-            if (chordLineRenderers.ContainsKey(playKey)) continue;
             uint[] pair = Szudzik.uintSzudzik2tupleReverse(playKey);
             int key = (int)pair[0];
             int otherKey = (int)pair[1];
+            Note note1 = notes[key];
+            Note note2 = notes[otherKey];
+
+            float combinedAmplitude = note1.CurrentAmp + note2.CurrentAmp;
+            float intensity = combinedAmplitude * 1.5f;
+
+            bool pointingOut = Vector3.Magnitude(notes[key].transform.localPosition) <
+                               Vector3.Magnitude(notes[otherKey].transform.localPosition);
+
+            // sum all fifths below key and below otherKey and vote
+            int scaleOther = Roll(otherKey , pointingOut ? 5 : -5);
+            int scaleKey = Roll(key , pointingOut ? -5 : 5);
+
+            scaleOther %= Tones;
+            scaleKey %= Tones;
+
+            float otherSum = 0;
+            float thisSum = 0;
+            for (int i = 0; i < Octaves; i++)
+            {
+                otherSum += notes[scaleOther + i * Tones].CurrentAmp;
+                thisSum += notes[scaleKey + i * Tones].CurrentAmp;
+            }
+
+            Color calcColor = Color.white;
+            if (thisSum == 0 && otherSum == 0)
+            {
+                // default to inner (major) color
+                calcColor = pointingOut ? descendingFifthColors[fifthToColor[scaleKey]] : descendingFifthColors[fifthToColor[otherKey]];
+            }
+            else
+            {
+                float colorT = GetRatio(thisSum, otherSum);
+
+                calcColor = Color.Lerp(
+                    descendingFifthColors[fifthToColor[pointingOut ? scaleKey : Roll(scaleKey, -5)]],
+                    descendingFifthColors[fifthToColor[pointingOut ? Roll(scaleOther, -5) : scaleOther]],
+                    colorT);
+            }
+
+            Color color = Color.Lerp(
+                calcColor,
+                Color.white,
+                .3f) * Mathf.Pow(2, intensity); // whiten and intensify on HDR
+
+            if (chordLineRenderers.TryGetValue(playKey, out Chord lineRenderer))
+            {
+                // update chord color
+                lineRenderer.GetComponent<Renderer>().material.color = color;
+                continue;
+            }
 
             // draw thirds as simple lines
             GameObject chordGo = new("chord");
             LineRenderer chordRend = NewLineRenderer(chordGo, BloomMat, .015f, false);
             Chord newChord = chordGo.AddComponent<Chord>();
-            newChord.Init(notes[key], notes[otherKey], chordRend);
+            newChord.Init(note1, note2, chordRend);
             chordLineRenderers.Add(playKey, newChord);
+
+            // set chord color
+            chordRend.material.color = color;
         }
 
         foreach (ulong playKey in playingFifths)
@@ -241,8 +366,10 @@ public class Main : MonoBehaviour
             GameObject chordGo = new("chord");
             LineRenderer chordRend = NewLineRenderer(chordGo, BloomMat, .02f, false);
 
+            Note note1 = notes[key];
+            Note note2 = notes[otherKey];
             Chord newChord = chordGo.AddComponent<Chord>();
-            newChord.Init(notes[key], notes[otherKey], chordRend);
+            newChord.Init(note1, note2, chordRend);
             chordLineRenderers.Add(playKey, newChord);
 
             int min = Math.Min(scaleToFifths[key], scaleToFifths[otherKey]);
@@ -273,9 +400,43 @@ public class Main : MonoBehaviour
                     t,
                     Mathf.PI));
             }
-            
+
+            float combinedAmplitude = note1.CurrentAmp + note2.CurrentAmp;
+
+            // set color of fifth (it is always the same color, but intensity changes)
+            float intensity = combinedAmplitude * 1.5f;
+            Color color = Color.Lerp(
+                descendingFifthColors[scaleToFifths[otherKey]],
+                Color.white,
+                .3f) * Mathf.Pow(2, intensity); // whiten and intensify on HDR
+
+            chordRend.material.color = color;
+
             newChord.Fifth(fifthLine);
         }
+    }
+
+    static float GetRatio(float a, float b)
+    {
+        // Handle special cases
+        if (b == 0f && a != 0f)
+            return 0f;
+        if (a == 0f && b != 0f)
+            return 1f;
+
+        // General case: both a and b are positive
+        return b / (a + b);
+    }
+
+    static int Roll(int val, int interval)
+    {
+        val += interval;
+        return val switch
+        {
+            < 0 => val + Tones,
+            >= Tones => val - Tones,
+            _ => val
+        };
     }
 
     void UpdateText()
