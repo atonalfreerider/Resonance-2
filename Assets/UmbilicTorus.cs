@@ -8,7 +8,7 @@ public static class UmbilicTorus
     /// </summary>
     /// <param name="S">Number of sides in the polygon cross-section</param>
     /// <param name="edgeLength">Length of each polygon edge</param>
-    /// <param name="R">Major radius of the torus (distance from center to polygon centers)</param>
+    /// <param name="R">Centroid radius of the torus (distance from the origin to the centroid of the polygon)</param>
     /// <param name="t">Parameter along umbilical path (0 to 1)</param>
     /// <param name="offsetAlpha">Starting rotation offset to determine center point</param>
     /// <param name="rotM">Rotation multiplier to induce extra turns</param>
@@ -17,17 +17,16 @@ public static class UmbilicTorus
         int rotM = 1)
     {
         // Calculate the radius of the circumscribed circle of the polygon
-        float polyRad = edgeLength / (2f * Mathf.Sin(Mathf.PI / S));
-        float r = R + polyRad; // radius to polygon centers
+        float polyRad = edgeLength / (2f * Mathf.Sin(Mathf.PI / S)); // Radius from centroid to polygon vertex
 
         // Convert t to angle (negative for clockwise sweep, multiplied by S for S sweeps)
         float angle = -2f * Mathf.PI * S * t;
 
         // Calculate center position at this t
         Vector3 center = new(
-            r * Mathf.Cos(angle),
+            R * Mathf.Cos(angle), // Use R as the centroid radius
             0f,
-            r * Mathf.Sin(angle)
+            R * Mathf.Sin(angle)
         );
 
         // Calculate the vertex position that lies on the umbilical

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using NAudio.Midi;
@@ -24,7 +24,7 @@ public class Main : MonoBehaviour
     const int Octaves = 8;
     const int Sides = 3;
     const float EdgeLength = 1.2f;
-    const float Rad = 1f;
+    const float Rad = 1.5f;
     const int Sections = Tones / Sides;
 
     readonly List<Note> notes = new();
@@ -87,7 +87,7 @@ public class Main : MonoBehaviour
                 Note newNote = pointGo.AddComponent<Note>();
                 pointGo.transform.SetParent(transform, false);
                 pointGo.transform.localScale =
-                    Vector3.one * Mathf.Lerp(.03f, .005f, (float)(noteIndex) / (Tones * Octaves));
+                    Vector3.one * Mathf.Lerp(.03f, .005f, (float)noteIndex / (Tones * Octaves));
                 notes.Add(newNote);
                 pointGo.name = $"{noteLabels[i]} {j}";
 
@@ -213,7 +213,7 @@ public class Main : MonoBehaviour
                 Vector3 centroid = Centroid(i);
 
                 notes[next].transform.localPosition =
-                    Vector3.Lerp(umbilicPosition, centroid, (float)j / Octaves);
+                    Vector3.Lerp(centroid, umbilicPosition, (float)(j + 1) / Octaves);
 
                 if (j == 0)
                 {
@@ -384,11 +384,11 @@ public class Main : MonoBehaviour
             }
 
             // move fifth line across face as it approaches other note
-            int startIndex = key % Tones - key;
-            int endIndex = otherKey % Tones - otherKey;
+            int startOctave = key / Tones;
+            int endOctave = otherKey / Tones;
 
-            float startLength = EdgeLength * (1 - (float)startIndex / Octaves);
-            float endLength = EdgeLength * (1 - (float)endIndex / Octaves);
+            float startLength = EdgeLength * ((float)(startOctave + 1) / Octaves);
+            float endLength = EdgeLength * ((float)(endOctave + 1) / Octaves);
 
             List<Vector3> fifthLine = new();
             for (float t = startT; t < endT; t += .001f)
@@ -580,9 +580,9 @@ public class Main : MonoBehaviour
         int fractionOfTorus = (i + 1) % Sections;
         float alpha = 2 * Mathf.PI * fractionOfTorus / Sections;
         return new Vector3(
-            (Rad + EdgeLength * .5f) * Mathf.Sin(alpha),
+            Rad * Mathf.Sin(alpha),
             0,
-            (Rad + EdgeLength * .5f) * Mathf.Cos(alpha));
+            Rad * Mathf.Cos(alpha));
     }
 
     static float ToHertz(int n)
