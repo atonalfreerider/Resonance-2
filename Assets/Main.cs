@@ -15,7 +15,6 @@ public class Main : MonoBehaviour
 {
     public Material BloomMat;
 
-    static readonly int Color1 = Shader.PropertyToID("_Color");
     public string midiPath;
 
     const float NoteScale = .01f;
@@ -69,6 +68,7 @@ public class Main : MonoBehaviour
 
     void Awake()
     {
+        // create map for fifths to color lookup
         int count = 7;
         for (int i = Tones - 1; i >= 0; i--)
         {
@@ -83,16 +83,11 @@ public class Main : MonoBehaviour
             for (int i = 0; i < Tones; i++)
             {
                 int noteIndex = j * Tones + i;
-                GameObject pointGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                Note newNote = pointGo.AddComponent<Note>();
-                pointGo.transform.SetParent(transform, false);
-                pointGo.transform.localScale =
-                    Vector3.one * Mathf.Lerp(.03f, .005f, (float)noteIndex / (Tones * Octaves));
+                float scaleFactor = Mathf.Lerp(.03f, .005f, (float)noteIndex / (Tones * Octaves));
+                Note newNote = Note.Create($"{noteLabels[i]} {j}", ToHertz(noteIndex), scaleFactor);
+                newNote.transform.SetParent(transform, false);
                 notes.Add(newNote);
-                pointGo.name = $"{noteLabels[i]} {j}";
-
                 scaleToFifths.Add(noteIndex, next);
-                newNote.Hertz = ToHertz(noteIndex);
 
                 next += 5; // fifths
                 if (next >= Tones * (j + 1))
@@ -111,7 +106,7 @@ public class Main : MonoBehaviour
 
         for (int i = 0; i < Tones; i++)
         {
-            Material fifthsMat = new Material(Shader.Find("Legacy Shaders/Particles/Alpha Blended Premultiply"));
+            Material fifthsMat = new(Shader.Find("Particles/Standard Unlit"));
             GameObject fifthsGo = new("fifths");
             fifthsGo.transform.SetParent(transform, false);
             fifthsLineRenderer.Add(NewLineRenderer(fifthsGo, fifthsMat, .01f, false));
@@ -229,6 +224,8 @@ public class Main : MonoBehaviour
     /// </summary>
     void PlayKeys(List<Tuple<int, float>> keysAndAmplitudes)
     {
+        float[] votes = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+        
         // from the input, sort all notes into octaves, fifths, and thirds
         List<ulong> playingOctaves = new();
         List<ulong> playingThirds = new();
@@ -239,6 +236,7 @@ public class Main : MonoBehaviour
             notes[key].CurrentAmp = amp;
 
             int baseKey = key % Tones;
+            votes[baseKey] += amp;
             foreach (Tuple<int, float> otherKeyAndAmp in keysAndAmplitudes)
             {
                 int otherKey = otherKeyAndAmp.Item1;
@@ -301,26 +299,23 @@ public class Main : MonoBehaviour
             bool pointingOut = Vector3.Magnitude(notes[key].transform.localPosition) <
                                Vector3.Magnitude(notes[otherKey].transform.localPosition);
 
-            // sum all fifths below key and below otherKey and vote
-            int scaleOther = Roll(otherKey , pointingOut ? 5 : -5);
-            int scaleKey = Roll(key , pointingOut ? -5 : 5);
+            // sum all fifths below key and below otherKey and retrieve vote
+            int scaleOther = Roll(otherKey, pointingOut ? 5 : -5);
+            int scaleKey = Roll(key, pointingOut ? -5 : 5);
 
             scaleOther %= Tones;
             scaleKey %= Tones;
 
-            float otherSum = 0;
-            float thisSum = 0;
-            for (int i = 0; i < Octaves; i++)
-            {
-                otherSum += notes[scaleOther + i * Tones].CurrentAmp;
-                thisSum += notes[scaleKey + i * Tones].CurrentAmp;
-            }
+            float otherSum = votes[scaleOther];
+            float thisSum = votes[scaleKey];
 
             Color calcColor = Color.white;
             if (thisSum == 0 && otherSum == 0)
             {
                 // default to inner (major) color
-                calcColor = pointingOut ? descendingFifthColors[fifthToColor[scaleKey]] : descendingFifthColors[fifthToColor[otherKey]];
+                calcColor = pointingOut
+                    ? descendingFifthColors[fifthToColor[scaleKey]]
+                    : descendingFifthColors[fifthToColor[otherKey]];
             }
             else
             {
@@ -414,6 +409,8 @@ public class Main : MonoBehaviour
 
             newChord.Fifth(fifthLine);
         }
+        
+        
     }
 
     static float GetRatio(float a, float b)
