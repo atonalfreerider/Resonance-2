@@ -486,7 +486,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   BloomMat: {fileID: 2100000, guid: 101e24c81ce26c74dac5a5d7db94c29c, type: 2}
-  midiPath: C:\Users\john\Documents\MuseScore4\Scores\Chopin\Chopin_Ballade_No._4_Piano_solo-Piano.mid
+  midiPath: C:\Users\john\Documents\MuseScore4\Scores\Chopin\Ballade_No._1_G-Minor.mid
+  playbackSpeed: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

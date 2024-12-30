@@ -17,8 +17,6 @@ public class Main : MonoBehaviour
 
     public string midiPath;
 
-    const float NoteScale = .01f;
-
     const int Tones = 12;
     const int Octaves = 8;
     const int Sides = 3;
@@ -65,6 +63,18 @@ public class Main : MonoBehaviour
     readonly Dictionary<int, int> scaleToFifths = new();
 
     CameraControl cameraControl;
+
+    MidiFile midiFile;
+    double playbackStartTime;
+    bool isPlaying;
+    IList<MidiEvent>[] midiEvents;
+    int[] currentEventIndex;
+    double timePerTick;
+    public float playbackSpeed = 1f; // Add this with your other fields
+
+    readonly Dictionary<int, List<Tuple<int, float>>> timeSlicedNotes = new();
+    int totalTimeSlices;
+    const float TIME_SLICE = 0.1f; // 100ms per slice
 
     void Awake()
     {
@@ -125,6 +135,7 @@ public class Main : MonoBehaviour
 
     void Start()
     {
+        LoadMidi();
         UpdateText();
         Camera.main.GetComponent<CameraControl>().MovementUpdater += UpdateText;
         Camera.main.transform.LookAt(Vector3.zero);
@@ -290,6 +301,7 @@ public class Main : MonoBehaviour
             uint[] pair = Szudzik.uintSzudzik2tupleReverse(playKey);
             int key = (int)pair[0];
             int otherKey = (int)pair[1];
+            
             Note note1 = notes[key];
             Note note2 = notes[otherKey];
 
@@ -315,7 +327,7 @@ public class Main : MonoBehaviour
                 // default to inner (major) color
                 calcColor = pointingOut
                     ? descendingFifthColors[fifthToColor[scaleKey]]
-                    : descendingFifthColors[fifthToColor[otherKey]];
+                    : descendingFifthColors[fifthToColor[scaleOther]];
             }
             else
             {
@@ -401,7 +413,7 @@ public class Main : MonoBehaviour
             // set color of fifth (it is always the same color, but intensity changes)
             float intensity = combinedAmplitude * 1.5f;
             Color color = Color.Lerp(
-                descendingFifthColors[scaleToFifths[otherKey]],
+                descendingFifthColors[scaleToFifths[otherKey % Tones]],
                 Color.white,
                 .3f) * Mathf.Pow(2, intensity); // whiten and intensify on HDR
 
@@ -445,121 +457,223 @@ public class Main : MonoBehaviour
         }
     }
 
-    public void LoadMidi()
+    static int MidiNoteToKeyIndex(int midiNote)
     {
-        // Load the MIDI file
-        MidiFile midi = new(midiPath, false);
+        // MIDI note 21 is A0 (our index 0)
+        return midiNote - 21;
+    }
 
-        for (int trackIndex = 0; trackIndex < midi.Events.Count(); trackIndex++)
+    void LoadMidi()
+    {
+        midiFile = new MidiFile(midiPath, false);
+        timeSlicedNotes.Clear();
+
+        // Get MIDI time division (ticks per quarter note)
+        int ticksPerQuarter = midiFile.DeltaTicksPerQuarterNote;
+        double currentTempo = 500000.0; // Default tempo (microseconds per quarter note)
+        const int timeSignatureNumerator = 4; // Default time signature numerator
+        int timeSignatureDenominator = 4; // Default time signature denominator
+        int ticksPerMeasure = ticksPerQuarter * timeSignatureNumerator;
+
+        // Collect all MIDI events
+        List<(long tick, MidiEvent evt)> allEvents = new List<(long tick, MidiEvent evt)>();
+        long maxTicks = 0;
+        foreach (IList<MidiEvent> track in midiFile.Events)
         {
-            IList<MidiEvent> trackEvents = midi.Events[trackIndex];
-
-            int totalNoteCount = 0;
-
-            foreach (MidiEvent trackEvent in trackEvents)
+            long absoluteTick = 0;
+            foreach (MidiEvent evt in track)
             {
-                if (totalNoteCount > 50) continue;
+                absoluteTick += evt.DeltaTime;
+                allEvents.Add((absoluteTick, evt));
+                maxTicks = Math.Max(maxTicks, absoluteTick);
+            }
+        }
 
-                if (trackEvent is NoteOnEvent noteOnEvent &&
-                    noteOnEvent.Velocity > 0) // Only consider NoteOn with velocity > 0 (actual note starts)
+        // Sort events by their absolute tick count
+        allEvents.Sort((a, b) => a.tick.CompareTo(b.tick));
+
+        List<(double time, int note, float velocity)> noteEvents = new List<(double time, int note, float velocity)>();
+        double currentTime = 0;
+        long lastTick = 0;
+
+        foreach ((long tick, MidiEvent evt) in allEvents)
+        {
+            // Calculate time up to this event
+            long deltaTicks = tick - lastTick;
+            double deltaSeconds = (deltaTicks * currentTempo) / (ticksPerQuarter * 1_000_000.0);
+            currentTime += deltaSeconds;
+            lastTick = tick;
+
+            // Process tempo and time signature changes
+            if (evt is TempoEvent tempoEvent)
+            {
+                currentTempo = tempoEvent.MicrosecondsPerQuarterNote;
+            }
+            else if (evt is NoteOnEvent noteEvent)
+            {
+                int noteIndex = MidiNoteToKeyIndex(noteEvent.NoteNumber);
+                if (noteIndex is >= 0 and < Tones * Octaves)
                 {
-                    int noteKey = noteOnEvent.NoteNumber;
-                    long onAbsoluteTime = noteOnEvent.AbsoluteTime;
-                    long offAbsoluteTime = noteOnEvent.OffEvent.AbsoluteTime;
-                    long duration = offAbsoluteTime - onAbsoluteTime;
-
-                    GameObject noteGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    noteGo.transform.SetParent(transform, false);
-
-                    noteGo.transform.localScale = new Vector3(.2f, .001f, duration * NoteScale);
-                    noteGo.transform.Translate(Vector3.right * noteKey * .5f);
-                    noteGo.transform.Translate(Vector3.forward * (onAbsoluteTime + duration * .5f) * NoteScale);
-                    totalNoteCount++;
+                    noteEvents.Add((currentTime, noteIndex, noteEvent.Velocity / 127f));
                 }
+            }
+        }
+
+        if (!noteEvents.Any())
+        {
+            Debug.LogError("No valid note events found in MIDI file");
+            return;
+        }
+
+        // Calculate time slices based on actual duration
+        double startTime = noteEvents[0].time;
+        double endTime = noteEvents[^1].time;
+        double duration = endTime - startTime;
+
+        totalTimeSlices = Mathf.Max(1, Mathf.CeilToInt((float)(duration / TIME_SLICE)));
+
+        // Create time slices with note states
+        Dictionary<int, float> activeNotes = new Dictionary<int, float>();
+        int currentEventIndex = 0;
+
+        for (int slice = 0; slice < totalTimeSlices; slice++)
+        {
+            double sliceTime = startTime + (slice * TIME_SLICE);
+            double nextSliceTime = sliceTime + TIME_SLICE;
+
+            while (currentEventIndex < noteEvents.Count &&
+                   noteEvents[currentEventIndex].time < nextSliceTime)
+            {
+                (_, int note, float velocity) = noteEvents[currentEventIndex];
+
+                if (velocity > 0)
+                {
+                    activeNotes[note] = velocity;
+                }
+                else
+                {
+                    activeNotes.Remove(note);
+                }
+
+                currentEventIndex++;
+            }
+
+            if (activeNotes.Any())
+            {
+                timeSlicedNotes[slice] = new List<Tuple<int, float>>(
+                    activeNotes.Select(kvp => new Tuple<int, float>(kvp.Key, kvp.Value))
+                );
             }
         }
     }
 
     void Update()
     {
-        List<int> currentKeys = new();
-        if (Keyboard.current.digit1Key.isPressed)
+        if (Keyboard.current.spaceKey.wasPressedThisFrame)
         {
-            currentKeys.Add(0);
+            playbackStartTime = Time.timeAsDouble;
+            isPlaying = true;
         }
 
-        if (Keyboard.current.digit2Key.isPressed)
+        if (isPlaying)
         {
-            currentKeys.Add(1);
-        }
+            double currentTime = (Time.timeAsDouble - playbackStartTime) * playbackSpeed;
+            int currentSlice = (int)(currentTime / TIME_SLICE);
 
-        if (Keyboard.current.digit3Key.isPressed)
-        {
-            currentKeys.Add(2);
-        }
-
-        if (Keyboard.current.digit4Key.isPressed)
-        {
-            currentKeys.Add(3);
-        }
-
-        if (Keyboard.current.digit5Key.isPressed)
-        {
-            currentKeys.Add(4);
-        }
-
-        if (Keyboard.current.digit6Key.isPressed)
-        {
-            currentKeys.Add(5);
-        }
-
-        if (Keyboard.current.digit7Key.isPressed)
-        {
-            currentKeys.Add(6);
-        }
-
-        if (Keyboard.current.digit8Key.isPressed)
-        {
-            currentKeys.Add(7);
-        }
-
-        if (Keyboard.current.digit9Key.isPressed)
-        {
-            currentKeys.Add(8);
-        }
-
-        if (Keyboard.current.digit0Key.isPressed)
-        {
-            currentKeys.Add(9);
-        }
-
-        if (Keyboard.current.minusKey.isPressed)
-        {
-            currentKeys.Add(10);
-        }
-
-        if (Keyboard.current.equalsKey.isPressed)
-        {
-            currentKeys.Add(11);
-        }
-
-        List<Tuple<int, float>> adjusted = new();
-        foreach (int key in currentKeys)
-        {
-            int newKey = key + currentKey;
-            if (newKey > 12)
+            if (currentSlice >= totalTimeSlices)
             {
-                newKey -= 12;
+                isPlaying = false;
+                return;
             }
 
-            //newKey += 36;
-
-            adjusted.Add(new Tuple<int, float>(newKey, 1f)); // default 1 amplitude
+            if (timeSlicedNotes.TryGetValue(currentSlice, out List<Tuple<int, float>> notes))
+            {
+                PlayKeys(notes);
+            }
         }
 
-        if (adjusted.Any() || Keyboard.current.anyKey.wasReleasedThisFrame)
+        // Handle keyboard input if not playing MIDI
+        if (!isPlaying)
         {
-            PlayKeys(adjusted);
+            List<int> currentKeys = new();
+            if (Keyboard.current.digit1Key.isPressed)
+            {
+                currentKeys.Add(0);
+            }
+
+            if (Keyboard.current.digit2Key.isPressed)
+            {
+                currentKeys.Add(1);
+            }
+
+            if (Keyboard.current.digit3Key.isPressed)
+            {
+                currentKeys.Add(2);
+            }
+
+            if (Keyboard.current.digit4Key.isPressed)
+            {
+                currentKeys.Add(3);
+            }
+
+            if (Keyboard.current.digit5Key.isPressed)
+            {
+                currentKeys.Add(4);
+            }
+
+            if (Keyboard.current.digit6Key.isPressed)
+            {
+                currentKeys.Add(5);
+            }
+
+            if (Keyboard.current.digit7Key.isPressed)
+            {
+                currentKeys.Add(6);
+            }
+
+            if (Keyboard.current.digit8Key.isPressed)
+            {
+                currentKeys.Add(7);
+            }
+
+            if (Keyboard.current.digit9Key.isPressed)
+            {
+                currentKeys.Add(8);
+            }
+
+            if (Keyboard.current.digit0Key.isPressed)
+            {
+                currentKeys.Add(9);
+            }
+
+            if (Keyboard.current.minusKey.isPressed)
+            {
+                currentKeys.Add(10);
+            }
+
+            if (Keyboard.current.equalsKey.isPressed)
+            {
+                currentKeys.Add(11);
+            }
+
+            List<Tuple<int, float>> adjusted = new();
+            foreach (int key in currentKeys)
+            {
+                int newKey = key + currentKey;
+                if (newKey > 12)
+                {
+                    newKey -= 12;
+                }
+
+                //newKey += 36;
+
+                adjusted.Add(new Tuple<int, float>(newKey, 1f)); // default 1 amplitude
+            }
+
+            if (adjusted.Any() || Keyboard.current.anyKey.wasReleasedThisFrame)
+            {
+                PlayKeys(adjusted);
+            }
         }
     }
 
