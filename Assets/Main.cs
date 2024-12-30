@@ -410,6 +410,7 @@ public class Main : MonoBehaviour
             newChord.Fifth(fifthLine);
         }
         
+        // color notes
         
     }
 
@@ -550,6 +551,8 @@ public class Main : MonoBehaviour
             {
                 newKey -= 12;
             }
+
+            //newKey += 36;
 
             adjusted.Add(new Tuple<int, float>(newKey, 1f)); // default 1 amplitude
         }
