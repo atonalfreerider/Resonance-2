@@ -3,105 +3,115 @@ using UnityEngine.InputSystem;
 
 public class CameraControl : MonoBehaviour
 {
-    // From:
-    // http://answers.unity3d.com/questions/29741/mouse-look-script.html
-
-    public float Sensitivity = 1f;
-    public float Speed = 1f;
-
-    const float MinimumXRotation = -360f;
-    const float MaximumXRotation = 360f;
-
-    const float MinimumYRotation = -60f;
-    const float MaximumYRotation = 60f;
-
-    Vector2 rotation = Vector2.zero;
-
+    public float Speed = 0.3f;          // Speed of movement and rotation
+    public Vector3 center = Vector3.zero; // The point the camera orbits around
+    float rad = 3.5f;            // Radius (distance from center)
+    float alpha = Mathf.PI / 2;      // Polar angle (from Y-axis)
+    float phi = 0;              // Azimuthal angle (around Y-axis)
+    
     public delegate void MovementUpdate();
     public MovementUpdate MovementUpdater;
 
-    void Update()
+    void Start()
     {
-        // Rotate the camera on right click
-        if (Mouse.current.rightButton.isPressed)
-        {
-            // Read the mouse input axis
-            rotation += new Vector2(
-                Mouse.current.delta.x.ReadValue(),
-                Mouse.current.delta.y.ReadValue()) * Sensitivity;
-            rotation.x = ClampAngle(
-                rotation.x,
-                MinimumXRotation,
-                MaximumXRotation);
-            rotation.y = ClampAngle(
-                rotation.y,
-                MinimumYRotation,
-                MaximumYRotation);
-            Quaternion xQuaternion =
-                Quaternion.AngleAxis(rotation.x, Vector3.up);
-            Quaternion yQuaternion =
-                Quaternion.AngleAxis(rotation.y, -Vector3.right);
-            transform.localRotation = xQuaternion * yQuaternion;
-        }
-
-        MoveCamera();
+        UpdateCameraPosition();
+        transform.LookAt(center);
     }
 
-    static float ClampAngle(float angle, float min, float max)
+    void Update()
     {
-        if (angle < -360f)
-        {
-            angle += 360f;
-        }
-
-        if (angle > 360f)
-        {
-            angle -= 360f;
-        }
-
-        return Mathf.Clamp(angle, min, max);
+        MoveCamera();
+        transform.LookAt(center); // Ensure the camera always looks at the center
     }
 
     void MoveCamera()
     {
+        bool isMoving = false; // Flag to check if any movement key is pressed
+
+        // Zoom In (W key)
         if (Keyboard.current.wKey.isPressed)
         {
-            transform.position +=
-                transform.forward.normalized * (Time.deltaTime * Speed);
+            rad -= Speed * Time.deltaTime;
+            rad = Mathf.Max(rad, 0.3f); // Clamp to a minimum radius
+            isMoving = true;
         }
 
-        if (Keyboard.current.aKey.isPressed)
-        {
-            transform.position -=
-                transform.right.normalized * (Time.deltaTime * Speed);
-        }
-
+        // Zoom Out (S key)
         if (Keyboard.current.sKey.isPressed)
         {
-            transform.position -=
-                transform.forward.normalized * (Time.deltaTime * Speed);
+            rad += Speed * Time.deltaTime;
+            rad = Mathf.Min(rad, 10f); // Clamp to a maximum radius
+            isMoving = true;
         }
 
+        // Orbit Left (A key) - Adjust phi
         if (Keyboard.current.dKey.isPressed)
         {
-            transform.position +=
-                transform.right.normalized * (Time.deltaTime * Speed);
+            phi += Speed * Time.deltaTime;
+            phi = NormalizeAngle(phi);
+            isMoving = true;
         }
 
+        // Orbit Right (D key) - Adjust phi
+        if (Keyboard.current.aKey.isPressed)
+        {
+            phi -= Speed * Time.deltaTime;
+            phi = NormalizeAngle(phi);
+            isMoving = true;
+        }
+
+        // Move Up (E key) - Adjust alpha (towards north pole)
         if (Keyboard.current.qKey.isPressed)
         {
-            transform.position += Vector3.down * (Time.deltaTime * Speed);
+            alpha += Speed * Time.deltaTime;
+            alpha = Mathf.Clamp(alpha, 0.01f, Mathf.PI - 0.01f); // Prevent gimbal lock at poles
+            isMoving = true;
         }
 
+        // Move Down (Q key) - Adjust alpha (towards south pole)
         if (Keyboard.current.eKey.isPressed)
         {
-            transform.position += Vector3.up * (Time.deltaTime * Speed);
+            alpha -= Speed * Time.deltaTime;
+            alpha = Mathf.Clamp(alpha, 0.01f, Mathf.PI - 0.01f); // Prevent gimbal lock at poles
+            isMoving = true;
         }
 
-        if (Keyboard.current.anyKey.isPressed)
+        // Update the camera position based on spherical coordinates
+        UpdateCameraPosition();
+
+        // Invoke movement update if any key was pressed
+        if (isMoving && MovementUpdater != null)
         {
-            transform.LookAt(Vector3.zero);
             MovementUpdater.Invoke();
         }
+    }
+
+    /// <summary>
+    /// Updates the camera's position based on the current spherical coordinates.
+    /// </summary>
+    void UpdateCameraPosition()
+    {
+        // Convert spherical coordinates to Cartesian coordinates
+        Vector3 newPosition = center + new Vector3(
+            rad * Mathf.Sin(alpha) * Mathf.Cos(phi), // X component
+            rad * Mathf.Cos(alpha),                  // Y component
+            rad * Mathf.Sin(alpha) * Mathf.Sin(phi)  // Z component
+        );
+
+        transform.position = newPosition;
+    }
+
+    /// <summary>
+    /// Normalizes an angle to the range [-PI, PI].
+    /// </summary>
+    /// <param name="angle">The angle in radians.</param>
+    /// <returns>The normalized angle.</returns>
+    static float NormalizeAngle(float angle)
+    {
+        while (angle > Mathf.PI)
+            angle -= 2 * Mathf.PI;
+        while (angle < -Mathf.PI)
+            angle += 2 * Mathf.PI;
+        return angle;
     }
 }
