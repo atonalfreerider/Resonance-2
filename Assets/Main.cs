@@ -35,6 +35,7 @@ public class Main : MonoBehaviour
     readonly string[] noteLabels = { "A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#" };
 
     int currentKey = 0; // A
+    float torusRotation = 0f; // Current rotation of the torus
 
     static Color darkGrey => new(0.2f, 0.2f, 0.2f);
 
@@ -70,20 +71,20 @@ public class Main : MonoBehaviour
     IList<MidiEvent>[] midiEvents;
     int[] currentEventIndex;
     double timePerTick;
-    public float playbackSpeed = 1f; // Add this with your other fields
+    public float playbackSpeed = 1f;
 
     readonly Dictionary<int, List<Tuple<int, float>>> timeSlicedNotes = new();
     int totalTimeSlices;
-    const float TIME_SLICE = 0.1f; // 100ms per slice
+    const float TIME_SLICE = 0.1f;
 
     void Awake()
     {
         // create map for fifths to color lookup
-        int count = 7;
-        for (int i = Tones - 1; i >= 0; i--)
+        // Maps semitone interval to circle-of-fifths index: I(0)->11(Blue), V(7)->10(Blue/Green), IV(5)->0(Red)
+        for (int i = 0; i < Tones; i++)
         {
-            fifthToColor.Add(count, i);
-            count = Roll(count, -5);
+            int fifthsIndex = (11 - (7 * i) % Tones + Tones) % Tones;
+            fifthToColor.Add(i, fifthsIndex);
         }
 
         for (int j = 0; j < Octaves; j++)
@@ -139,6 +140,9 @@ public class Main : MonoBehaviour
         UpdateText();
         Camera.main.GetComponent<CameraControl>().MovementUpdater += UpdateText;
         Camera.main.transform.LookAt(Vector3.zero);
+        
+        // Initialize note colors with empty input to set default colors
+        PlayKeys(new List<Tuple<int, float>>());
     }
 
     void SetChromatic()
@@ -158,7 +162,7 @@ public class Main : MonoBehaviour
         const int ratio = Sides * 2 - 1;
         for (float t = 0; t < 1; t += resolution)
         {
-            chromaticList.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI, ratio)); // 5 roll
+            chromaticList.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI + torusRotation, ratio));
         }
 
         for (int i = 0; i < Tones; i++)
@@ -167,7 +171,7 @@ public class Main : MonoBehaviour
             List<Vector3> subSection = new();
             for (float t = (float)i / Tones; t < (float)(i + 1) / Tones; t += resolution)
             {
-                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI)); // natural 3 roll
+                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI + torusRotation));
             }
 
             fifthsSegment.positionCount = subSection.Count;
@@ -213,7 +217,7 @@ public class Main : MonoBehaviour
                 int next = scaleToFifths[j * Tones + i];
 
                 Vector3 umbilicPosition =
-                    UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, (float)i / Tones, Mathf.PI);
+                    UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, (float)i / Tones, Mathf.PI + torusRotation);
 
                 // interpolate octave points to centroid of torus
                 Vector3 centroid = Centroid(i);
@@ -228,6 +232,93 @@ public class Main : MonoBehaviour
                 }
             }
         }
+    }
+
+    void ChangeKey(int newKey)
+    {
+        if (newKey == currentKey) return;
+        
+        currentKey = newKey;
+        
+        // Calculate rotation needed to put new key at 12 o'clock
+        // Each step is 2π/12 = π/6 radians
+        torusRotation = -currentKey * (2f * Mathf.PI / Tones);
+        
+        // Rebuild the torus with new rotation
+        SetUmbilic();
+    }
+
+    Color CalculateNoteColor(int noteIndex, List<Tuple<int, float>> activeNotes)
+    {
+        int baseNote = noteIndex % Tones;
+        int relativeToKey = (baseNote - currentKey + Tones) % Tones;
+        
+        // Base color from position in circle of fifths relative to current key
+        Color baseColor = descendingFifthColors[fifthToColor[relativeToKey]];
+        
+        if (activeNotes.Count <= 1)
+        {
+            // Single note or no harmonies - use base color
+            return baseColor;
+        }
+        
+        // Calculate harmonic relationships with other active notes
+        Color blendedColor = baseColor * 0.5f; // Start with half the base color
+        float totalInfluence = 0.5f;
+        
+        foreach (var (otherNoteIndex, amplitude) in activeNotes)
+        {
+            if (otherNoteIndex == noteIndex) continue;
+            
+            int otherBase = otherNoteIndex % Tones;
+            int interval = (otherBase - baseNote + Tones) % Tones;
+            
+            float influence = 0f;
+            Color harmonicColor = Color.clear;
+            
+            // Determine harmonic relationship and color influence
+            switch (interval)
+            {
+                case 0: // Octave - same color
+                    harmonicColor = baseColor;
+                    influence = amplitude * 0.3f;
+                    break;
+                case 5: // Perfect fourth
+                case 7: // Perfect fifth
+                    int fifthRelativeToKey = (otherBase - currentKey + Tones) % Tones;
+                    harmonicColor = descendingFifthColors[fifthRelativeToKey];
+                    influence = amplitude * 0.4f;
+                    break;
+                case 3: // Minor third
+                case 4: // Major third
+                case 8: // Minor sixth
+                case 9: // Major sixth
+                    int thirdRelativeToKey = (otherBase - currentKey + Tones) % Tones;
+                    harmonicColor = descendingFifthColors[thirdRelativeToKey];
+                    influence = amplitude * 0.3f;
+                    break;
+                default:
+                    // Dissonant intervals - less influence
+                    int dissonantRelativeToKey = (otherBase - currentKey + Tones) % Tones;
+                    harmonicColor = descendingFifthColors[dissonantRelativeToKey];
+                    influence = amplitude * 0.1f;
+                    break;
+            }
+            
+            if (influence > 0)
+            {
+                blendedColor += harmonicColor * influence;
+                totalInfluence += influence;
+            }
+        }
+        
+        // Normalize the color
+        if (totalInfluence > 0)
+        {
+            blendedColor /= totalInfluence;
+        }
+        
+        return blendedColor;
     }
 
     /// <summary>
@@ -326,16 +417,19 @@ public class Main : MonoBehaviour
             {
                 // default to inner (major) color
                 calcColor = pointingOut
-                    ? descendingFifthColors[fifthToColor[scaleKey]]
-                    : descendingFifthColors[fifthToColor[scaleOther]];
+                    ? descendingFifthColors[fifthToColor[(scaleKey - currentKey + Tones) % Tones]]
+                    : descendingFifthColors[fifthToColor[(scaleOther - currentKey + Tones) % Tones]];
             }
             else
             {
                 float colorT = GetRatio(thisSum, otherSum);
 
+                int startIdx = (pointingOut ? scaleKey : Roll(scaleKey, -5));
+                int endIdx = (pointingOut ? Roll(scaleOther, -5) : scaleOther);
+
                 calcColor = Color.Lerp(
-                    descendingFifthColors[fifthToColor[pointingOut ? scaleKey : Roll(scaleKey, -5)]],
-                    descendingFifthColors[fifthToColor[pointingOut ? Roll(scaleOther, -5) : scaleOther]],
+                    descendingFifthColors[fifthToColor[(startIdx - currentKey + Tones) % Tones]],
+                    descendingFifthColors[fifthToColor[(endIdx - currentKey + Tones) % Tones]],
                     colorT);
             }
 
@@ -413,7 +507,7 @@ public class Main : MonoBehaviour
             // set color of fifth (it is always the same color, but intensity changes)
             float intensity = combinedAmplitude * 1.5f;
             Color color = Color.Lerp(
-                descendingFifthColors[scaleToFifths[otherKey % Tones]],
+                descendingFifthColors[fifthToColor[(otherKey % Tones - currentKey + Tones) % Tones]],
                 Color.white,
                 .3f) * Mathf.Pow(2, intensity); // whiten and intensify on HDR
 
@@ -422,8 +516,28 @@ public class Main : MonoBehaviour
             newChord.Fifth(fifthLine);
         }
         
-        // color notes
-        
+        // Color individual notes based on harmonic relationships
+        for (int i = 0; i < notes.Count; i++)
+        {
+            Note note = notes[i];
+            Color noteColor = CalculateNoteColor(i, keysAndAmplitudes);
+            
+            // Apply intensity based on amplitude
+            if (note.CurrentAmp > 0)
+            {
+                // Brighten and intensify active notes
+                float intensity = note.CurrentAmp * 1.5f;
+                noteColor = Color.Lerp(noteColor, Color.white, 0.2f) * Mathf.Pow(2, intensity);
+            }
+            else
+            {
+                // Dim inactive notes
+                noteColor = Color.Lerp(noteColor, Color.black, 0.8f);
+            }
+            
+            // Set the note color
+            note.SetColor(noteColor);
+        }
     }
 
     static float GetRatio(float a, float b)
@@ -569,6 +683,15 @@ public class Main : MonoBehaviour
 
     void Update()
     {
+        // Handle key changes
+        if (Keyboard.current.aKey.wasPressedThisFrame) ChangeKey(0);  // A
+        if (Keyboard.current.bKey.wasPressedThisFrame) ChangeKey(2);  // B
+        if (Keyboard.current.cKey.wasPressedThisFrame) ChangeKey(3);  // C
+        if (Keyboard.current.dKey.wasPressedThisFrame) ChangeKey(5);  // D
+        if (Keyboard.current.eKey.wasPressedThisFrame) ChangeKey(7);  // E
+        if (Keyboard.current.fKey.wasPressedThisFrame) ChangeKey(8);  // F
+        if (Keyboard.current.gKey.wasPressedThisFrame) ChangeKey(10); // G
+
         if (Keyboard.current.spaceKey.wasPressedThisFrame)
         {
             playbackStartTime = Time.timeAsDouble;

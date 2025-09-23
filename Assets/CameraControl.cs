@@ -29,7 +29,7 @@ public class CameraControl : MonoBehaviour
         bool isMoving = false; // Flag to check if any movement key is pressed
 
         // Zoom In (W key)
-        if (Keyboard.current.wKey.isPressed)
+        if (Keyboard.current.upArrowKey.isPressed)
         {
             rad -= Speed * Time.deltaTime;
             rad = Mathf.Max(rad, 0.3f); // Clamp to a minimum radius
@@ -37,7 +37,7 @@ public class CameraControl : MonoBehaviour
         }
 
         // Zoom Out (S key)
-        if (Keyboard.current.sKey.isPressed)
+        if (Keyboard.current.downArrowKey.isPressed)
         {
             rad += Speed * Time.deltaTime;
             rad = Mathf.Min(rad, 10f); // Clamp to a maximum radius
@@ -45,7 +45,7 @@ public class CameraControl : MonoBehaviour
         }
 
         // Orbit Left (A key) - Adjust phi
-        if (Keyboard.current.dKey.isPressed)
+        if (Keyboard.current.leftArrowKey.isPressed)
         {
             phi += Speed * Time.deltaTime;
             phi = NormalizeAngle(phi);
@@ -53,7 +53,7 @@ public class CameraControl : MonoBehaviour
         }
 
         // Orbit Right (D key) - Adjust phi
-        if (Keyboard.current.aKey.isPressed)
+        if (Keyboard.current.rightArrowKey.isPressed)
         {
             phi -= Speed * Time.deltaTime;
             phi = NormalizeAngle(phi);
@@ -61,7 +61,7 @@ public class CameraControl : MonoBehaviour
         }
 
         // Move Up (E key) - Adjust alpha (towards north pole)
-        if (Keyboard.current.qKey.isPressed)
+        if (Keyboard.current.pageUpKey.isPressed)
         {
             alpha += Speed * Time.deltaTime;
             alpha = Mathf.Clamp(alpha, 0.01f, Mathf.PI - 0.01f); // Prevent gimbal lock at poles
@@ -69,7 +69,7 @@ public class CameraControl : MonoBehaviour
         }
 
         // Move Down (Q key) - Adjust alpha (towards south pole)
-        if (Keyboard.current.eKey.isPressed)
+        if (Keyboard.current.pageDownKey.isPressed)
         {
             alpha -= Speed * Time.deltaTime;
             alpha = Mathf.Clamp(alpha, 0.01f, Mathf.PI - 0.01f); // Prevent gimbal lock at poles
