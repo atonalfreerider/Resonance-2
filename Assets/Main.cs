@@ -75,7 +75,7 @@ public class Main : MonoBehaviour
 
     readonly Dictionary<int, List<Tuple<int, float>>> timeSlicedNotes = new();
     int totalTimeSlices;
-    const float TIME_SLICE = 0.1f;
+    const float TIME_SLICE = 0.01f; // Higher resolution (10ms) for better polyphony
 
     void Awake()
     {
@@ -628,17 +628,23 @@ public class Main : MonoBehaviour
             currentTime += deltaSeconds;
             lastTick = tick;
 
-            // Process tempo and time signature changes
+            // Process tempo and note events
             if (evt is TempoEvent tempoEvent)
             {
                 currentTempo = tempoEvent.MicrosecondsPerQuarterNote;
             }
-            else if (evt is NoteOnEvent noteEvent)
+            else if (evt is NoteEvent noteEvent)
             {
                 int noteIndex = MidiNoteToKeyIndex(noteEvent.NoteNumber);
                 if (noteIndex is >= 0 and < Tones * Octaves)
                 {
-                    noteEvents.Add((currentTime, noteIndex, noteEvent.Velocity / 127f));
+                    float velocity = 0;
+                    if (noteEvent.CommandCode == MidiCommandCode.NoteOn)
+                    {
+                        velocity = ((NoteOnEvent)noteEvent).Velocity / 127f;
+                    }
+                    // NoteOff CommandCode (0x80) will result in velocity 0
+                    noteEvents.Add((currentTime, noteIndex, velocity));
                 }
             }
         }
@@ -688,6 +694,10 @@ public class Main : MonoBehaviour
                     activeNotes.Select(kvp => new Tuple<int, float>(kvp.Key, kvp.Value))
                 );
             }
+            else
+            {
+                timeSlicedNotes[slice] = new List<Tuple<int, float>>();
+            }
         }
     }
 
@@ -716,12 +726,17 @@ public class Main : MonoBehaviour
             if (currentSlice >= totalTimeSlices)
             {
                 isPlaying = false;
+                PlayKeys(new List<Tuple<int, float>>());
                 return;
             }
 
-            if (timeSlicedNotes.TryGetValue(currentSlice, out List<Tuple<int, float>> notes))
+            if (timeSlicedNotes.TryGetValue(currentSlice, out List<Tuple<int, float>> notesToPlay))
             {
-                PlayKeys(notes);
+                PlayKeys(notesToPlay);
+            }
+            else
+            {
+                PlayKeys(new List<Tuple<int, float>>());
             }
         }
 
