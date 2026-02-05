@@ -286,7 +286,7 @@ public class Main : MonoBehaviour
                 case 5: // Perfect fourth
                 case 7: // Perfect fifth
                     int fifthRelativeToKey = (otherBase - currentKey + Tones) % Tones;
-                    harmonicColor = descendingFifthColors[fifthRelativeToKey];
+                    harmonicColor = descendingFifthColors[fifthToColor[fifthRelativeToKey]];
                     influence = amplitude * 0.4f;
                     break;
                 case 3: // Minor third
@@ -294,13 +294,13 @@ public class Main : MonoBehaviour
                 case 8: // Minor sixth
                 case 9: // Major sixth
                     int thirdRelativeToKey = (otherBase - currentKey + Tones) % Tones;
-                    harmonicColor = descendingFifthColors[thirdRelativeToKey];
+                    harmonicColor = descendingFifthColors[fifthToColor[thirdRelativeToKey]];
                     influence = amplitude * 0.3f;
                     break;
                 default:
                     // Dissonant intervals - less influence
                     int dissonantRelativeToKey = (otherBase - currentKey + Tones) % Tones;
-                    harmonicColor = descendingFifthColors[dissonantRelativeToKey];
+                    harmonicColor = descendingFifthColors[fifthToColor[dissonantRelativeToKey]];
                     influence = amplitude * 0.1f;
                     break;
             }
@@ -403,11 +403,8 @@ public class Main : MonoBehaviour
                                Vector3.Magnitude(notes[otherKey].transform.localPosition);
 
             // sum all fifths below key and below otherKey and retrieve vote
-            int scaleOther = Roll(otherKey, pointingOut ? 5 : -5);
-            int scaleKey = Roll(key, pointingOut ? -5 : 5);
-
-            scaleOther %= Tones;
-            scaleKey %= Tones;
+            int scaleOther = otherKey % Tones;
+            int scaleKey = key % Tones;
 
             float otherSum = votes[scaleOther];
             float thisSum = votes[scaleKey];
@@ -415,7 +412,7 @@ public class Main : MonoBehaviour
             Color calcColor = Color.white;
             if (thisSum == 0 && otherSum == 0)
             {
-                // default to inner (major) color
+                // default to inner note color
                 calcColor = pointingOut
                     ? descendingFifthColors[fifthToColor[(scaleKey - currentKey + Tones) % Tones]]
                     : descendingFifthColors[fifthToColor[(scaleOther - currentKey + Tones) % Tones]];
@@ -424,8 +421,8 @@ public class Main : MonoBehaviour
             {
                 float colorT = GetRatio(thisSum, otherSum);
 
-                int startIdx = (pointingOut ? scaleKey : Roll(scaleKey, -5));
-                int endIdx = (pointingOut ? Roll(scaleOther, -5) : scaleOther);
+                int startIdx = scaleKey;
+                int endIdx = scaleOther;
 
                 calcColor = Color.Lerp(
                     descendingFifthColors[fifthToColor[(startIdx - currentKey + Tones) % Tones]],
@@ -517,7 +514,7 @@ public class Main : MonoBehaviour
             // set color of fifth (it is always the same color, but intensity changes)
             float intensity = combinedAmplitude * 1.5f;
             Color color = Color.Lerp(
-                descendingFifthColors[fifthToColor[(otherKey % Tones - currentKey + Tones) % Tones]],
+                descendingFifthColors[fifthToColor[(key % Tones - currentKey + Tones) % Tones]],
                 Color.white,
                 .3f) * Mathf.Pow(2, intensity); // whiten and intensify on HDR
 
