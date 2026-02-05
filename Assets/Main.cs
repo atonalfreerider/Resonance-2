@@ -473,33 +473,43 @@ public class Main : MonoBehaviour
             newChord.Init(note1, note2, chordRend);
             chordLineRenderers.Add(playKey, newChord);
 
-            int min = Math.Min(scaleToFifths[key], scaleToFifths[otherKey]);
-            float startT = (float)min / Tones;
-            float endT = (float)((min + 1) % Tones) / Tones;
-            if (min == 0 && scaleToFifths[otherKey] == Tones - 1)
-            {
-                // 0 -> 0 and 7 -> 11
-                // 11 needs to wrap back to zero
-                startT = (float)scaleToFifths[otherKey] / Tones;
-                endT = 1;
-            }
+            // Get torus positions (0-11)
+            int torusIdx1 = scaleToFifths[key] % Tones;
+            int torusIdx2 = scaleToFifths[otherKey] % Tones;
 
-            // move fifth line across face as it approaches other note
+            float t1 = (float)torusIdx1 / Tones;
+            float t2 = (float)torusIdx2 / Tones;
+
+            // Handle wrap-around for shortest path
+            float delta = t2 - t1;
+            if (delta > 0.5f) t1 += 1.0f;
+            else if (delta < -0.5f) t2 += 1.0f;
+
             int startOctave = key / Tones;
             int endOctave = otherKey / Tones;
-
-            float startLength = EdgeLength * ((float)(startOctave + 1) / Octaves);
-            float endLength = EdgeLength * ((float)(endOctave + 1) / Octaves);
+            float startFactor = (float)(startOctave + 1) / Octaves;
+            float endFactor = (float)(endOctave + 1) / Octaves;
 
             List<Vector3> fifthLine = new();
-            for (float t = startT; t < endT; t += .001f)
+            const int steps = 40;
+            for (int i = 0; i <= steps; i++)
             {
-                fifthLine.Add(UmbilicTorus.PointAlongUmbilical(
+                float progress = (float)i / steps;
+                float t = Mathf.Lerp(t1, t2, progress);
+                float currentFactor = Mathf.Lerp(startFactor, endFactor, progress);
+                
+                float wrappedT = t % 1.0f;
+                if (wrappedT < 0) wrappedT += 1.0f;
+
+                Vector3 umbilicPos = UmbilicTorus.PointAlongUmbilical(
                     Sides,
-                    Mathf.Lerp(startLength, endLength, (t - startT) / (endT - startT)),
+                    EdgeLength,
                     Rad,
-                    t,
-                    Mathf.PI));
+                    wrappedT,
+                    Mathf.PI + torusRotation);
+
+                Vector3 centroid = CentroidAt(wrappedT);
+                fifthLine.Add(Vector3.Lerp(centroid, umbilicPos, currentFactor));
             }
 
             float combinedAmplitude = note1.CurrentAmp + note2.CurrentAmp;
@@ -810,6 +820,16 @@ public class Main : MonoBehaviour
         fifthsLineRenderer.useWorldSpace = false;
 
         return fifthsLineRenderer;
+    }
+
+    static Vector3 CentroidAt(float t)
+    {
+        float i = t * Tones;
+        float alpha = 2 * Mathf.PI * (i + 1) / Sections;
+        return new Vector3(
+            Rad * Mathf.Sin(alpha),
+            0,
+            Rad * Mathf.Cos(alpha));
     }
 
     static Vector3 Centroid(int i)
