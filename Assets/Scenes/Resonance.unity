@@ -457,6 +457,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1725743181}
   - component: {fileID: 1725743182}
+  - component: {fileID: 1725743184}
+  - component: {fileID: 1725743183}
   m_Layer: 0
   m_Name: Main
   m_TagString: Untagged
@@ -492,8 +494,33 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   BloomMat: {fileID: 2100000, guid: 101e24c81ce26c74dac5a5d7db94c29c, type: 2}
-  midiPath: C:\Users\john\Documents\MuseScore4\Scores\pc2.mid
+  currentKey: 0
+--- !u!114 &1725743183
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1725743180}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8108b98ddd24e6498a9e974240e40f1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MidiPlayer
+  midiPath: C:\Users\johnb\Documents\MuseScore4\Scores\The_Beatles_-_Ticket_to_Ride-no-perc.mid
   playbackSpeed: 1
+--- !u!114 &1725743184
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1725743180}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f6a5e5df77e2234ab7036aab0d0f01b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::InputHandler
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

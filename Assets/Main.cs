@@ -15,10 +15,8 @@ public class Main : MonoBehaviour
 {
     public Material BloomMat;
 
-    public string midiPath;
-
-    const int Tones = 12;
-    const int Octaves = 8;
+    public const int Tones = 12;
+    public const int Octaves = 8;
     const int Sides = 3;
     const float EdgeLength = 1.2f;
     const float Rad = 1.5f;
@@ -34,7 +32,7 @@ public class Main : MonoBehaviour
 
     readonly string[] noteLabels = { "A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#" };
 
-    int currentKey = 0; // A
+    public int currentKey = 0; // A
     float torusRotation = 0f; // Current rotation of the torus
 
     static Color darkGrey => new(0.2f, 0.2f, 0.2f);
@@ -64,18 +62,6 @@ public class Main : MonoBehaviour
     readonly Dictionary<int, int> scaleToFifths = new();
 
     CameraControl cameraControl;
-
-    MidiFile midiFile;
-    double playbackStartTime;
-    bool isPlaying;
-    IList<MidiEvent>[] midiEvents;
-    int[] currentEventIndex;
-    double timePerTick;
-    public float playbackSpeed = 1f;
-
-    readonly Dictionary<int, List<Tuple<int, float>>> timeSlicedNotes = new();
-    int totalTimeSlices;
-    const float TIME_SLICE = 0.01f; // Higher resolution (10ms) for better polyphony
 
     void Awake()
     {
@@ -136,7 +122,6 @@ public class Main : MonoBehaviour
 
     void Start()
     {
-        LoadMidi();
         UpdateText();
         Camera.main.GetComponent<CameraControl>().MovementUpdater += UpdateText;
         Camera.main.transform.LookAt(Vector3.zero);
@@ -234,7 +219,7 @@ public class Main : MonoBehaviour
         }
     }
 
-    void ChangeKey(int newKey)
+    public void ChangeKey(int newKey)
     {
         if (newKey == currentKey) return;
         
@@ -324,7 +309,7 @@ public class Main : MonoBehaviour
     /// <summary>
     /// Takes input from keyboard or midi file
     /// </summary>
-    void PlayKeys(List<Tuple<int, float>> keysAndAmplitudes)
+    public void PlayKeys(List<Tuple<int, float>> keysAndAmplitudes)
     {
         float[] votes = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         
@@ -575,250 +560,6 @@ public class Main : MonoBehaviour
         foreach (TextBox textLabel in noteTextLabels)
         {
             textLabel.Billboard();
-        }
-    }
-
-    static int MidiNoteToKeyIndex(int midiNote)
-    {
-        // MIDI note 21 is A0 (our index 0)
-        return midiNote - 21;
-    }
-
-    void LoadMidi()
-    {
-        midiFile = new MidiFile(midiPath, false);
-        timeSlicedNotes.Clear();
-
-        // Get MIDI time division (ticks per quarter note)
-        int ticksPerQuarter = midiFile.DeltaTicksPerQuarterNote;
-        double currentTempo = 500000.0; // Default tempo (microseconds per quarter note)
-        const int timeSignatureNumerator = 4; // Default time signature numerator
-        int timeSignatureDenominator = 4; // Default time signature denominator
-        int ticksPerMeasure = ticksPerQuarter * timeSignatureNumerator;
-
-        // Collect all MIDI events
-        List<(long tick, MidiEvent evt)> allEvents = new List<(long tick, MidiEvent evt)>();
-        long maxTicks = 0;
-        foreach (IList<MidiEvent> track in midiFile.Events)
-        {
-            long absoluteTick = 0;
-            foreach (MidiEvent evt in track)
-            {
-                absoluteTick += evt.DeltaTime;
-                allEvents.Add((absoluteTick, evt));
-                maxTicks = Math.Max(maxTicks, absoluteTick);
-            }
-        }
-
-        // Sort events by their absolute tick count
-        allEvents.Sort((a, b) => a.tick.CompareTo(b.tick));
-
-        List<(double time, int note, float velocity)> noteEvents = new List<(double time, int note, float velocity)>();
-        double currentTime = 0;
-        long lastTick = 0;
-
-        foreach ((long tick, MidiEvent evt) in allEvents)
-        {
-            // Calculate time up to this event
-            long deltaTicks = tick - lastTick;
-            double deltaSeconds = (deltaTicks * currentTempo) / (ticksPerQuarter * 1_000_000.0);
-            currentTime += deltaSeconds;
-            lastTick = tick;
-
-            // Process tempo and note events
-            if (evt is TempoEvent tempoEvent)
-            {
-                currentTempo = tempoEvent.MicrosecondsPerQuarterNote;
-            }
-            else if (evt is NoteEvent noteEvent)
-            {
-                int noteIndex = MidiNoteToKeyIndex(noteEvent.NoteNumber);
-                if (noteIndex is >= 0 and < Tones * Octaves)
-                {
-                    float velocity = 0;
-                    if (noteEvent.CommandCode == MidiCommandCode.NoteOn)
-                    {
-                        velocity = ((NoteOnEvent)noteEvent).Velocity / 127f;
-                    }
-                    // NoteOff CommandCode (0x80) will result in velocity 0
-                    noteEvents.Add((currentTime, noteIndex, velocity));
-                }
-            }
-        }
-
-        if (!noteEvents.Any())
-        {
-            Debug.LogError("No valid note events found in MIDI file");
-            return;
-        }
-
-        // Calculate time slices based on actual duration
-        double startTime = noteEvents[0].time;
-        double endTime = noteEvents[^1].time;
-        double duration = endTime - startTime;
-
-        totalTimeSlices = Mathf.Max(1, Mathf.CeilToInt((float)(duration / TIME_SLICE)));
-
-        // Create time slices with note states
-        Dictionary<int, float> activeNotes = new Dictionary<int, float>();
-        int currentEventIndex = 0;
-
-        for (int slice = 0; slice < totalTimeSlices; slice++)
-        {
-            double sliceTime = startTime + (slice * TIME_SLICE);
-            double nextSliceTime = sliceTime + TIME_SLICE;
-
-            while (currentEventIndex < noteEvents.Count &&
-                   noteEvents[currentEventIndex].time < nextSliceTime)
-            {
-                (_, int note, float velocity) = noteEvents[currentEventIndex];
-
-                if (velocity > 0)
-                {
-                    activeNotes[note] = velocity;
-                }
-                else
-                {
-                    activeNotes.Remove(note);
-                }
-
-                currentEventIndex++;
-            }
-
-            if (activeNotes.Any())
-            {
-                timeSlicedNotes[slice] = new List<Tuple<int, float>>(
-                    activeNotes.Select(kvp => new Tuple<int, float>(kvp.Key, kvp.Value))
-                );
-            }
-            else
-            {
-                timeSlicedNotes[slice] = new List<Tuple<int, float>>();
-            }
-        }
-    }
-
-    void Update()
-    {
-        // Handle key changes
-        if (Keyboard.current.aKey.wasPressedThisFrame) ChangeKey(0);  // A
-        if (Keyboard.current.bKey.wasPressedThisFrame) ChangeKey(2);  // B
-        if (Keyboard.current.cKey.wasPressedThisFrame) ChangeKey(3);  // C
-        if (Keyboard.current.dKey.wasPressedThisFrame) ChangeKey(5);  // D
-        if (Keyboard.current.eKey.wasPressedThisFrame) ChangeKey(7);  // E
-        if (Keyboard.current.fKey.wasPressedThisFrame) ChangeKey(8);  // F
-        if (Keyboard.current.gKey.wasPressedThisFrame) ChangeKey(10); // G
-
-        if (Keyboard.current.spaceKey.wasPressedThisFrame)
-        {
-            playbackStartTime = Time.timeAsDouble;
-            isPlaying = true;
-        }
-
-        if (isPlaying)
-        {
-            double currentTime = (Time.timeAsDouble - playbackStartTime) * playbackSpeed;
-            int currentSlice = (int)(currentTime / TIME_SLICE);
-
-            if (currentSlice >= totalTimeSlices)
-            {
-                isPlaying = false;
-                PlayKeys(new List<Tuple<int, float>>());
-                return;
-            }
-
-            if (timeSlicedNotes.TryGetValue(currentSlice, out List<Tuple<int, float>> notesToPlay))
-            {
-                PlayKeys(notesToPlay);
-            }
-            else
-            {
-                PlayKeys(new List<Tuple<int, float>>());
-            }
-        }
-
-        // Handle keyboard input if not playing MIDI
-        if (!isPlaying)
-        {
-            List<int> currentKeys = new();
-            if (Keyboard.current.digit1Key.isPressed)
-            {
-                currentKeys.Add(0);
-            }
-
-            if (Keyboard.current.digit2Key.isPressed)
-            {
-                currentKeys.Add(1);
-            }
-
-            if (Keyboard.current.digit3Key.isPressed)
-            {
-                currentKeys.Add(2);
-            }
-
-            if (Keyboard.current.digit4Key.isPressed)
-            {
-                currentKeys.Add(3);
-            }
-
-            if (Keyboard.current.digit5Key.isPressed)
-            {
-                currentKeys.Add(4);
-            }
-
-            if (Keyboard.current.digit6Key.isPressed)
-            {
-                currentKeys.Add(5);
-            }
-
-            if (Keyboard.current.digit7Key.isPressed)
-            {
-                currentKeys.Add(6);
-            }
-
-            if (Keyboard.current.digit8Key.isPressed)
-            {
-                currentKeys.Add(7);
-            }
-
-            if (Keyboard.current.digit9Key.isPressed)
-            {
-                currentKeys.Add(8);
-            }
-
-            if (Keyboard.current.digit0Key.isPressed)
-            {
-                currentKeys.Add(9);
-            }
-
-            if (Keyboard.current.minusKey.isPressed)
-            {
-                currentKeys.Add(10);
-            }
-
-            if (Keyboard.current.equalsKey.isPressed)
-            {
-                currentKeys.Add(11);
-            }
-
-            List<Tuple<int, float>> adjusted = new();
-            foreach (int key in currentKeys)
-            {
-                int newKey = key + currentKey;
-                if (newKey > 12)
-                {
-                    newKey -= 12;
-                }
-
-                //newKey += 36;
-
-                adjusted.Add(new Tuple<int, float>(newKey, 1f)); // default 1 amplitude
-            }
-
-            if (adjusted.Any() || Keyboard.current.anyKey.wasReleasedThisFrame)
-            {
-                PlayKeys(adjusted);
-            }
         }
     }
 
