@@ -26,6 +26,8 @@ public class Main : MonoBehaviour
     readonly List<TextBox> noteTextLabels = new();
 
     readonly List<LineRenderer> fifthsLineRenderer = new();
+    readonly List<LineRenderer> boundaryLineRenderers = new();
+    readonly List<MeshFilter> boundaryMeshFilters = new();
     LineRenderer chromaticLineRenderer;
 
     readonly Dictionary<ulong, Chord> chordLineRenderers = new();
@@ -107,6 +109,18 @@ public class Main : MonoBehaviour
             GameObject fifthsGo = new("fifths");
             fifthsGo.transform.SetParent(transform, false);
             fifthsLineRenderer.Add(NewLineRenderer(fifthsGo, fifthsMat, .01f, false));
+
+            GameObject boundaryGo = new("boundary");
+            boundaryGo.transform.SetParent(transform, false);
+            Material boundaryMat = new(Shader.Find("Unlit/Color")) { color = Color.gray };
+            boundaryLineRenderers.Add(NewLineRenderer(boundaryGo, boundaryMat, .005f, false));
+            boundaryLineRenderers[i].gameObject.SetActive(false);
+
+            GameObject meshGo = new("boundaryVolume");
+            meshGo.transform.SetParent(transform, false);
+            boundaryMeshFilters.Add(meshGo.AddComponent<MeshFilter>());
+            MeshRenderer mr = meshGo.AddComponent<MeshRenderer>();
+            mr.material = new Material(Shader.Find("UI/Default"));
         }
 
         Material chromaticMat = new(Shader.Find("Unlit/Color"))
@@ -194,6 +208,10 @@ public class Main : MonoBehaviour
         chromaticLineRenderer.SetPositions(chromaticList.ToArray());
         chromaticLineRenderer.gameObject.SetActive(false);
 
+        // Map torus slot index to semitone index for Octave 0
+        int[] slotToNote = new int[Tones];
+        for (int k = 0; k < Tones; k++) slotToNote[scaleToFifths[k] % Tones] = k;
+
         for (int j = 0; j < Octaves; j++)
         {
             // set the notes in 5th intervals evenly from 0 to 1 on the umbilical
@@ -217,6 +235,102 @@ public class Main : MonoBehaviour
                 }
             }
         }
+
+
+        // Draw boundary volumes for specific Nashville chords
+        for (int slot = 0; slot < Tones; slot++)
+        {
+            int i = slotToNote[slot];
+            int rel = (i - currentKey + Tones) % Tones;
+
+            // Nashville Roles: 0:I, 1:bII (Neapolitan), 2:ii, 4:iii, 5:IV, 7:V, 9:vi
+            bool isMajor = rel is 0 or 5 or 7 or 1;
+            bool isMinor = rel is 2 or 4 or 9;
+            bool isNeapolitan = rel == 1;
+
+            if (!isMajor && !isMinor)
+            {
+                boundaryMeshFilters[slot].gameObject.SetActive(false);
+                continue;
+            }
+
+            boundaryMeshFilters[slot].gameObject.SetActive(true);
+
+            // Major triad: 0, 4, 7. Opposite vertex for surface: 11.
+            // Minor triad: 0, 3, 7. Opposite vertex for surface: -4 (or 8).
+            int thirdInt = isMajor ? 4 : 3;
+            int oppInt = isMajor ? 11 : -4;
+
+            float tRoot = (float)slot / Tones;
+            float t3rd = (float)(scaleToFifths[(i + thirdInt) % Tones] % Tones) / Tones;
+            float t5th = (float)(scaleToFifths[(i + 7) % Tones] % Tones) / Tones;
+            float tOpp = (float)(scaleToFifths[(i + oppInt + Tones) % Tones] % Tones) / Tones;
+
+            float p1Start = isMajor ? tRoot : t5th;
+            float p1End = isMajor ? t5th : tRoot;
+
+            // Shortest path wrap-around
+            if (p1End - p1Start > 0.5f) p1Start += 1.0f; else if (p1End - p1Start < -0.5f) p1End += 1.0f;
+            if (tOpp - t3rd > 0.5f) t3rd += 1.0f; else if (tOpp - t3rd < -0.5f) tOpp += 1.0f;
+
+            const int uSteps = 20;
+            const float L_top = 1f; // Inclusive of space touching umbilic
+            const float L_bot = 0f; // Inclusive of space to bottom centroid edge
+
+            List<Vector3> verts = new();
+            List<int> tris = new();
+
+            for (int u = 0; u <= uSteps; u++)
+            {
+                float U = (float)u / uSteps;
+                float p1T = Mathf.Lerp(p1Start, p1End, U);
+                float p2T = Mathf.Lerp(t3rd, tOpp, U);
+                
+                Vector3 p1Top = GetPointAt(p1T, L_top);
+                Vector3 p1Bot = GetPointAt(p1T, L_bot);
+                Vector3 p2Top = GetPointAt(p2T, L_top);
+                Vector3 p2Bot = GetPointAt(p2T, L_bot);
+
+                // Shared boundary surface interpolation
+                Vector3 pbTop = Vector3.Lerp(p2Top, p1Top, U);
+                Vector3 pbBot = Vector3.Lerp(p2Bot, p1Bot, U);
+
+                verts.Add(p1Top); verts.Add(p1Bot);
+                verts.Add(pbTop); verts.Add(pbBot);
+            }
+
+            for (int u = 0; u < uSteps; u++)
+            {
+                int b = u * 4; int n = (u + 1) * 4;
+                AddQuad(tris, b + 0, n + 0, n + 2, b + 2); // Top
+                AddQuad(tris, b + 1, b + 3, n + 3, n + 1); // Bottom
+                AddQuad(tris, b + 0, b + 1, n + 1, n + 0); // Inner Wall
+                AddQuad(tris, b + 2, n + 2, n + 3, b + 3); // Outer Wall
+            }
+            AddQuad(tris, 0, 2, 3, 1); // Start Cap
+            AddQuad(tris, uSteps * 4, uSteps * 4 + 1, uSteps * 4 + 3, uSteps * 4 + 2); // End Cap
+
+            Mesh mesh = new() { vertices = verts.ToArray(), triangles = tris.ToArray() };
+            mesh.RecalculateNormals();
+            boundaryMeshFilters[slot].mesh = mesh;
+            
+            Color refColor = descendingFifthColors[fifthToColor[rel]];
+            refColor.a = isMajor ? 0.1f : 0.01f; 
+            if(isNeapolitan) refColor.a = 0.005f;
+            boundaryMeshFilters[slot].GetComponent<MeshRenderer>().material.color = refColor;
+        }
+    }
+
+    Vector3 GetPointAt(float t, float factor)
+    {
+        float wt = t % 1.0f; if (wt < 0) wt += 1.0f;
+        Vector3 umbilicPos = UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, wt, Mathf.PI + torusRotation);
+        return Vector3.Lerp(CentroidAt(wt), umbilicPos, factor);
+    }
+
+    void AddQuad(List<int> tris, int a, int b, int c, int d)
+    {
+        tris.AddRange(new[] { a, b, c, a, c, d });
     }
 
     public void ChangeKey(int newKey)

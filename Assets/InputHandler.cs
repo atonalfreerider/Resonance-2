@@ -44,7 +44,7 @@ public class InputHandler : MonoBehaviour
 
         if (keys.Any() || Keyboard.current.anyKey.wasReleasedThisFrame)
         {
-            var adjusted = keys.Select(k => new Tuple<int, float>((k + main.currentKey) % Main.Tones, 1f)).ToList();
+            var adjusted = keys.Select(k => new Tuple<int, float>((k + main.currentKey) % Main.Tones +  36, 1f)).ToList();
             main.PlayKeys(adjusted);
         }
     }

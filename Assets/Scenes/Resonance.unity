@@ -494,6 +494,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   BloomMat: {fileID: 2100000, guid: 101e24c81ce26c74dac5a5d7db94c29c, type: 2}
+  transparentCutoutShader: {fileID: 10751, guid: 0000000000000000f000000000000000, type: 0}
   currentKey: 0
 --- !u!114 &1725743183
 MonoBehaviour:
