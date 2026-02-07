@@ -35,7 +35,10 @@ public class Main : MonoBehaviour
     readonly string[] noteLabels = { "A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#" };
 
     public int currentKey = 0; // A
-    float torusRotation = 0f; // Current rotation of the torus
+    float currentVisualRotation = 0f; 
+    int visualKeyForRendering = 0;
+    private Coroutine keyChangeCoroutine;
+    private List<Tuple<int, float>> lastActiveKeys = new();
 
     static Color darkGrey => new(0.2f, 0.2f, 0.2f);
 
@@ -74,6 +77,8 @@ public class Main : MonoBehaviour
             int fifthsIndex = (11 - (7 * i) % Tones + Tones) % Tones;
             fifthToColor.Add(i, fifthsIndex);
         }
+
+        visualKeyForRendering = currentKey;
 
         for (int j = 0; j < Octaves; j++)
         {
@@ -161,7 +166,7 @@ public class Main : MonoBehaviour
         const int ratio = Sides * 2 - 1;
         for (float t = 0; t < 1; t += resolution)
         {
-            chromaticList.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI + torusRotation, ratio));
+            chromaticList.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI, ratio));
         }
 
         for (int i = 0; i < Tones; i++)
@@ -170,7 +175,7 @@ public class Main : MonoBehaviour
             List<Vector3> subSection = new();
             for (float t = (float)i / Tones; t < (float)(i + 1) / Tones; t += resolution)
             {
-                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI + torusRotation));
+                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI));
             }
 
             fifthsSegment.positionCount = subSection.Count;
@@ -208,75 +213,68 @@ public class Main : MonoBehaviour
         chromaticLineRenderer.SetPositions(chromaticList.ToArray());
         chromaticLineRenderer.gameObject.SetActive(false);
 
-        // Map torus slot index to semitone index for Octave 0
+        UpdateTorusPoints(currentVisualRotation, visualKeyForRendering);
+    }
+
+    void UpdateTorusPoints(float phaseShift, int visualKey)
+    {
         int[] slotToNote = new int[Tones];
         for (int k = 0; k < Tones; k++) slotToNote[scaleToFifths[k] % Tones] = k;
 
         for (int j = 0; j < Octaves; j++)
         {
-            // set the notes in 5th intervals evenly from 0 to 1 on the umbilical
             for (int i = 0; i < Tones; i++)
             {
-                int next = scaleToFifths[j * Tones + i];
+                int chromaticNote = i; 
+                int slot = scaleToFifths[j * Tones + i] % Tones;
 
-                Vector3 umbilicPosition =
-                    UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, (float)i / Tones, Mathf.PI + torusRotation);
+                float t = ((float)slot / Tones + phaseShift) % 1.0f;
+                if (t < 0) t += 1.0f;
 
-                // interpolate octave points to centroid of torus
-                Vector3 centroid = Centroid(i);
+                Vector3 umbilicPosition = UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI);
+                Vector3 centroid = CentroidAt(t);
 
-                notes[next].transform.localPosition =
-                    Vector3.Lerp(centroid, umbilicPosition, (float)(j + 1) / Octaves);
+                notes[j * Tones + i].transform.localPosition = Vector3.Lerp(centroid, umbilicPosition, (float)(j + 1) / Octaves);
 
                 if (j == 0)
                 {
-                    noteTextLabels[next].transform.localPosition =
-                        Vector3.LerpUnclamped(umbilicPosition, centroid, -.2f);
+                    noteTextLabels[i].transform.localPosition = Vector3.LerpUnclamped(umbilicPosition, centroid, -.2f);
                 }
             }
         }
 
-
-        // Draw boundary volumes for specific Nashville chords
-        for (int slot = 0; slot < Tones; slot++)
+        for (int slotIdx = 0; slotIdx < Tones; slotIdx++)
         {
-            int i = slotToNote[slot];
-            int rel = (i - currentKey + Tones) % Tones;
+            int i = slotToNote[slotIdx];
+            int rel = (i - visualKey + Tones) % Tones;
 
-            // Nashville Roles: 0:I, 1:bII (Neapolitan), 2:ii, 4:iii, 5:IV, 7:V, 9:vi
             bool isMajor = rel is 0 or 5 or 7 or 1;
             bool isMinor = rel is 2 or 4 or 9;
             bool isNeapolitan = rel == 1;
 
             if (!isMajor && !isMinor)
             {
-                boundaryMeshFilters[slot].gameObject.SetActive(false);
+                boundaryMeshFilters[slotIdx].gameObject.SetActive(false);
                 continue;
             }
 
-            boundaryMeshFilters[slot].gameObject.SetActive(true);
+            boundaryMeshFilters[slotIdx].gameObject.SetActive(true);
 
-            // Major triad: 0, 4, 7. Opposite vertex for surface: 11.
-            // Minor triad: 0, 3, 7. Opposite vertex for surface: -4 (or 8).
             int thirdInt = isMajor ? 4 : 3;
             int oppInt = isMajor ? 11 : -4;
 
-            float tRoot = (float)slot / Tones;
-            float t3rd = (float)(scaleToFifths[(i + thirdInt) % Tones] % Tones) / Tones;
-            float t5th = (float)(scaleToFifths[(i + 7) % Tones] % Tones) / Tones;
-            float tOpp = (float)(scaleToFifths[(i + oppInt + Tones) % Tones] % Tones) / Tones;
+            float tRoot = ((float)slotIdx / Tones + phaseShift) % 1.0f;
+            float t3rd = ((float)(scaleToFifths[(i + thirdInt) % Tones] % Tones) / Tones + phaseShift) % 1.0f;
+            float t5th = ((float)(scaleToFifths[(i + 7) % Tones] % Tones) / Tones + phaseShift) % 1.0f;
+            float tOpp = ((float)(scaleToFifths[(i + oppInt + Tones) % Tones] % Tones) / Tones + phaseShift) % 1.0f;
 
             float p1Start = isMajor ? tRoot : t5th;
             float p1End = isMajor ? t5th : tRoot;
 
-            // Shortest path wrap-around
             if (p1End - p1Start > 0.5f) p1Start += 1.0f; else if (p1End - p1Start < -0.5f) p1End += 1.0f;
             if (tOpp - t3rd > 0.5f) t3rd += 1.0f; else if (tOpp - t3rd < -0.5f) tOpp += 1.0f;
 
             const int uSteps = 20;
-            const float L_top = 1f; // Inclusive of space touching umbilic
-            const float L_bot = 0f; // Inclusive of space to bottom centroid edge
-
             List<Vector3> verts = new();
             List<int> tris = new();
 
@@ -286,12 +284,11 @@ public class Main : MonoBehaviour
                 float p1T = Mathf.Lerp(p1Start, p1End, U);
                 float p2T = Mathf.Lerp(t3rd, tOpp, U);
                 
-                Vector3 p1Top = GetPointAt(p1T, L_top);
-                Vector3 p1Bot = GetPointAt(p1T, L_bot);
-                Vector3 p2Top = GetPointAt(p2T, L_top);
-                Vector3 p2Bot = GetPointAt(p2T, L_bot);
+                Vector3 p1Top = GetPointAt(p1T, 1f);
+                Vector3 p1Bot = GetPointAt(p1T, 0f);
+                Vector3 p2Top = GetPointAt(p2T, 1f);
+                Vector3 p2Bot = GetPointAt(p2T, 0f);
 
-                // Shared boundary surface interpolation
                 Vector3 pbTop = Vector3.Lerp(p2Top, p1Top, U);
                 Vector3 pbBot = Vector3.Lerp(p2Bot, p1Bot, U);
 
@@ -302,29 +299,29 @@ public class Main : MonoBehaviour
             for (int u = 0; u < uSteps; u++)
             {
                 int b = u * 4; int n = (u + 1) * 4;
-                AddQuad(tris, b + 0, n + 0, n + 2, b + 2); // Top
-                AddQuad(tris, b + 1, b + 3, n + 3, n + 1); // Bottom
-                AddQuad(tris, b + 0, b + 1, n + 1, n + 0); // Inner Wall
-                AddQuad(tris, b + 2, n + 2, n + 3, b + 3); // Outer Wall
+                AddQuad(tris, b + 0, n + 0, n + 2, b + 2);
+                AddQuad(tris, b + 1, b + 3, n + 3, n + 1);
+                AddQuad(tris, b + 0, b + 1, n + 1, n + 0);
+                AddQuad(tris, b + 2, n + 2, n + 3, b + 3);
             }
-            AddQuad(tris, 0, 2, 3, 1); // Start Cap
-            AddQuad(tris, uSteps * 4, uSteps * 4 + 1, uSteps * 4 + 3, uSteps * 4 + 2); // End Cap
+            AddQuad(tris, 0, 2, 3, 1);
+            AddQuad(tris, uSteps * 4, uSteps * 4 + 1, uSteps * 4 + 3, uSteps * 4 + 2);
 
             Mesh mesh = new() { vertices = verts.ToArray(), triangles = tris.ToArray() };
             mesh.RecalculateNormals();
-            boundaryMeshFilters[slot].mesh = mesh;
+            boundaryMeshFilters[slotIdx].mesh = mesh;
             
             Color refColor = descendingFifthColors[fifthToColor[rel]];
             refColor.a = isMajor ? 0.1f : 0.01f; 
             if(isNeapolitan) refColor.a = 0.005f;
-            boundaryMeshFilters[slot].GetComponent<MeshRenderer>().material.color = refColor;
+            boundaryMeshFilters[slotIdx].GetComponent<MeshRenderer>().material.color = refColor;
         }
     }
 
     Vector3 GetPointAt(float t, float factor)
     {
         float wt = t % 1.0f; if (wt < 0) wt += 1.0f;
-        Vector3 umbilicPos = UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, wt, Mathf.PI + torusRotation);
+        Vector3 umbilicPos = UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, wt, Mathf.PI);
         return Vector3.Lerp(CentroidAt(wt), umbilicPos, factor);
     }
 
@@ -336,21 +333,54 @@ public class Main : MonoBehaviour
     public void ChangeKey(int newKey)
     {
         if (newKey == currentKey) return;
-        
-        currentKey = newKey;
-        
-        // Calculate rotation needed to put new key at 12 o'clock
-        // Each step is 2π/12 = π/6 radians
-        torusRotation = -currentKey * (2f * Mathf.PI / Tones);
-        
-        // Rebuild the torus with new rotation
-        SetUmbilic();
+        if (keyChangeCoroutine != null) StopCoroutine(keyChangeCoroutine);
+        keyChangeCoroutine = StartCoroutine(KeyChangeRoutine(newKey));
+    }
+
+    private System.Collections.IEnumerator KeyChangeRoutine(int targetKey)
+    {
+        int startKey = currentKey;
+        int slotStart = scaleToFifths[startKey] % Tones;
+        int slotTarget = scaleToFifths[targetKey] % Tones;
+
+        int fSteps = slotTarget - slotStart;
+        if (fSteps > 6) fSteps -= 12;
+        else if (fSteps < -6) fSteps += 12;
+
+        float startShift = currentVisualRotation;
+        float targetShift = startShift - (fSteps / (float)Tones);
+
+        int[] slotToNote = new int[Tones];
+        for (int k = 0; k < Tones; k++) slotToNote[scaleToFifths[k] % Tones] = k;
+
+        float duration = 1.0f;
+        int frameCount = 30;
+        float waitTime = duration / frameCount;
+
+        for (int i = 1; i <= frameCount; i++)
+        {
+            float lerp = (float)i / frameCount;
+            currentVisualRotation = Mathf.Lerp(startShift, targetShift, lerp);
+            
+            float currentFProgress = lerp * fSteps;
+            int nearestSlotOffset = Mathf.RoundToInt(currentFProgress);
+            int currentSlot = (slotStart + nearestSlotOffset + 12) % 12;
+            visualKeyForRendering = slotToNote[currentSlot];
+
+            UpdateTorusPoints(currentVisualRotation, visualKeyForRendering);
+            PlayKeys(lastActiveKeys);
+            yield return new UnityEngine.WaitForSeconds(waitTime);
+        }
+
+        currentKey = targetKey;
+        visualKeyForRendering = currentKey;
+        keyChangeCoroutine = null;
     }
 
     Color CalculateNoteColor(int noteIndex, List<Tuple<int, float>> activeNotes)
     {
         int baseNote = noteIndex % Tones;
-        int relativeToKey = (baseNote - currentKey + Tones) % Tones;
+        int relativeToKey = (baseNote - visualKeyForRendering + Tones) % Tones;
         
         // Base color from position in circle of fifths relative to current key
         Color baseColor = descendingFifthColors[fifthToColor[relativeToKey]];
@@ -384,7 +414,7 @@ public class Main : MonoBehaviour
                     break;
                 case 5: // Perfect fourth
                 case 7: // Perfect fifth
-                    int fifthRelativeToKey = (otherBase - currentKey + Tones) % Tones;
+                    int fifthRelativeToKey = (otherBase - visualKeyForRendering + Tones) % Tones;
                     harmonicColor = descendingFifthColors[fifthToColor[fifthRelativeToKey]];
                     influence = amplitude * 0.4f;
                     break;
@@ -392,13 +422,13 @@ public class Main : MonoBehaviour
                 case 4: // Major third
                 case 8: // Minor sixth
                 case 9: // Major sixth
-                    int thirdRelativeToKey = (otherBase - currentKey + Tones) % Tones;
+                    int thirdRelativeToKey = (otherBase - visualKeyForRendering + Tones) % Tones;
                     harmonicColor = descendingFifthColors[fifthToColor[thirdRelativeToKey]];
                     influence = amplitude * 0.3f;
                     break;
                 default:
                     // Dissonant intervals - less influence
-                    int dissonantRelativeToKey = (otherBase - currentKey + Tones) % Tones;
+                    int dissonantRelativeToKey = (otherBase - visualKeyForRendering + Tones) % Tones;
                     harmonicColor = descendingFifthColors[fifthToColor[dissonantRelativeToKey]];
                     influence = amplitude * 0.1f;
                     break;
@@ -425,6 +455,7 @@ public class Main : MonoBehaviour
     /// </summary>
     public void PlayKeys(List<Tuple<int, float>> keysAndAmplitudes)
     {
+        lastActiveKeys = keysAndAmplitudes;
         float[] votes = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         
         // from the input, sort all notes into octaves, fifths, and thirds
@@ -513,8 +544,8 @@ public class Main : MonoBehaviour
             {
                 // default to inner note color
                 calcColor = pointingOut
-                    ? descendingFifthColors[fifthToColor[(scaleKey - currentKey + Tones) % Tones]]
-                    : descendingFifthColors[fifthToColor[(scaleOther - currentKey + Tones) % Tones]];
+                    ? descendingFifthColors[fifthToColor[(scaleKey - visualKeyForRendering + Tones) % Tones]]
+                    : descendingFifthColors[fifthToColor[(scaleOther - visualKeyForRendering + Tones) % Tones]];
             }
             else
             {
@@ -524,8 +555,8 @@ public class Main : MonoBehaviour
                 int endIdx = scaleOther;
 
                 calcColor = Color.Lerp(
-                    descendingFifthColors[fifthToColor[(startIdx - currentKey + Tones) % Tones]],
-                    descendingFifthColors[fifthToColor[(endIdx - currentKey + Tones) % Tones]],
+                    descendingFifthColors[fifthToColor[(startIdx - visualKeyForRendering + Tones) % Tones]],
+                    descendingFifthColors[fifthToColor[(endIdx - visualKeyForRendering + Tones) % Tones]],
                     colorT);
             }
 
@@ -573,8 +604,8 @@ public class Main : MonoBehaviour
             int torusIdx1 = scaleToFifths[key] % Tones;
             int torusIdx2 = scaleToFifths[otherKey] % Tones;
 
-            float t1 = (float)torusIdx1 / Tones;
-            float t2 = (float)torusIdx2 / Tones;
+            float t1 = (float)torusIdx1 / Tones + currentVisualRotation;
+            float t2 = (float)torusIdx2 / Tones + currentVisualRotation;
 
             // Handle wrap-around for shortest path
             float delta = t2 - t1;
@@ -602,7 +633,7 @@ public class Main : MonoBehaviour
                     EdgeLength,
                     Rad,
                     wrappedT,
-                    Mathf.PI + torusRotation);
+                    Mathf.PI);
 
                 Vector3 centroid = CentroidAt(wrappedT);
                 fifthLine.Add(Vector3.Lerp(centroid, umbilicPos, currentFactor));
@@ -613,7 +644,7 @@ public class Main : MonoBehaviour
             // set color of fifth (it is always the same color, but intensity changes)
             float intensity = combinedAmplitude * 1.5f;
             Color color = Color.Lerp(
-                descendingFifthColors[fifthToColor[(key % Tones - currentKey + Tones) % Tones]],
+                descendingFifthColors[fifthToColor[(key % Tones - visualKeyForRendering + Tones) % Tones]],
                 Color.white,
                 .3f) * Mathf.Pow(2, intensity); // whiten and intensify on HDR
 
