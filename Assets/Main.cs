@@ -36,6 +36,7 @@ public class Main : MonoBehaviour
 
     public int currentKey = 0; // A
     float currentVisualRotation = 0f; 
+    float currentVisualTwist = Mathf.PI;
     int visualKeyForRendering = 0;
     private Coroutine keyChangeCoroutine;
     private List<Tuple<int, float>> lastActiveKeys = new();
@@ -79,6 +80,7 @@ public class Main : MonoBehaviour
         }
 
         visualKeyForRendering = currentKey;
+        currentVisualTwist = Mathf.PI;
 
         for (int j = 0; j < Octaves; j++)
         {
@@ -166,7 +168,7 @@ public class Main : MonoBehaviour
         const int ratio = Sides * 2 - 1;
         for (float t = 0; t < 1; t += resolution)
         {
-            chromaticList.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI, ratio));
+            chromaticList.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, currentVisualTwist, ratio));
         }
 
         for (int i = 0; i < Tones; i++)
@@ -175,7 +177,7 @@ public class Main : MonoBehaviour
             List<Vector3> subSection = new();
             for (float t = (float)i / Tones; t < (float)(i + 1) / Tones; t += resolution)
             {
-                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI));
+                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, currentVisualTwist));
             }
 
             fifthsSegment.positionCount = subSection.Count;
@@ -225,16 +227,18 @@ public class Main : MonoBehaviour
         {
             for (int i = 0; i < Tones; i++)
             {
-                int chromaticNote = i; 
-                int slot = scaleToFifths[j * Tones + i] % Tones;
+                // Correctly map the chromatic note 'i' to its circle-of-fifths slot
+                int chromaticIndex = j * Tones + i;
+                int slot = scaleToFifths[chromaticIndex] % Tones;
 
                 float t = ((float)slot / Tones + phaseShift) % 1.0f;
                 if (t < 0) t += 1.0f;
 
-                Vector3 umbilicPosition = UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, Mathf.PI);
+                Vector3 umbilicPosition = UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, currentVisualTwist);
                 Vector3 centroid = CentroidAt(t);
 
-                notes[j * Tones + i].transform.localPosition = Vector3.Lerp(centroid, umbilicPosition, (float)(j + 1) / Octaves);
+                // Update the position of the chromatic note object
+                notes[chromaticIndex].transform.localPosition = Vector3.Lerp(centroid, umbilicPosition, (float)(j + 1) / Octaves);
 
                 if (j == 0)
                 {
@@ -321,7 +325,7 @@ public class Main : MonoBehaviour
     Vector3 GetPointAt(float t, float factor)
     {
         float wt = t % 1.0f; if (wt < 0) wt += 1.0f;
-        Vector3 umbilicPos = UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, wt, Mathf.PI);
+        Vector3 umbilicPos = UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, wt, currentVisualTwist);
         return Vector3.Lerp(CentroidAt(wt), umbilicPos, factor);
     }
 
@@ -340,15 +344,32 @@ public class Main : MonoBehaviour
     private System.Collections.IEnumerator KeyChangeRoutine(int targetKey)
     {
         int startKey = currentKey;
-        int slotStart = scaleToFifths[startKey] % Tones;
-        int slotTarget = scaleToFifths[targetKey] % Tones;
+        int n = (targetKey - startKey + 12) % 12;
 
-        int fSteps = slotTarget - slotStart;
-        if (fSteps > 6) fSteps -= 12;
-        else if (fSteps < -6) fSteps += 12;
+        // Path Map: Turn (x) = +7 semitones (1 step circle of fifths), Twist (y) = +4 semitones (1 skip skip)
+        // Solves n = (7x + 4y) mod 12
+        (int x, int y)[] pathMap = {
+            (0,0),   // 0: Unison
+            (-1,2),  // 1: -7 + 8 = 1
+            (2,0),   // 2: 14 = 2
+            (1,-1),  // 3: 7 - 4 = 3 (A to C: Turn to E, Twist to C)
+            (0,1),   // 4: 4 (Major Third)
+            (-1,0),  // 5: -7 = 5 (Fourth)
+            (2,-2),  // 6: 14 - 8 = 6 (Tritone)
+            (1,0),   // 7: 7 (Fifth)
+            (0,-1),  // 8: -4 = 8 (Minor Sixth)
+            (-1,1),  // 9: -7 + 4 = 9 (Major Sixth)
+            (-2,0),  // 10: -14 = 10
+            (1,-2)   // 11: 7 - 8 = -1 = 11
+        };
 
-        float startShift = currentVisualRotation;
-        float targetShift = startShift - (fSteps / (float)Tones);
+        var move = pathMap[n];
+        float startRotation = currentVisualRotation;
+        // x represents steps in circle of fifths. Flipped sign to correct rotation direction.
+        float targetRotation = startRotation + (move.x / (float)Tones);
+        
+        float startTwist = currentVisualTwist;
+        float targetTwist = startTwist + (move.y * (2f * Mathf.PI / 3f));
 
         int[] slotToNote = new int[Tones];
         for (int k = 0; k < Tones; k++) slotToNote[scaleToFifths[k] % Tones] = k;
@@ -360,14 +381,15 @@ public class Main : MonoBehaviour
         for (int i = 1; i <= frameCount; i++)
         {
             float lerp = (float)i / frameCount;
-            currentVisualRotation = Mathf.Lerp(startShift, targetShift, lerp);
+            currentVisualRotation = Mathf.Lerp(startRotation, targetRotation, lerp);
+            currentVisualTwist = Mathf.Lerp(startTwist, targetTwist, lerp);
             
-            float currentFProgress = lerp * fSteps;
-            int nearestSlotOffset = Mathf.RoundToInt(currentFProgress);
-            int currentSlot = (slotStart + nearestSlotOffset + 12) % 12;
-            visualKeyForRendering = slotToNote[currentSlot];
+            // Calculate intermediate visual key based on turn/twist progress
+            int curX = Mathf.RoundToInt(lerp * move.x);
+            int curY = Mathf.RoundToInt(lerp * move.y);
+            visualKeyForRendering = (startKey + curX * 7 + curY * 4 + 120) % 12;
 
-            UpdateTorusPoints(currentVisualRotation, visualKeyForRendering);
+            SetUmbilic(); // Updates lines and notes
             PlayKeys(lastActiveKeys);
             yield return new UnityEngine.WaitForSeconds(waitTime);
         }
@@ -633,7 +655,7 @@ public class Main : MonoBehaviour
                     EdgeLength,
                     Rad,
                     wrappedT,
-                    Mathf.PI);
+                    currentVisualTwist);
 
                 Vector3 centroid = CentroidAt(wrappedT);
                 fifthLine.Add(Vector3.Lerp(centroid, umbilicPos, currentFactor));
