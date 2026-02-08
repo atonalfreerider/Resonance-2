@@ -6,8 +6,8 @@ public class CameraControl : MonoBehaviour
     public float Speed = 0.3f;          // Speed of movement and rotation
     public Vector3 center = Vector3.zero; // The point the camera orbits around
     float rad = 3.5f;            // Radius (distance from center)
-    float alpha = Mathf.PI / 2;      // Polar angle (from Y-axis)
-    float phi = 0;              // Azimuthal angle (around Y-axis)
+    float alpha = 45f * Mathf.Deg2Rad;      // Polar angle (from Y-axis) - set to 45 degrees
+    float phi = 45f * Mathf.Deg2Rad;        // Azimuthal angle (around Y-axis) - set to 45 degrees
     
     public delegate void MovementUpdate();
     public MovementUpdate MovementUpdater;

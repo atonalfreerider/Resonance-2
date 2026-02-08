@@ -34,12 +34,27 @@ public class Main : MonoBehaviour
 
     readonly string[] noteLabels = { "A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#" };
 
-    public int currentKey = 0; // A
+    public int currentKey = 0; // A (Default)
     float currentVisualRotation = 0f; 
     float currentVisualTwist = Mathf.PI;
     int visualKeyForRendering = 0;
     private Coroutine keyChangeCoroutine;
     private List<Tuple<int, float>> lastActiveKeys = new();
+
+    private static readonly (int x, int y)[] pathMap = {
+        (0,0),   // 0: Unison
+        (-1,2),  // 1: -7 + 8 = 1
+        (2,0),   // 2: 14 = 2
+        (1,-1),  // 3: 7 - 4 = 3 (A to C: Turn to E, Twist to C)
+        (0,1),   // 4: 4 (Major Third)
+        (-1,0),  // 5: -7 = 5 (Fourth)
+        (2,-2),  // 6: 14 - 8 = 6 (Tritone)
+        (1,0),   // 7: 7 (Fifth)
+        (0,-1),  // 8: -4 = 8 (Minor Sixth)
+        (-1,1),  // 9: -7 + 4 = 9 (Major Sixth)
+        (-2,0),  // 10: -14 = 10
+        (1,-2)   // 11: 7 - 8 = -1 = 11
+    };
 
     static Color darkGrey => new(0.2f, 0.2f, 0.2f);
 
@@ -202,10 +217,12 @@ public class Main : MonoBehaviour
                 endColor = Color.Lerp(Color.black, Color.yellow, lerp);
             }
 
+            // Note: Color logic preserved above for animations, but rendering as grey
             const float alpha = 1.0f;
+            Color renderColor = new(0.35f, 0.35f, 0.35f);
             Gradient gradient = new();
             gradient.SetKeys(
-                new[] { new GradientColorKey(color, 0.0f), new GradientColorKey(endColor, 1.0f) },
+                new[] { new GradientColorKey(renderColor, 0.0f), new GradientColorKey(renderColor, 1.0f) },
                 new[] { new GradientAlphaKey(alpha, 0.0f), new GradientAlphaKey(alpha, 1.0f) }
             );
             fifthsSegment.colorGradient = gradient;
@@ -334,34 +351,29 @@ public class Main : MonoBehaviour
         tris.AddRange(new[] { a, b, c, a, c, d });
     }
 
-    public void ChangeKey(int newKey)
+    public void ChangeKey(int newKey, float duration = 1.0f)
     {
-        if (newKey == currentKey) return;
         if (keyChangeCoroutine != null) StopCoroutine(keyChangeCoroutine);
-        keyChangeCoroutine = StartCoroutine(KeyChangeRoutine(newKey));
+        
+        if (duration <= 0)
+        {
+            int n = (newKey - currentKey + 12) % 12;
+            var move = pathMap[n];
+            currentVisualRotation += (move.x / (float)Tones);
+            currentVisualTwist += (move.y * (2f * Mathf.PI / 3f));
+            currentKey = newKey;
+            visualKeyForRendering = currentKey;
+            SetUmbilic();
+            PlayKeys(lastActiveKeys);
+            return;
+        }
+        keyChangeCoroutine = StartCoroutine(KeyChangeRoutine(newKey, duration));
     }
 
-    private System.Collections.IEnumerator KeyChangeRoutine(int targetKey)
+    private System.Collections.IEnumerator KeyChangeRoutine(int targetKey, float duration)
     {
         int startKey = currentKey;
         int n = (targetKey - startKey + 12) % 12;
-
-        // Path Map: Turn (x) = +7 semitones (1 step circle of fifths), Twist (y) = +4 semitones (1 skip skip)
-        // Solves n = (7x + 4y) mod 12
-        (int x, int y)[] pathMap = {
-            (0,0),   // 0: Unison
-            (-1,2),  // 1: -7 + 8 = 1
-            (2,0),   // 2: 14 = 2
-            (1,-1),  // 3: 7 - 4 = 3 (A to C: Turn to E, Twist to C)
-            (0,1),   // 4: 4 (Major Third)
-            (-1,0),  // 5: -7 = 5 (Fourth)
-            (2,-2),  // 6: 14 - 8 = 6 (Tritone)
-            (1,0),   // 7: 7 (Fifth)
-            (0,-1),  // 8: -4 = 8 (Minor Sixth)
-            (-1,1),  // 9: -7 + 4 = 9 (Major Sixth)
-            (-2,0),  // 10: -14 = 10
-            (1,-2)   // 11: 7 - 8 = -1 = 11
-        };
 
         var move = pathMap[n];
         float startRotation = currentVisualRotation;
@@ -374,7 +386,6 @@ public class Main : MonoBehaviour
         int[] slotToNote = new int[Tones];
         for (int k = 0; k < Tones; k++) slotToNote[scaleToFifths[k] % Tones] = k;
 
-        float duration = 1.0f;
         int frameCount = 30;
         float waitTime = duration / frameCount;
 
