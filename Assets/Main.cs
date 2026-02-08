@@ -159,6 +159,7 @@ public class Main : MonoBehaviour
     void Start()
     {
         UpdateText();
+        UpdateLabelStyles();
         Camera.main.GetComponent<CameraControl>().MovementUpdater += UpdateText;
         Camera.main.transform.LookAt(Vector3.zero);
         
@@ -233,6 +234,7 @@ public class Main : MonoBehaviour
         chromaticLineRenderer.gameObject.SetActive(false);
 
         UpdateTorusPoints(currentVisualRotation, visualKeyForRendering);
+        UpdateLabelStyles();
     }
 
     void UpdateTorusPoints(float phaseShift, int visualKey)
@@ -738,6 +740,36 @@ public class Main : MonoBehaviour
         foreach (TextBox textLabel in noteTextLabels)
         {
             textLabel.Billboard();
+        }
+    }
+
+    void UpdateLabelStyles()
+    {
+        for (int i = 0; i < noteTextLabels.Count; i++)
+        {
+            int rel = (i - visualKeyForRendering + Tones) % Tones;
+            const float baseSize = 0.5f;
+
+            if (rel == 0) // Key
+            {
+                noteTextLabels[i].Color = Color.blue;
+                noteTextLabels[i].Size = baseSize * 4.0f;
+            }
+            else if (rel == 7) // Upper Fifth
+            {
+                noteTextLabels[i].Color = Color.green;
+                noteTextLabels[i].Size = baseSize * 1.75f;
+            }
+            else if (rel == 5) // Lower Fifth
+            {
+                noteTextLabels[i].Color = Color.red;
+                noteTextLabels[i].Size = baseSize * 1.75f;
+            }
+            else
+            {
+                noteTextLabels[i].Color = Color.white;
+                noteTextLabels[i].Size = baseSize;
+            }
         }
     }
 
