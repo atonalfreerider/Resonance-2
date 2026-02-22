@@ -14,6 +14,8 @@ public class MidiPlayer : MonoBehaviour
     private double playbackStartTime;
     private bool isPlaying;
     private readonly Dictionary<int, List<Tuple<int, float>>> timeSlicedNotes = new();
+    private int[] timeSlicedKeys;
+    private int lastTriggeredKey = -1;
     private int totalTimeSlices;
     private const float TIME_SLICE = 0.01f;
 
@@ -35,6 +37,7 @@ public class MidiPlayer : MonoBehaviour
         {
             playbackStartTime = Time.timeAsDouble;
             isPlaying = true;
+            lastTriggeredKey = -1; // Reset to ensure the first key is triggered
         }
 
         if (isPlaying)
@@ -56,6 +59,17 @@ public class MidiPlayer : MonoBehaviour
             else
             {
                 main.PlayKeys(new List<Tuple<int, float>>());
+            }
+
+            // Check for key change
+            if (timeSlicedKeys != null && currentSlice < timeSlicedKeys.Length)
+            {
+                int currentKey = timeSlicedKeys[currentSlice];
+                if (currentKey != lastTriggeredKey)
+                {
+                    main.ChangeKey(currentKey);
+                    lastTriggeredKey = currentKey;
+                }
             }
         }
     }
@@ -83,6 +97,7 @@ public class MidiPlayer : MonoBehaviour
         allEvents.Sort((a, b) => a.tick.CompareTo(b.tick));
 
         List<(double time, int note, float velocity)> noteEvents = new();
+        List<(double time, int keyIndex)> keyEvents = new();
         double currentTime = 0;
         long lastTick = 0;
 
@@ -102,18 +117,38 @@ public class MidiPlayer : MonoBehaviour
                     noteEvents.Add((currentTime, noteIndex, velocity));
                 }
             }
+            else if (evt is KeySignatureEvent keySig)
+            {
+                int rootNote = (keySig.MajorMinor == 0 ? 3 : 0); // C Major is 3, A Minor is 0
+                int keyIndex = (rootNote + 7 * keySig.SharpsFlats + 120) % 12;
+                keyEvents.Add((currentTime, keyIndex));
+            }
         }
 
-        if (!noteEvents.Any()) return;
+        if (!noteEvents.Any() && !keyEvents.Any()) return;
 
-        double startTime = noteEvents[0].time;
-        totalTimeSlices = Mathf.Max(1, Mathf.CeilToInt((float)((noteEvents[^1].time - startTime) / TIME_SLICE)));
+        double startTime = noteEvents.Count > 0 ? noteEvents[0].time : (keyEvents.Count > 0 ? keyEvents[0].time : 0);
+        double endTime = noteEvents.Count > 0 ? noteEvents[^1].time : (keyEvents.Count > 0 ? keyEvents[^1].time : 0);
+        totalTimeSlices = Mathf.Max(1, Mathf.CeilToInt((float)((endTime - startTime) / TIME_SLICE)));
+        
+        timeSlicedKeys = new int[totalTimeSlices];
         Dictionary<int, float> activeNotes = new();
         int eventIdx = 0;
+        int keyEventIdx = 0;
+        int currentKey = 0; // Default to A (0)
 
         for (int slice = 0; slice < totalTimeSlices; slice++)
         {
             double nextSliceTime = startTime + (slice + 1) * TIME_SLICE;
+            
+            // Update current key for this slice
+            while (keyEventIdx < keyEvents.Count && keyEvents[keyEventIdx].time < nextSliceTime)
+            {
+                currentKey = keyEvents[keyEventIdx++].keyIndex;
+            }
+            timeSlicedKeys[slice] = currentKey;
+
+            // Update notes for this slice
             while (eventIdx < noteEvents.Count && noteEvents[eventIdx].time < nextSliceTime)
             {
                 var e = noteEvents[eventIdx++];
