@@ -20,10 +20,11 @@ public class CameraControl : MonoBehaviour
 
     void Update()
     {
-        MoveCamera();
+        if (Keyboard.current != null && !HarmonyExplorer.TextEditing) MoveCamera();
         transform.LookAt(center); // Ensure the camera always looks at the center
     }
 
+    public void ResetView() { rad=3.5f; alpha=45f*Mathf.Deg2Rad; phi=45f*Mathf.Deg2Rad; UpdateCameraPosition(); transform.LookAt(center); MovementUpdater?.Invoke(); }
     void MoveCamera()
     {
         bool isMoving = false; // Flag to check if any movement key is pressed

@@ -64,3 +64,8 @@ crashlytics-build.properties
 .idea
 UserSettings
 .utmp
+
+# Standalone harmonic-model checks
+Tests/**/bin/
+Tests/**/obj/
+!Tests/ModelChecks/ModelChecks.csproj

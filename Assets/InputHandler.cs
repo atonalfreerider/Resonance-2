@@ -7,45 +7,28 @@ using UnityEngine.InputSystem;
 [RequireComponent(typeof(Main))]
 public class InputHandler : MonoBehaviour
 {
-    private Main main;
-    private MidiPlayer midiPlayer;
-
-    void Awake()
-    {
-        main = GetComponent<Main>();
-        midiPlayer = GetComponent<MidiPlayer>();
-    }
-
+    Main main;
+    MidiPlayer midi;
+    string previous = "";
+    void Awake(){main=GetComponent<Main>();midi=GetComponent<MidiPlayer>();}
     void Update()
     {
-        if (Keyboard.current.aKey.wasPressedThisFrame) main.ChangeKey(0);
-        if (Keyboard.current.bKey.wasPressedThisFrame) main.ChangeKey(2);
-        if (Keyboard.current.cKey.wasPressedThisFrame) main.ChangeKey(3);
-        if (Keyboard.current.dKey.wasPressedThisFrame) main.ChangeKey(5);
-        if (Keyboard.current.eKey.wasPressedThisFrame) main.ChangeKey(7);
-        if (Keyboard.current.fKey.wasPressedThisFrame) main.ChangeKey(8);
-        if (Keyboard.current.gKey.wasPressedThisFrame) main.ChangeKey(10);
-
-        if (midiPlayer != null && midiPlayer.IsPlaying) return;
-
-        List<int> keys = new();
-        if (Keyboard.current.digit1Key.isPressed) keys.Add(0);
-        if (Keyboard.current.digit2Key.isPressed) keys.Add(1);
-        if (Keyboard.current.digit3Key.isPressed) keys.Add(2);
-        if (Keyboard.current.digit4Key.isPressed) keys.Add(3);
-        if (Keyboard.current.digit5Key.isPressed) keys.Add(4);
-        if (Keyboard.current.digit6Key.isPressed) keys.Add(5);
-        if (Keyboard.current.digit7Key.isPressed) keys.Add(6);
-        if (Keyboard.current.digit8Key.isPressed) keys.Add(7);
-        if (Keyboard.current.digit9Key.isPressed) keys.Add(8);
-        if (Keyboard.current.digit0Key.isPressed) keys.Add(9);
-        if (Keyboard.current.minusKey.isPressed) keys.Add(10);
-        if (Keyboard.current.equalsKey.isPressed) keys.Add(11);
-
-        if (keys.Any() || Keyboard.current.anyKey.wasReleasedThisFrame)
-        {
-            var adjusted = keys.Select(k => new Tuple<int, float>((k + main.currentKey) % Main.Tones +  36, 1f)).ToList();
-            main.PlayKeys(adjusted);
-        }
+        var kb=Keyboard.current;
+        if(kb==null || HarmonyExplorer.TextEditing)return;
+        if(kb.aKey.wasPressedThisFrame || kb.bKey.wasPressedThisFrame || kb.cKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame || kb.eKey.wasPressedThisFrame || kb.fKey.wasPressedThisFrame || kb.gKey.wasPressedThisFrame)main.KeySource="Manual";
+        if(kb.aKey.wasPressedThisFrame)main.ChangeKey(0);
+        if(kb.bKey.wasPressedThisFrame)main.ChangeKey(2);
+        if(kb.cKey.wasPressedThisFrame)main.ChangeKey(3);
+        if(kb.dKey.wasPressedThisFrame)main.ChangeKey(5);
+        if(kb.eKey.wasPressedThisFrame)main.ChangeKey(7);
+        if(kb.fKey.wasPressedThisFrame)main.ChangeKey(8);
+        if(kb.gKey.wasPressedThisFrame)main.ChangeKey(10);
+        if((midi!=null && midi.IsPlaying) || (GetComponent<HarmonyExplorer>()?.LessonPlaying??false) || (GetComponent<LiveMidiInput>()?.Connected??false)){previous="";return;}
+        var controls=new[]{kb.digit1Key,kb.digit2Key,kb.digit3Key,kb.digit4Key,kb.digit5Key,kb.digit6Key,kb.digit7Key,kb.digit8Key,kb.digit9Key,kb.digit0Key,kb.minusKey,kb.equalsKey};
+        var keys=new List<Tuple<int,float>>();
+        for(int i=0;i<controls.Length;i++)if(controls[i].isPressed)keys.Add(Tuple.Create(HarmonyModel.Mod(i+main.currentKey)+36,.7f));
+        string signature=string.Join(",",keys.Select(k=>k.Item1));
+        if(signature!=previous){main.PlayKeys(keys);previous=signature;}
     }
+    void OnApplicationFocus(bool focus){if(!focus){previous="";main.Silence();}}
 }

@@ -3,159 +3,139 @@ using System.Collections.Generic;
 using System.Linq;
 using NAudio.Midi;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(Main))]
 public class MidiPlayer : MonoBehaviour
 {
     public string midiPath;
     public float playbackSpeed = 1f;
-
-    private Main main;
-    private double playbackStartTime;
-    private bool isPlaying;
-    private readonly Dictionary<int, List<Tuple<int, float>>> timeSlicedNotes = new();
-    private int[] timeSlicedKeys;
-    private int lastTriggeredKey = -1;
-    private int totalTimeSlices;
-    private const float TIME_SLICE = 0.01f;
-
-    public bool IsPlaying => isPlaying;
-
-    void Awake()
+    public bool Loop, FollowKey = true, SkipPercussion = true;
+    public int ChannelFilter; // 0 = all, otherwise MIDI channel 1-16
+    public int TrackFilter = -1;
+    public string Status { get; private set; } = "Load a MIDI file";
+    public int TrackCount { get; private set; }
+    public bool IsPlaying { get; private set; }
+    public double Duration { get; private set; }
+    public double Position => IsPlaying ? Math.Min(Duration, Math.Max(0, originPosition + (AudioSettings.dspTime-originDsp)*playbackSpeed)) : originPosition;
+    sealed class Frame
     {
-        main = GetComponent<Main>();
+        public double Time;
+        public List<Tuple<int,float>> Notes;
+        public int? Key;
+        public bool Minor;
     }
-
-    void Start()
+    readonly List<Frame> frames = new();
+    Main main;
+    double originPosition, originDsp;
+    int visualIndex, audioIndex;
+    int fallbackKey; bool fallbackMinor;
+    public bool Loaded => frames.Count > 0;
+    void Awake() { main = GetComponent<Main>(); }
+    void Start() { if (!string.IsNullOrWhiteSpace(midiPath)) Load(midiPath); }
+    public bool Load(string path)
     {
-        LoadMidi();
+        Stop(); frames.Clear(); Duration = 0;
+        try
+        {
+            var file = new MidiFile(path.Trim().Trim('"'), false);
+            if (file.FileFormat == 2 || file.DeltaTicksPerQuarterNote <= 0) throw new ArgumentException("Use a format 0/1 MIDI with PPQ timing.");
+            TrackCount = file.Tracks;
+            var events = new List<(long tick, int order, int track, MidiEvent evt)>();
+            int order = 0;
+            for (int track=0;track<file.Tracks;track++) foreach (var evt in file.Events[track]) events.Add((evt.AbsoluteTime, order++, track, evt));
+            double time=0, tempo=500000; long tick=0;
+            int? key = null; bool minor = false;
+            var voices = new MidiVoiceState();
+            foreach (var entry in events.OrderBy(e=>e.tick).ThenBy(e=>e.order))
+            {
+                time += (entry.tick-tick)*tempo/(file.DeltaTicksPerQuarterNote*1000000.0); tick=entry.tick;
+                var evt=entry.evt;
+                if (evt is TempoEvent te) { tempo=te.MicrosecondsPerQuarterNote; continue; }
+                bool changed=false;
+                if (evt is KeySignatureEvent ks) { minor=ks.MajorMinor!=0; key=HarmonyModel.Mod((minor?0:3)+7*ks.SharpsFlats); changed=true; }
+                else if ((TrackFilter<0 || entry.track==TrackFilter) && (ChannelFilter==0 || evt.Channel==ChannelFilter) && !(SkipPercussion && evt.Channel==10))
+                {
+                    if (evt is NoteEvent ne && (evt.CommandCode==MidiCommandCode.NoteOn || evt.CommandCode==MidiCommandCode.NoteOff))
+                    {
+                        int note=ne.NoteNumber-21;
+                        if (note>=0 && note<96)
+                        {
+                            if (evt is NoteOnEvent on && on.Velocity>0) voices.NoteOn(evt.Channel,note,on.Velocity/127f);
+                            else voices.NoteOff(evt.Channel,note);
+                            changed=true;
+                        }
+                    }
+                    else if (evt is ControlChangeEvent cc) { voices.Control(evt.Channel,(int)cc.Controller,cc.ControllerValue); changed=true; }
+                }
+                if (changed) frames.Add(new Frame { Time=time, Notes=voices.Snapshot(), Key=key, Minor=minor });
+            }
+            Duration=time+.08;
+            frames.Add(new Frame {Time=Duration,Notes=new List<Tuple<int,float>>(),Key=key,Minor=minor});
+            midiPath=path; originPosition=0;
+            fallbackKey=main.currentKey; fallbackMinor=main.MinorMode;
+            Status=$"{System.IO.Path.GetFileName(path)} · {TrackCount} tracks";
+            return true;
+        }
+        catch (Exception e) { frames.Clear(); Status="MIDI import: "+e.Message; return false; }
     }
-
+    public void Play()
+    {
+        if (!Loaded) return;
+        GetComponent<LiveMidiInput>()?.Disconnect();
+        GetComponent<HarmonyExplorer>()?.StopLesson();
+        if (Position>=Duration) originPosition=0;
+        if (originPosition==0 && main.KeySource.StartsWith("Manual")) { fallbackKey=main.currentKey; fallbackMinor=main.MinorMode; }
+        Rebase(originPosition); IsPlaying=true;
+    }
+    void Rebase(double position)
+    {
+        originPosition=Math.Clamp(position,0,Duration); originDsp=AudioSettings.dspTime+.05;
+        main.Synth.ResetVoices(); visualIndex=0;
+        while (visualIndex<frames.Count && frames[visualIndex].Time<=originPosition) visualIndex++;
+        audioIndex=visualIndex;
+        var notes=visualIndex>0?frames[visualIndex-1].Notes:new List<Tuple<int,float>>();
+        main.Synth.Schedule(originDsp,notes); main.SetNotes(notes,false);
+        ApplyKey(visualIndex>0?frames[visualIndex-1]:null);
+    }
+    void ApplyKey(Frame frame)
+    {
+        if (!FollowKey) return;
+        int key=frame?.Key??fallbackKey; bool minor=frame?.Key!=null?frame.Minor:fallbackMinor;
+        main.KeySource=frame?.Key!=null?"MIDI signature":"Manual (no MIDI signature)";
+        if (main.currentKey!=key || main.MinorMode!=minor) { main.MinorMode=minor; main.ChangeKey(key); }
+    }
+    public void Pause()
+    {
+        double position=Position; IsPlaying=false; originPosition=position; main.Silence();
+    }
+    public void Stop() { IsPlaying=false; originPosition=0; visualIndex=audioIndex=0; if (main!=null) main.Silence(); }
+    public void Seek(double seconds)
+    {
+        if (!Loaded || main.Synth==null) return;
+        bool playing=IsPlaying; Rebase(seconds); if (!playing) main.Synth.ResetVoices();
+    }
+    public void SetSpeed(float speed)
+    {
+        double position=Position; playbackSpeed=Mathf.Clamp(speed,.25f,2f);
+        if (IsPlaying) Rebase(position);
+    }
     void Update()
     {
-        if (UnityEngine.InputSystem.Keyboard.current.spaceKey.wasPressedThisFrame)
+        if (Keyboard.current!=null && Keyboard.current.spaceKey.wasPressedThisFrame && !HarmonyExplorer.TextEditing)
+        { if (IsPlaying) Pause(); else Play(); }
+        if (!IsPlaying) return;
+        double position=Position;
+        while (audioIndex<frames.Count && frames[audioIndex].Time <= position + .5*playbackSpeed)
         {
-            playbackStartTime = Time.timeAsDouble;
-            isPlaying = true;
-            lastTriggeredKey = -1; // Reset to ensure the first key is triggered
+            var frame=frames[audioIndex++];
+            main.Synth.Schedule(originDsp+(frame.Time-originPosition)/playbackSpeed,frame.Notes);
         }
-
-        if (isPlaying)
-        {
-            double currentTime = (Time.timeAsDouble - playbackStartTime) * playbackSpeed;
-            int currentSlice = (int)(currentTime / TIME_SLICE);
-
-            if (currentSlice >= totalTimeSlices)
-            {
-                isPlaying = false;
-                main.PlayKeys(new List<Tuple<int, float>>());
-                return;
-            }
-
-            if (timeSlicedNotes.TryGetValue(currentSlice, out List<Tuple<int, float>> notesToPlay))
-            {
-                main.PlayKeys(notesToPlay);
-            }
-            else
-            {
-                main.PlayKeys(new List<Tuple<int, float>>());
-            }
-
-            // Check for key change
-            if (timeSlicedKeys != null && currentSlice < timeSlicedKeys.Length)
-            {
-                int currentKey = timeSlicedKeys[currentSlice];
-                if (currentKey != lastTriggeredKey)
-                {
-                    main.ChangeKey(currentKey);
-                    lastTriggeredKey = currentKey;
-                }
-            }
-        }
+        int previous=visualIndex;
+        while (visualIndex<frames.Count && frames[visualIndex].Time<=position) visualIndex++;
+        if (visualIndex!=previous && visualIndex>0) { var frame=frames[visualIndex-1]; main.SetNotes(frame.Notes,false); ApplyKey(frame); }
+        if (position>=Duration) { if (Loop) { originPosition=0; Rebase(0); } else Stop(); }
     }
-
-    void LoadMidi()
-    {
-        if (string.IsNullOrEmpty(midiPath)) return;
-        MidiFile midiFile = new MidiFile(midiPath, false);
-        timeSlicedNotes.Clear();
-
-        int ticksPerQuarter = midiFile.DeltaTicksPerQuarterNote;
-        double currentTempo = 500000.0;
-        List<(long tick, MidiEvent evt)> allEvents = new();
-        
-        foreach (IList<MidiEvent> track in midiFile.Events)
-        {
-            long absoluteTick = 0;
-            foreach (MidiEvent evt in track)
-            {
-                absoluteTick += evt.DeltaTime;
-                allEvents.Add((absoluteTick, evt));
-            }
-        }
-
-        allEvents.Sort((a, b) => a.tick.CompareTo(b.tick));
-
-        List<(double time, int note, float velocity)> noteEvents = new();
-        List<(double time, int keyIndex)> keyEvents = new();
-        double currentTime = 0;
-        long lastTick = 0;
-
-        foreach ((long tick, MidiEvent evt) in allEvents)
-        {
-            long deltaTicks = tick - lastTick;
-            currentTime += (deltaTicks * currentTempo) / (ticksPerQuarter * 1_000_000.0);
-            lastTick = tick;
-
-            if (evt is TempoEvent tempoEvent) currentTempo = tempoEvent.MicrosecondsPerQuarterNote;
-            else if (evt is NoteEvent noteEvent)
-            {
-                int noteIndex = noteEvent.NoteNumber - 21; // MIDI 21 is A0
-                if (noteIndex >= 0 && noteIndex < Main.Tones * Main.Octaves)
-                {
-                    float velocity = noteEvent.CommandCode == MidiCommandCode.NoteOn ? ((NoteOnEvent)noteEvent).Velocity / 127f : 0;
-                    noteEvents.Add((currentTime, noteIndex, velocity));
-                }
-            }
-            else if (evt is KeySignatureEvent keySig)
-            {
-                int rootNote = (keySig.MajorMinor == 0 ? 3 : 0); // C Major is 3, A Minor is 0
-                int keyIndex = (rootNote + 7 * keySig.SharpsFlats + 120) % 12;
-                keyEvents.Add((currentTime, keyIndex));
-            }
-        }
-
-        if (!noteEvents.Any() && !keyEvents.Any()) return;
-
-        double startTime = noteEvents.Count > 0 ? noteEvents[0].time : (keyEvents.Count > 0 ? keyEvents[0].time : 0);
-        double endTime = noteEvents.Count > 0 ? noteEvents[^1].time : (keyEvents.Count > 0 ? keyEvents[^1].time : 0);
-        totalTimeSlices = Mathf.Max(1, Mathf.CeilToInt((float)((endTime - startTime) / TIME_SLICE)));
-        
-        timeSlicedKeys = new int[totalTimeSlices];
-        Dictionary<int, float> activeNotes = new();
-        int eventIdx = 0;
-        int keyEventIdx = 0;
-        int currentKey = 0; // Default to A (0)
-
-        for (int slice = 0; slice < totalTimeSlices; slice++)
-        {
-            double nextSliceTime = startTime + (slice + 1) * TIME_SLICE;
-            
-            // Update current key for this slice
-            while (keyEventIdx < keyEvents.Count && keyEvents[keyEventIdx].time < nextSliceTime)
-            {
-                currentKey = keyEvents[keyEventIdx++].keyIndex;
-            }
-            timeSlicedKeys[slice] = currentKey;
-
-            // Update notes for this slice
-            while (eventIdx < noteEvents.Count && noteEvents[eventIdx].time < nextSliceTime)
-            {
-                var e = noteEvents[eventIdx++];
-                if (e.velocity > 0) activeNotes[e.note] = e.velocity;
-                else activeNotes.Remove(e.note);
-            }
-            timeSlicedNotes[slice] = activeNotes.Select(kvp => new Tuple<int, float>(kvp.Key, kvp.Value)).ToList();
-        }
-    }
+    void OnApplicationFocus(bool focus) { if (!focus && IsPlaying) Pause(); }
+    void OnDisable() { if (main!=null) Stop(); }
 }
