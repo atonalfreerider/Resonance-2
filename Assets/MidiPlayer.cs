@@ -122,7 +122,7 @@ public class MidiPlayer : MonoBehaviour
     }
     void Update()
     {
-        if (Keyboard.current!=null && Keyboard.current.spaceKey.wasPressedThisFrame && !HarmonyExplorer.TextEditing)
+        if (Keyboard.current!=null && Keyboard.current.spaceKey.wasPressedThisFrame && ExplorerInputFocus.ViewportOwnsKeyboard)
         { if (IsPlaying) Pause(); else Play(); }
         if (!IsPlaying) return;
         double position=Position;

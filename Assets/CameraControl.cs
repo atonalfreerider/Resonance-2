@@ -5,7 +5,7 @@ public class CameraControl : MonoBehaviour
 {
     public float Speed = 0.3f;          // Speed of movement and rotation
     public Vector3 center = Vector3.zero; // The point the camera orbits around
-    float rad = 3.5f;            // Radius (distance from center)
+    float rad = 4.3f;            // Frame the whole umbilic surface beside the controls.
     float alpha = 45f * Mathf.Deg2Rad;      // Polar angle (from Y-axis) - set to 45 degrees
     float phi = 45f * Mathf.Deg2Rad;        // Azimuthal angle (around Y-axis) - set to 45 degrees
     
@@ -20,11 +20,23 @@ public class CameraControl : MonoBehaviour
 
     void Update()
     {
-        if (Keyboard.current != null && !HarmonyExplorer.TextEditing) MoveCamera();
+        if (Keyboard.current != null && ExplorerInputFocus.ViewportOwnsKeyboard) MoveCamera();
+        var mouse=Mouse.current;
+        if(mouse!=null && ExplorerInputFocus.ViewportOwnsKeyboard && ExplorerInputFocus.PointerInViewport)
+        {
+            bool changed=false;
+            if(mouse.rightButton.isPressed)
+            {
+                Vector2 delta=mouse.delta.ReadValue(); phi-=delta.x*.004f;alpha=Mathf.Clamp(alpha-delta.y*.004f,.05f,Mathf.PI-.05f);changed=delta.sqrMagnitude>0;
+            }
+            float scroll=mouse.scroll.ReadValue().y;
+            if(Mathf.Abs(scroll)>.01f){rad=Mathf.Clamp(rad-scroll*.0015f,.5f,10);changed=true;}
+            if(changed){UpdateCameraPosition();MovementUpdater?.Invoke();}
+        }
         transform.LookAt(center); // Ensure the camera always looks at the center
     }
 
-    public void ResetView() { rad=3.5f; alpha=45f*Mathf.Deg2Rad; phi=45f*Mathf.Deg2Rad; UpdateCameraPosition(); transform.LookAt(center); MovementUpdater?.Invoke(); }
+    public void ResetView() { rad=4.3f; alpha=45f*Mathf.Deg2Rad; phi=45f*Mathf.Deg2Rad; UpdateCameraPosition(); transform.LookAt(center); MovementUpdater?.Invoke(); }
     void MoveCamera()
     {
         bool isMoving = false; // Flag to check if any movement key is pressed

@@ -27,7 +27,7 @@ public class SurfaceOverlay : MonoBehaviour
         int root=main.SelectedSurface;
         for(int i=0;i<4;i++)
         {
-            bool show=i<2?main.ShowStructure:main.ShowDiagonals;
+            bool show=main.SurfaceGuide && (i<2?main.ShowStructure:main.ShowDiagonals);
             lines[i].enabled=show; labels[i].gameObject.SetActive(show); if(!show)continue;
             if(i==0)
             {

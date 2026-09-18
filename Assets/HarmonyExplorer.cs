@@ -8,12 +8,12 @@ using UnityEngine.UIElements;
 
 public class HarmonyExplorer : MonoBehaviour
 {
-    public static bool TextEditing;
     public bool LessonPlaying { get; private set; }
     Main main; MidiPlayer midi; UIDocument document; PanelSettings settings;
     LiveMidiInput live;
     int sequenceStart;
     Label details, trace, sounding, midiStatus, clock, analysis, historyLabel;
+    Label focusHint;
     TextField grammar, path;
     DropdownField keyChoice, surfaceChoice, modeChoice;
     Slider seek;
@@ -34,13 +34,14 @@ public class HarmonyExplorer : MonoBehaviour
         settings.referenceResolution=new Vector2Int(1280,800); settings.match=.5f;
         document=gameObject.AddComponent<UIDocument>(); document.panelSettings=settings;
         document.visualTreeAsset=Resources.Load<VisualTreeAsset>("HarmonyExplorer");
+        gameObject.AddComponent<ExplorerInputFocus>().Bind(document);
         var root=document.rootVisualElement;
         root.pickingMode=PickingMode.Ignore;
         root.style.unityFont=Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         var panel=root.Q<ScrollView>("controls");
         panel.RegisterCallback<GeometryChangedEvent>(_ => { float fraction=Mathf.Clamp(panel.worldBound.width/root.worldBound.width,0,.5f); if(Camera.main!=null)Camera.main.rect=new Rect(fraction,0,1-fraction,1); });
-        panel.RegisterCallback<FocusInEvent>(e => TextEditing = e.target is TextField || (e.target is VisualElement v && v.GetFirstAncestorOfType<TextField>()!=null));
-        panel.RegisterCallback<FocusOutEvent>(_ => TextEditing=false);
+        focusHint=Label(panel,"Click the torus to play / orbit. Click this panel to edit.");
+        focusHint.AddToClassList("focus-hint");
         Section(panel,"TONAL CONTEXT");
         keyChoice=Choice(panel,"Key / tonic",Enumerable.Range(0,12).Select(i=>HarmonyModel.Name(i)).ToList(),main.currentKey,i=> { midi?.Pause(); main.KeySource="Manual"; main.ChangeKey(i); });
         modeChoice=Choice(panel,"Mode",new List<string>{"Major","Natural minor"},0,i=> { main.MinorMode=i==1; main.KeySource="Manual"; main.RefreshView(); Refresh(); });
@@ -64,8 +65,12 @@ public class HarmonyExplorer : MonoBehaviour
         Toggle(panel,"Loop lesson",false,v=>loopLesson=v);
         trace=Label(panel,"Choose a lesson or enter tokens. > starts a new chord; (objects) sustain until Stop. Grammar v1 is experimental.");
         Section(panel,"VIEW");
-        Toggle(panel,"Major7 surface regions",true,v=>{main.ShowSurfaces=v; main.RefreshView();});
-        Toggle(panel,"Diatonic strip",false,v=>{main.DiatonicStrip=v; main.RefreshView();});
+        Toggle(panel,"Continuous tonal field",true,v=>{main.ShowSurfaces=v; main.RefreshView();});
+        Toggle(panel,"Harmonic partials build light",true,v=>main.ShowHarmonics=v);
+        Slider(panel,"Field density",.1f,1.5f,main.FieldDensity,v=>main.FieldDensity=v);
+        Label(panel,"Position blends blue I, red IV and green V. Light adds the first eight ideal partials, folded to pitch classes; it is not a spectrum measurement.");
+        Toggle(panel,"Diatonic emphasis (soft)",false,v=>{main.DiatonicStrip=v; main.RefreshView();});
+        Toggle(panel,"Selected-surface guide",false,v=>main.SurfaceGuide=v);
         Toggle(panel,"Structural wireframe",true,v=>{main.ShowStructure=v; main.RefreshView();});
         Toggle(panel,"Sounding diagonals d / l",true,v=>{main.ShowDiagonals=v; main.RefreshView();});
         Toggle(panel,"All registers",true,v=>{main.ShowRegisters=v; main.RefreshView();});
@@ -90,7 +95,7 @@ public class HarmonyExplorer : MonoBehaviour
         var track=new IntegerField("Track (0 = all)"){value=0}; panel.Add(track); track.RegisterValueChangedCallback(e=>{midi.TrackFilter=e.newValue-1;ReloadMidi();});
         Section(panel,"HARMONIC HISTORY"); historyLabel=Label(panel,"");
         Button(panel,"Export progression",Export);
-        Label(panel,"1–0, −, =: notes · A–G: tonic\nArrows: orbit / zoom · PgUp / PgDn: elevation\nSpace: MIDI · Esc: silence\nClick a note sphere to inspect its surface.");
+        Label(panel,"Click torus: instrument shortcuts. Click panel / Tab: UI shortcuts.\nInstrument: 1–0, −, = notes · A–G tonic\nArrows orbit / zoom · PgUp / PgDn elevation\nRight-drag orbit · Wheel zoom\nSpace MIDI · Esc silence\nCtrl+Esc always stops sound.\nClick a note sphere to inspect its surface.");
         main.StateChanged+=Refresh;
         LoadLesson(0); Refresh();
     }
@@ -158,7 +163,8 @@ public class HarmonyExplorer : MonoBehaviour
     void Update()
     {
         if(main==null)return;
-        if(Keyboard.current!=null && Keyboard.current.escapeKey.wasPressedThisFrame){StopLesson();midi?.Stop(); main.Silence();}
+        if(focusHint!=null)focusHint.text=ExplorerInputFocus.ViewportOwnsKeyboard?"TORUS CONTROLS · click panel to edit":"UI CONTROLS · click torus to play / orbit";
+        if(Keyboard.current!=null && Keyboard.current.escapeKey.wasPressedThisFrame && (ExplorerInputFocus.ViewportOwnsKeyboard || Keyboard.current.ctrlKey.isPressed)) { StopLesson();midi?.Stop();live.Disconnect();main.Silence(); }
         if(LessonPlaying && Time.unscaledTimeAsDouble>=nextStep)
         {
             if(step>=frames.Count-1){if(loopLesson)step=-1;else{StopLesson();return;}}
@@ -177,7 +183,7 @@ public class HarmonyExplorer : MonoBehaviour
         catch(Exception e){trace.text="Export: "+e.Message;}
     }
     void OnApplicationFocus(bool focus){if(!focus)StopLesson();}
-    void OnDestroy(){TextEditing=false;if(main!=null)main.StateChanged-=Refresh;if(settings!=null)Destroy(settings);if(Camera.main!=null)Camera.main.rect=new Rect(0,0,1,1);}
+    void OnDestroy(){if(main!=null)main.StateChanged-=Refresh;if(settings!=null)Destroy(settings);if(Camera.main!=null)Camera.main.rect=new Rect(0,0,1,1);}
     static void Section(VisualElement p,string text){var l=new Label(text);l.AddToClassList("section");p.Add(l);}
     static Label Label(VisualElement p,string text){var l=new Label(text);l.AddToClassList("details");p.Add(l);return l;}
     static VisualElement Row(VisualElement p){var r=new VisualElement();r.AddToClassList("row");p.Add(r);return r;}

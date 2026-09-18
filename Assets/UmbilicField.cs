@@ -1,0 +1,121 @@
+using UnityEngine;
+
+[RequireComponent(typeof(MeshFilter),typeof(MeshRenderer))]
+public class UmbilicField : MonoBehaviour
+{
+    const int Along=240, Across=24;
+    Main main;
+    Mesh mesh;
+    Material material;
+    MeshRenderer rendererComponent;
+    readonly Vector3[] vertices=new Vector3[(Along+1)*(Across+1)];
+    readonly Vector4[] anchors=new Vector4[12], colors=new Vector4[12], excitation=new Vector4[12];
+    readonly float[] target=new float[12];
+    float phase=float.NaN, twist;
+    int maskKey=-1;
+    bool maskMinor;
+    readonly Vector2[] tonalCoverage=new Vector2[(Along+1)*(Across+1)];
+    public Mesh SurfaceMesh => mesh;
+    public float[] Energy => target;
+    public void Initialize(Main owner)
+    {
+        main=owner; mesh=new Mesh{name="Continuous umbilic field"};mesh.MarkDynamic();
+        var uv=new Vector2[vertices.Length];var triangles=new int[Along*Across*6];int k=0;
+        for(int i=0;i<=Along;i++)for(int j=0;j<=Across;j++)uv[i*(Across+1)+j]=new Vector2(i/(float)Along,j/(float)Across);
+        for(int i=0;i<Along;i++)for(int j=0;j<Across;j++)
+        {
+            int a=i*(Across+1)+j,b=a+Across+1;
+            triangles[k++]=a;triangles[k++]=b;triangles[k++]=a+1;
+            triangles[k++]=a+1;triangles[k++]=b;triangles[k++]=b+1;
+        }
+        mesh.vertices=vertices;mesh.uv=uv;mesh.triangles=triangles;
+        GetComponent<MeshFilter>().sharedMesh=mesh;
+        material=new Material(Resources.Load<Shader>("UmbilicField"));
+        rendererComponent=GetComponent<MeshRenderer>();rendererComponent.sharedMaterial=material;
+        UpdateGeometry();
+    }
+    void UpdateGeometry()
+    {
+        if(phase==main.VisualRotation && twist==main.VisualTwist)return;
+        phase=main.VisualRotation;twist=main.VisualTwist;
+        for(int i=0;i<=Along;i++)
+        {
+            float t=i/(float)Along+phase;
+            Vector3 a=main.UmbilicPoint(t),b=main.UmbilicPoint(t+1f/3f);
+            for(int j=0;j<=Across;j++)vertices[i*(Across+1)+j]=Vector3.Lerp(a,b,j/(float)Across);
+        }
+        mesh.vertices=vertices;mesh.RecalculateBounds();
+        for(int pc=0;pc<12;pc++)anchors[pc]=main.UmbilicPoint(HarmonyModel.Mod(pc*5)/12f+phase);
+        material.SetVectorArray("_Anchors",anchors);
+        maskKey=-1;
+    }
+    // Defined chord regions have soft spatial support; unclaimed surface emits no light.
+    void UpdateCoverage()
+    {
+        if(maskKey==main.currentKey && maskMinor==main.MinorMode)return;
+        maskKey=main.currentKey;maskMinor=main.MinorMode;
+        var regions=new System.Collections.Generic.List<Vector3[]>();
+        var strengths=new System.Collections.Generic.List<float>();
+        void Triad(int root,int third,float strength)
+        {
+            regions.Add(new[]{(Vector3)anchors[HarmonyModel.Mod(root)],
+                (Vector3)anchors[HarmonyModel.Mod(root+third)],(Vector3)anchors[HarmonyModel.Mod(root+7)]});
+            strengths.Add(strength);
+        }
+        int collection=main.CollectionRoot;
+        foreach(int offset in new[]{0,5,7})Triad(collection+offset,4,1);
+        foreach(int offset in new[]{2,4,9})Triad(collection+offset,3,.28f);
+        Triad(main.currentKey+1,4,.18f); // Neapolitan bII.
+        Triad(main.currentKey+7,4,main.MinorMode?.35f:1); // Major dominant in minor.
+        foreach(int offset in new[]{2,4,9,11})Triad(collection+offset,4,.18f); // Secondary dominants.
+        for(int i=0;i<vertices.Length;i++)
+        {
+            float coverage=0;
+            for(int r=0;r<regions.Count;r++)
+            {
+                var region=regions[r];
+                float distance=TriangleDistance(vertices[i],region[0],region[1],region[2]);
+                float fade=1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(.025f,.26f,distance));
+                coverage=Mathf.Max(coverage,fade*strengths[r]);
+            }
+            tonalCoverage[i]=new Vector2(coverage,0);
+        }
+        mesh.uv2=tonalCoverage;
+    }
+    static float SegmentDistance(Vector3 p,Vector3 a,Vector3 b)
+    {
+        Vector3 edge=b-a;
+        return Vector3.Distance(p,a+edge*Mathf.Clamp01(Vector3.Dot(p-a,edge)/Mathf.Max(edge.sqrMagnitude,.000001f)));
+    }
+    static float TriangleDistance(Vector3 p,Vector3 a,Vector3 b,Vector3 c)
+    {
+        Vector3 ab=b-a,ac=c-a,normal=Vector3.Cross(ab,ac);
+        float norm=normal.sqrMagnitude;
+        if(norm>.000001f)
+        {
+            Vector3 q=p-normal*(Vector3.Dot(p-a,normal)/norm),aq=q-a;
+            float u=Vector3.Dot(Vector3.Cross(aq,ac),normal)/norm;
+            float v=Vector3.Dot(Vector3.Cross(ab,aq),normal)/norm;
+            if(u>=0 && v>=0 && u+v<=1)return Vector3.Distance(p,q);
+        }
+        return Mathf.Min(SegmentDistance(p,a,b),Mathf.Min(SegmentDistance(p,b,c),SegmentDistance(p,c,a)));
+    }
+    void LateUpdate()
+    {
+        if(main==null)return;
+        UpdateGeometry();UpdateCoverage();rendererComponent.enabled=main.ShowSurfaces;
+        HarmonicSpectrum.Accumulate(main.ActiveNotes,target,main.ShowHarmonics);
+        float blend=1-Mathf.Exp(-Time.unscaledDeltaTime*7);
+        for(int pc=0;pc<12;pc++)
+        {
+            Color c=TonalColorField.Pitch(pc,main.currentKey); colors[pc]=new Vector4(c.r,c.g,c.b,1);
+            excitation[pc].x=Mathf.Lerp(excitation[pc].x,target[pc],blend);
+            int rel=HarmonyModel.Mod(pc-main.CollectionRoot);
+            excitation[pc].y=rel is 0 or 2 or 4 or 5 or 7 or 9 or 11?1:0;
+        }
+        material.SetVectorArray("_Colors",colors);material.SetVectorArray("_Excitation",excitation);
+        material.SetFloat("_Opacity",main.FieldDensity);material.SetFloat("_Flow",Main.ReducedMotion?0:1);
+        material.SetFloat("_Diatonic",main.DiatonicStrip?1:0);material.SetFloat("_SoundingOnly",main.SoundingOnly?1:0);
+    }
+    void OnDestroy(){if(mesh!=null)Destroy(mesh);if(material!=null)Destroy(material);}
+}

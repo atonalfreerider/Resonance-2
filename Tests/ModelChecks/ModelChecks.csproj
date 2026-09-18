@@ -3,5 +3,6 @@
   <ItemGroup>
     <Compile Include="../../Assets/HarmonyModel.cs" Link="HarmonyModel.cs" />
     <Compile Include="../../Assets/MidiVoiceState.cs" Link="MidiVoiceState.cs" />
+    <Compile Include="../../Assets/HarmonicSpectrum.cs" Link="HarmonicSpectrum.cs" />
   </ItemGroup>
 </Project>

@@ -21,7 +21,8 @@ public static class ResonanceValidation
         try
         {
             midi.Pause();main.Synth.Volume=0;main.MinorMode=false;
-            var meshes=main.GetComponentsInChildren<MeshFilter>(true).Where(f=>f.name=="boundaryVolume").Select(f=>f.sharedMesh).Where(m=>m!=null).ToArray();
+            var meshes=main.GetComponentsInChildren<UmbilicField>(true).Select(f=>f.SurfaceMesh).ToArray();
+            Check(meshes.Length==1 && meshes[0]!=null,"Single continuous umbilic surface");
             main.PlayKeys(new List<Tuple<int,float>>{Tuple.Create(39,.7f),Tuple.Create(43,.7f),Tuple.Create(46,.7f)});
             for(int key=0;key<12;key++)
             {

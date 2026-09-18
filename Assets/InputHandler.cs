@@ -14,7 +14,7 @@ public class InputHandler : MonoBehaviour
     void Update()
     {
         var kb=Keyboard.current;
-        if(kb==null || HarmonyExplorer.TextEditing)return;
+        if(kb==null || !ExplorerInputFocus.ViewportOwnsKeyboard) { ReleaseKeyboardNotes(); return; }
         if(kb.aKey.wasPressedThisFrame || kb.bKey.wasPressedThisFrame || kb.cKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame || kb.eKey.wasPressedThisFrame || kb.fKey.wasPressedThisFrame || kb.gKey.wasPressedThisFrame)main.KeySource="Manual";
         if(kb.aKey.wasPressedThisFrame)main.ChangeKey(0);
         if(kb.bKey.wasPressedThisFrame)main.ChangeKey(2);
@@ -29,6 +29,11 @@ public class InputHandler : MonoBehaviour
         for(int i=0;i<controls.Length;i++)if(controls[i].isPressed)keys.Add(Tuple.Create(HarmonyModel.Mod(i+main.currentKey)+36,.7f));
         string signature=string.Join(",",keys.Select(k=>k.Item1));
         if(signature!=previous){main.PlayKeys(keys);previous=signature;}
+    }
+    public void ReleaseKeyboardNotes()
+    {
+        if(previous.Length==0)return;
+        previous=""; main.Silence();
     }
     void OnApplicationFocus(bool focus){if(!focus){previous="";main.Silence();}}
 }

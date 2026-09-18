@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using NAudio.Midi;
 using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using Util;
 
 /// <summary>
@@ -26,8 +24,8 @@ public class Main : MonoBehaviour
     readonly List<TextBox> noteTextLabels = new();
 
     readonly List<LineRenderer> fifthsLineRenderer = new();
-    readonly List<LineRenderer> boundaryLineRenderers = new();
-    readonly List<MeshFilter> boundaryMeshFilters = new();
+    UmbilicField tonalField;
+
     LineRenderer chromaticLineRenderer;
 
     readonly Dictionary<ulong, Chord> chordLineRenderers = new();
@@ -56,36 +54,17 @@ public class Main : MonoBehaviour
         (1,-2)   // 11: 7 - 8 = -1 = 11
     };
 
-    static Color darkGrey => new(0.2f, 0.2f, 0.2f);
-
-    readonly Color[] descendingFifthColors =
-    {
-        // order from key - 1, descending through fifths
-        // Major
-        Color.red,
-        // Transient
-        Color.yellow,
-        darkGrey,
-        darkGrey,
-        darkGrey,
-        Color.yellow,
-        Color.Lerp(Color.yellow, Color.green, 0.5f),
-        // Minor
-        Color.Lerp(Color.green, Color.blue, 0.5f),
-        Color.Lerp(Color.blue, Color.red, 0.5f),
-        Color.Lerp(Color.red, Color.yellow, 0.5f),
-        // Major
-        Color.green,
-        Color.blue
-    };
-
-    readonly Dictionary<int, int> fifthToColor = new();
     readonly Dictionary<int, int> scaleToFifths = new();
 
     CameraControl cameraControl;
     public static bool ReducedMotion;
     public bool MinorMode, UseFlats, ShowSurfaces = true, ShowDiagonals = true, ShowStructure = true, ShowRegisters = true, SoundingOnly, DiatonicStrip;
     public int SelectedSurface = 3;
+    public bool ShowHarmonics = true, SurfaceGuide;
+    public float FieldDensity = .7f;
+    public float VisualRotation => currentVisualRotation;
+    public float VisualTwist => currentVisualTwist;
+    public Vector3 UmbilicPoint(float t) => UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, Mathf.Repeat(t,1), currentVisualTwist);
     public MusicSynth Synth { get; private set; }
     public IReadOnlyList<Tuple<int, float>> ActiveNotes => lastActiveKeys;
     public event Action StateChanged;
@@ -104,14 +83,6 @@ public class Main : MonoBehaviour
 
     void Awake()
     {
-        // create map for fifths to color lookup
-        // Maps semitone interval to circle-of-fifths index: I(0)->11(Blue), V(7)->10(Blue/Green), IV(5)->0(Red)
-        for (int i = 0; i < Tones; i++)
-        {
-            int fifthsIndex = (11 - (7 * i) % Tones + Tones) % Tones;
-            fifthToColor.Add(i, fifthsIndex);
-        }
-
         visualKeyForRendering = currentKey;
         currentKey = HarmonyModel.Mod(currentKey); currentVisualRotation = pathMap[currentKey].x / (float)Tones; currentVisualTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
 
@@ -145,22 +116,11 @@ public class Main : MonoBehaviour
 
         for (int i = 0; i < Tones; i++)
         {
-            Material fifthsMat = new(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+            Material fifthsMat = new(Resources.Load<Shader>("HarmonicGlow"));
             GameObject fifthsGo = new("fifths");
             fifthsGo.transform.SetParent(transform, false);
             fifthsLineRenderer.Add(NewLineRenderer(fifthsGo, fifthsMat, .01f, false));
 
-            GameObject boundaryGo = new("boundary");
-            boundaryGo.transform.SetParent(transform, false);
-            Material boundaryMat = new(Shader.Find("Universal Render Pipeline/Unlit")) { color = Color.gray };
-            boundaryLineRenderers.Add(NewLineRenderer(boundaryGo, boundaryMat, .005f, false));
-            boundaryLineRenderers[i].gameObject.SetActive(false);
-
-            GameObject meshGo = new("boundaryVolume");
-            meshGo.transform.SetParent(transform, false);
-            boundaryMeshFilters.Add(meshGo.AddComponent<MeshFilter>());
-            MeshRenderer mr = meshGo.AddComponent<MeshRenderer>();
-            mr.material = new Material(Shader.Find("UI/Default"));
         }
 
         Material chromaticMat = new(Shader.Find("Universal Render Pipeline/Unlit"))
@@ -172,6 +132,8 @@ public class Main : MonoBehaviour
         chromaticLineRenderer = NewLineRenderer(chromGo, chromaticMat, .007f, true);
 
         SetUmbilic();
+        var fieldGo = new GameObject("Umbilic tonal field"); fieldGo.transform.SetParent(transform,false);
+        tonalField = fieldGo.AddComponent<UmbilicField>(); tonalField.Initialize(this);
     }
 
     void Start()
@@ -212,40 +174,14 @@ public class Main : MonoBehaviour
             List<Vector3> subSection = new();
             for (float t = (float)i / Tones; t < (float)(i + 1) / Tones; t += resolution)
             {
-                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, currentVisualTwist));
+                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t+currentVisualRotation, currentVisualTwist));
             }
 
             fifthsSegment.positionCount = subSection.Count;
             fifthsSegment.SetPositions(subSection.ToArray());
 
-            float lerp = .2f;
-            if (i is 7 or 8 or 11)
-            {
-                lerp = .3f;
-            }
-
-            Color color = Color.Lerp(Color.black, descendingFifthColors[i], lerp);
-
-            Color endColor = color;
-            if (i == 1)
-            {
-                endColor = darkGrey;
-            }
-            else if (i == 5)
-            {
-                color = darkGrey;
-                endColor = Color.Lerp(Color.black, Color.yellow, lerp);
-            }
-
-            // Note: Color logic preserved above for animations, but rendering as grey
-            const float alpha = 1.0f;
-            Color renderColor = new(0.35f, 0.35f, 0.35f);
-            Gradient gradient = new();
-            gradient.SetKeys(
-                new[] { new GradientColorKey(renderColor, 0.0f), new GradientColorKey(renderColor, 1.0f) },
-                new[] { new GradientAlphaKey(alpha, 0.0f), new GradientAlphaKey(alpha, 1.0f) }
-            );
-            fifthsSegment.colorGradient = gradient;
+            fifthsSegment.startColor=TonalColorField.Pitch(HarmonyModel.Mod(i*5),currentKey)*.45f;
+            fifthsSegment.endColor=TonalColorField.Pitch(HarmonyModel.Mod((i+1)*5),currentKey)*.45f;
         }
 
         chromaticLineRenderer.positionCount = chromaticList.Count;
@@ -258,8 +194,7 @@ public class Main : MonoBehaviour
 
     void UpdateTorusPoints(float phaseShift, int visualKey)
     {
-        int[] slotToNote = new int[Tones];
-        for (int k = 0; k < Tones; k++) slotToNote[scaleToFifths[k] % Tones] = k;
+
 
         for (int j = 0; j < Octaves; j++)
         {
@@ -285,84 +220,6 @@ public class Main : MonoBehaviour
             }
         }
 
-        for (int slotIdx = 0; slotIdx < Tones; slotIdx++)
-        {
-            int i = slotToNote[slotIdx];
-            int rel = HarmonyModel.Mod(i - (DiatonicStrip ? CollectionRoot : visualKey));
-
-            bool isMajor = MinorMode && !DiatonicStrip ? rel is 3 or 8 or 10 : rel is 0 or 5 or 7 or 1;
-            bool isMinor = MinorMode && !DiatonicStrip ? rel is 0 or 5 or 7 : rel is 2 or 4 or 9;
-            bool isNeapolitan = rel == 1;
-
-            if (DiatonicStrip) { isMajor = rel is 0 or 5 or 7; isMinor = rel == 2; }
-            if (!ShowSurfaces || (!isMajor && !isMinor))
-            {
-                boundaryMeshFilters[slotIdx].gameObject.SetActive(false);
-                continue;
-            }
-
-            boundaryMeshFilters[slotIdx].gameObject.SetActive(true);
-
-            int thirdInt = isMajor ? 4 : 3;
-            int oppInt = isMajor ? 11 : -4;
-
-            float tRoot = ((float)slotIdx / Tones + phaseShift) % 1.0f;
-            float t3rd = ((float)(scaleToFifths[(i + thirdInt) % Tones] % Tones) / Tones + phaseShift) % 1.0f;
-            float t5th = ((float)(scaleToFifths[(i + 7) % Tones] % Tones) / Tones + phaseShift) % 1.0f;
-            float tOpp = ((float)(scaleToFifths[(i + oppInt + Tones) % Tones] % Tones) / Tones + phaseShift) % 1.0f;
-
-            if (DiatonicStrip && rel == 7) tOpp = tRoot;
-            if (DiatonicStrip && rel == 2) tOpp = tRoot;
-            float p1Start = isMajor ? tRoot : t5th;
-            float p1End = isMajor ? t5th : tRoot;
-
-            if (p1End - p1Start > 0.5f) p1Start += 1.0f; else if (p1End - p1Start < -0.5f) p1End += 1.0f;
-            if (tOpp - t3rd > 0.5f) t3rd += 1.0f; else if (tOpp - t3rd < -0.5f) tOpp += 1.0f;
-
-            const int uSteps = 20;
-            List<Vector3> verts = new();
-            List<int> tris = new();
-
-            for (int u = 0; u <= uSteps; u++)
-            {
-                float U = (float)u / uSteps;
-                float p1T = Mathf.Lerp(p1Start, p1End, U);
-                float p2T = Mathf.Lerp(t3rd, tOpp, U);
-                
-                Vector3 p1Top = GetPointAt(p1T, 1f);
-                Vector3 p1Bot = GetPointAt(p1T, 0f);
-                Vector3 p2Top = GetPointAt(p2T, 1f);
-                Vector3 p2Bot = GetPointAt(p2T, 0f);
-
-                Vector3 pbTop = Vector3.Lerp(p2Top, p1Top, U);
-                Vector3 pbBot = Vector3.Lerp(p2Bot, p1Bot, U);
-
-                verts.Add(p1Top); verts.Add(p1Bot);
-                verts.Add(pbTop); verts.Add(pbBot);
-            }
-
-            for (int u = 0; u < uSteps; u++)
-            {
-                int b = u * 4; int n = (u + 1) * 4;
-                AddQuad(tris, b + 0, n + 0, n + 2, b + 2);
-                AddQuad(tris, b + 1, b + 3, n + 3, n + 1);
-                AddQuad(tris, b + 0, b + 1, n + 1, n + 0);
-                AddQuad(tris, b + 2, n + 2, n + 3, b + 3);
-            }
-            AddQuad(tris, 0, 2, 3, 1);
-            AddQuad(tris, uSteps * 4, uSteps * 4 + 1, uSteps * 4 + 3, uSteps * 4 + 2);
-
-            Mesh mesh = boundaryMeshFilters[slotIdx].sharedMesh;
-            if (mesh == null) { mesh = new Mesh(); mesh.MarkDynamic(); boundaryMeshFilters[slotIdx].sharedMesh = mesh; }
-            mesh.Clear(); mesh.SetVertices(verts); mesh.SetTriangles(tris, 0);
-            mesh.RecalculateNormals();
-            boundaryMeshFilters[slotIdx].mesh = mesh;
-            
-            Color refColor = descendingFifthColors[fifthToColor[HarmonyModel.Mod(i - visualKey)]];
-            refColor.a = DiatonicStrip ? .14f : isMajor ? .10f : .055f;
-            if(isNeapolitan) refColor.a = 0.005f;
-            boundaryMeshFilters[slotIdx].GetComponent<MeshRenderer>().material.color = refColor;
-        }
     }
 
     Vector3 GetPointAt(float t, float factor)
@@ -444,15 +301,16 @@ public class Main : MonoBehaviour
                 else
                 {
                     var go = new GameObject("Sounding interval"); go.transform.SetParent(transform, false);
-                    var lr = NewLineRenderer(go, new Material(BloomMat), .012f, false);
+                    var lr = NewLineRenderer(go, new Material(Resources.Load<Shader>("HarmonicGlow")), .012f, false);
                     chord = go.AddComponent<Chord>();
                 }
                 chord.Init(notes[ia], notes[ib], chord.GetComponent<LineRenderer>());
                 chordLineRenderers.Add(id, chord);
             }
             var renderer = chord.GetComponent<LineRenderer>();
-            Color color = descendingFifthColors[fifthToColor[HarmonyModel.Mod(ia - visualKeyForRendering)]];
-            renderer.sharedMaterial.color = color * Mathf.Pow(2, (notes[ia].CurrentAmp + notes[ib].CurrentAmp) * .6f);
+            renderer.startColor=TonalColorField.Pitch(ia,currentKey);
+            renderer.endColor=TonalColorField.Pitch(ib,currentKey);
+            renderer.sharedMaterial.SetColor("_BaseColor",Color.white*(2f+5f*(notes[ia].CurrentAmp+notes[ib].CurrentAmp)));
             if (fifth)
             {
                 float t1 = scaleToFifths[ia] % Tones / (float)Tones + currentVisualRotation;
@@ -470,8 +328,8 @@ public class Main : MonoBehaviour
         for (int i=0;i<notes.Count;i++)
         {
             var note = notes[i];
-            Color color = descendingFifthColors[fifthToColor[HarmonyModel.Mod(i-visualKeyForRendering)]];
-            note.SetColor(color * (note.CurrentAmp > 0 ? 1.4f : .3f));
+            Color color = TonalColorField.Pitch(i,currentKey);
+            note.SetColor(color * (note.CurrentAmp > 0 ? 3f+note.CurrentAmp*7f : .22f));
             note.gameObject.SetActive((ShowRegisters || i/12 == 3 || note.CurrentAmp > 0) && (!SoundingOnly || note.CurrentAmp > 0));
         }
     }
@@ -479,9 +337,9 @@ public class Main : MonoBehaviour
     void OnDestroy()
     {
         if (cameraControl != null) cameraControl.MovementUpdater -= UpdateText;
-        foreach (var mesh in boundaryMeshFilters) if (mesh != null && mesh.sharedMesh != null) Destroy(mesh.sharedMesh);
-        foreach (var lr in fifthsLineRenderer.Concat(boundaryLineRenderers)) if (lr != null) Destroy(lr.sharedMaterial);
-        foreach (var mf in boundaryMeshFilters) if (mf != null) Destroy(mf.GetComponent<Renderer>().sharedMaterial);
+
+        foreach (var lr in fifthsLineRenderer) if (lr != null) Destroy(lr.sharedMaterial);
+
         if (chromaticLineRenderer != null) Destroy(chromaticLineRenderer.sharedMaterial);
     }
     static float GetRatio(float a, float b)

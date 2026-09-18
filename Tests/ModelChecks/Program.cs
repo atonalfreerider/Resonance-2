@@ -37,4 +37,17 @@ Check(voices.Snapshot().Count==1,"All notes off respects pedal");
 voices.Control(1,120,0);Check(voices.Snapshot().Count==0,"All sound off clears pedal voices");
 Check(HarmonyModel.CompatibleCollections(new[]{3,7,10}).Count>1,"Triad remains ambiguous");
 Check(HarmonyModel.CompatibleCollections(Enumerable.Range(0,12)).Count==0,"Chromatic veto is collection-only");
+var energy=new float[12];
+HarmonicSpectrum.Accumulate(new[]{Tuple.Create(39,1f)},energy,true);
+Check(energy[3]>energy[10] && energy[10]>energy[7] && energy[7]>0,"Partial amplitude ordering: C, G, E");
+var single=(float[])energy.Clone();
+HarmonicSpectrum.Accumulate(new[]{Tuple.Create(39,1f),Tuple.Create(46,1f)},energy,true);
+Check(energy[10]>single[10],"Shared partials accumulate");
+for(int key=0;key<12;key++)
+{
+    HarmonicSpectrum.Accumulate(new[]{Tuple.Create(36+key,1f)},energy,true);
+    Check(Math.Abs(energy[key]-single[3])<.00001f,"Harmonic excitation transposes");
+}
+HarmonicSpectrum.Accumulate(new[]{Tuple.Create(39,1f)},energy,false);
+Check(energy.Count(v=>v>0)==1,"Fundamental-only visualization");
 Console.WriteLine($"PASS: {checks} harmonic-model and MIDI-state checks");
