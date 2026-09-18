@@ -65,11 +65,13 @@ public class UmbilicField : MonoBehaviour
         maskKey=main.currentKey;maskMinor=main.MinorMode;
         var regions=new System.Collections.Generic.List<Vector3[]>();
         var strengths=new System.Collections.Generic.List<float>();
+        var regionColors=new System.Collections.Generic.List<Color>();
         void Triad(int root,int third,float strength)
         {
             regions.Add(new[]{(Vector3)anchors[HarmonyModel.Mod(root)],
                 (Vector3)anchors[HarmonyModel.Mod(root+third)],(Vector3)anchors[HarmonyModel.Mod(root+7)]});
             strengths.Add(strength);
+            regionColors.Add(TonalColorField.Chord(root,main.currentKey,third==3));
         }
         int collection=main.CollectionRoot;
         foreach(int offset in new[]{0,5,7})Triad(collection+offset,4,1);
@@ -77,19 +79,23 @@ public class UmbilicField : MonoBehaviour
         Triad(main.currentKey+1,4,.18f); // Neapolitan bII.
         Triad(main.currentKey+7,4,main.MinorMode?.35f:1); // Major dominant in minor.
         foreach(int offset in new[]{2,4,9,11})Triad(collection+offset,4,.18f); // Secondary dominants.
+        var localColors=new Color[vertices.Length];
         for(int i=0;i<vertices.Length;i++)
         {
-            float coverage=0;
+            float coverage=0,major=0,weight=0;Color local=Color.black;
             for(int r=0;r<regions.Count;r++)
             {
                 var region=regions[r];
                 float distance=TriangleDistance(vertices[i],region[0],region[1],region[2]);
                 float fade=1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(.025f,.26f,distance));
                 coverage=Mathf.Max(coverage,fade*strengths[r]);
+                float w=Mathf.Pow(fade,8)*strengths[r];local+=regionColors[r]*w;weight+=w;
+                if(r<3)major=Mathf.Max(major,Mathf.Pow(fade,6));
             }
-            tonalCoverage[i]=new Vector2(coverage,0);
+            tonalCoverage[i]=new Vector2(coverage,major);
+            localColors[i]=weight>.00001f?local/weight:Color.black;
         }
-        mesh.uv2=tonalCoverage;
+        mesh.uv2=tonalCoverage;mesh.colors=localColors;
     }
     static float SegmentDistance(Vector3 p,Vector3 a,Vector3 b)
     {
@@ -123,6 +129,8 @@ public class UmbilicField : MonoBehaviour
             excitation[pc].y=rel is 0 or 2 or 4 or 5 or 7 or 9 or 11?1:0;
         }
         material.SetVectorArray("_Colors",colors);material.SetVectorArray("_Excitation",excitation);
+        var dominance=main.GetComponent<TonalDominance>();
+        if(dominance!=null){Color c=dominance.Hue;material.SetVector("_Primary",new Vector4(c.r,c.g,c.b,dominance.Energy));material.SetFloat("_Dominance",dominance.Influence);}
         material.SetFloat("_Opacity",main.FieldDensity);material.SetFloat("_Flow",Main.ReducedMotion?0:1);
         material.SetFloat("_Diatonic",main.DiatonicStrip?1:0);material.SetFloat("_SoundingOnly",main.SoundingOnly?1:0);
     }

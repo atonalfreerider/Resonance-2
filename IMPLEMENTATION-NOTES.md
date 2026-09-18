@@ -65,3 +65,29 @@ The field now uses a soft spatial mask around the defined chord triangles. Diato
 - Unity compiled the project and the inspected runtime console had no errors. The Game-view layout was captured and visually inspected after correction.
 
 Hardware live MIDI, standalone file import/builds, listening quality/latency, and sustained performance on target devices still require verification. No claim of a measured 60 FPS budget is made. Branch/reconvergence notation, disputed Classical Filter gating, automatic tonal-key estimation, saved-view presets, and a 3D history wake remain deferred; the current history is textual. Flat/sharp spelling is user-selected rather than full context-sensitive notation.
+
+## Offline fingerprint preprocessing
+
+The previous in-Unity timing estimator and anchor UI have been removed from song playback. Use Tools/SongPrep/prepare-song.ps1 before Unity. It extracts tuning-aware pitch and attack fingerprints with Sync Toolbox, aligns them using multiscale DTW at a 10 ms feature grid, and exports a new aligned.mid with a replacement tempo map. All original note/controller payloads and musical tick relationships are retained. The original MIDI and MP3 are untouched.
+
+The output bundle includes recording.wav (the canonical decode of the MP3), aligned.mid, its prepared manifest with SHA-256 hashes, timing-map.csv, analysis.json, fingerprint plots, and report.html with a stereo listening comparison. Review/correct matching cues offline using the optional anchors CSV, then regenerate. No Unity interaction is required for preparation. See Tools/SongPrep/README.md for commands, dependencies and limitations.
+
+Unity's SONG panel accepts the preprocessed MIDI and either the original MP3 or the prepared WAV. It validates hashes and plays the canonical recording alone. It uses an identity time map: timing is already baked into the MIDI, so no saved warp or duration scaling can be applied twice. It rejects raw or mismatched pairs with a preprocessing instruction. Section names/boundaries are saved separately from immutable prepared timing.
+
+The supplied Ticket to Ride score has a 1.92-second initial rest and a 192-second timeline. The canonical recording is 190.1482086 seconds. Fingerprint extraction detects approximately -33 cents of tuning offset and no whole-semitone transposition. All 3,710 notes were preserved; the regenerated MIDI's serialization error against its computed map is below 0.001 ms. Pitch similarity improves from roughly 51% under simple duration scaling to 63% after fingerprint alignment. These are matching/encoding diagnostics, not a claim of perfect musical synchronization. Sparse approximations, repeated music and the quiet fade remain uncertain and are flagged in the offline report.
+
+Tests: Tools/SongPrep/test_prepare.py checks nonlinear tempo conversion, onset/offset duration mapping and event-payload preservation with independent MIDI fixtures. The real output is reparsed and checked against every original event. Runtime paired-playback checks cover the sample clock, source isolation, pause/seek/end/loop, and original recording speed.
+
+## Primary-tone color and chord motion
+
+The sounding chord root (or weighted fundamentals/bass when auditioning) drives a smoothed global color wash. Upper partials no longer elect the dominant color by themselves. Notes and chords follow this primary hue strongly; VIEW exposes **Primary tone color influence**. Explicit key-relative violet/magenta minor hues replace the old normalized color kernel that let green spread across unrelated pitches. The orrery uses the same chord/minor palette. The three primary major regions retain substantial local blue/red/green identity, and the soft black mask remains intact.
+
+Chord motion combines two transverse vibration axes and multiple traveling modes at approximately three times the old amplitude. Endpoints stay fixed, reduced motion remains supported, and release still dissipates the complete span through diminishing motion, width and brightness. Umbilic mesh positions and topology are unchanged.
+
+Additional verification: `dotnet run --project Tests/ModelChecks/ModelChecks.csproj` passes 785 checks, including timing-map inversion, invalid anchors and independent synthetic audio with local tempo changes. **Tools → Resonance → Check paired recording playback** tests source isolation, exact sample duration, mapped position, seek/pause, synthesis muting, original-speed playback, end and loop behavior. Results: `Temp/ResonanceChecks/paired-audio.txt`. Automatic alignment of the real pair is exercised separately; this is not a listening certification of perfect sync.
+
+## Orrery bloom and camera ownership
+
+The floating orrery uses a small HDR render pass through the same URP volume settings as the torus. A separate composite converts the black bloom background to transparency. The active section's timeline arc, song/section/progression bodies, and current chord sector brighten with MIDI energy and decay after release. The geometry and labels remain crisp. The transparent overlay ignores pointer picking; the sidebar toggle returns the orrery to its inline position.
+
+Keyboard ownership changes only on an actual UI pointer event or Tab, or when the user clicks the camera viewport. An incidental focus assignment from UI navigation cannot claim ownership. While the viewport owns the keyboard, a non-tab root focus target captures navigation, FocusController.IgnoreEvent prevents focus movement, and raw key events are blocked from UI controls. The regression holds an arrow for twelve consecutive intervals while repeatedly assigning UI targets and injecting navigation; the camera must continue moving in every interval.

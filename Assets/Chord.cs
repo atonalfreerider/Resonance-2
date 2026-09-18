@@ -10,6 +10,8 @@ public class Chord : MonoBehaviour
     LineRenderer line;
     Vector3[] basis, animated;
     bool curved;
+    TonalDominance dominance;
+    Color startHue,endHue;
     readonly VisualRelease release=new();
     float amp1,amp2,peak,releaseSeconds=2.4f;
     public bool Releasing => !release.Held;
@@ -18,14 +20,15 @@ public class Chord : MonoBehaviour
     public void Drive(float a,float b,Color start,Color end,float seconds)
     {
         amp1=a;amp2=b;peak=(a+b)*.5f;releaseSeconds=seconds;release.Set(peak);
-        line.startColor=start;line.endColor=end;
+        startHue=start;endHue=end;line.startColor=start;line.endColor=end;
     }
     public void Release()=>release.Set(0);
-    public void Recolor(Color start,Color end){line.startColor=start;line.endColor=end;}
+    public void Recolor(Color start,Color end){startHue=start;endHue=end;line.startColor=start;line.endColor=end;}
     public void ClearTail()=>release.Clear();
     public void Init(Note a, Note b, LineRenderer renderer)
     {
         Note1 = a; Note2 = b; line = renderer;
+        dominance=GetComponentInParent<TonalDominance>();
         line.useWorldSpace = true;
         line.alignment = LineAlignment.View;
         line.widthCurve = AnimationCurve.Linear(0, 1, 1, 1);
@@ -49,16 +52,22 @@ public class Chord : MonoBehaviour
         if (!curved) for (int i = 0; i < basis.Length; i++)
             basis[i] = Vector3.Lerp(Note1.transform.position, Note2.transform.position, i / (float)(basis.Length - 1));
         float fade=peak>0?release.Level/peak:0;
+        line.startColor=dominance!=null?dominance.Blend(startHue,dominance.Energy):startHue;
+        line.endColor=dominance!=null?dominance.Blend(endHue,dominance.Energy):endHue;
         line.startWidth = (.004f + amp1 * .01f)*Mathf.Sqrt(fade);
         line.endWidth = (.004f + amp2 * .01f)*Mathf.Sqrt(fade);
         line.sharedMaterial.SetColor("_BaseColor",Color.white*((2+5*(amp1+amp2))*fade));
-        float amp = Main.ReducedMotion ? 0 : release.Level * amplitudeScale*(Releasing?fade:1);
+        float amp = Main.ReducedMotion ? 0 : release.Level * amplitudeScale*3.2f*(Releasing?Mathf.Sqrt(fade):1);
         for (int i = 0; i < basis.Length; i++)
         {
             Vector3 direction = basis[Mathf.Min(i + 1, basis.Length - 1)] - basis[Mathf.Max(0, i - 1)];
             Vector3 perpendicular = Vector3.Cross(direction, Vector3.up).normalized;
+            if(perpendicular.sqrMagnitude<.01f)perpendicular=Vector3.Cross(direction,Vector3.right).normalized;
+            Vector3 second=Vector3.Cross(direction.normalized,perpendicular).normalized;
             float envelope = Mathf.Sin(Mathf.PI * i / (basis.Length - 1));
-            animated[i] = basis[i] + perpendicular * (amp * envelope * Mathf.Sin(Time.time * waveFrequency + i * .5f));
+            float t=Time.time*waveFrequency,phase=i*.5f;
+            float wave=Mathf.Sin(t+phase)+.38f*Mathf.Sin(t*1.63f-phase*1.8f);
+            animated[i] = basis[i] + amp*envelope*(perpendicular*wave+second*(.45f*Mathf.Sin(t*1.21f-phase*.8f)));
         }
         line.SetPositions(animated);
     }

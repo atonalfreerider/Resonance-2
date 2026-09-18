@@ -8,6 +8,7 @@ public class Note : MonoBehaviour
     Transform sphere;
     readonly VisualRelease release=new();
     Color hue=Color.white;
+    TonalDominance dominance;
     bool showIdle=true;
     float releaseSeconds=2.4f;
     public float VisualAmplitude => release.Level;
@@ -33,8 +34,10 @@ public class Note : MonoBehaviour
         if(sphere==null)return;
         release.Set(CurrentAmp);release.Advance(Time.unscaledDeltaTime,releaseSeconds);
         float glow=release.Level;
+        if(dominance==null)dominance=GetComponentInParent<TonalDominance>();
         sphere.localScale=Vector3.one*homeScale*((showIdle?1:0)+2*Mathf.Sqrt(glow));
-        material.SetColor("_BaseColor",hue*((showIdle?.22f:0)+10*glow));
+        Color activeHue=dominance!=null?dominance.Blend(hue,dominance.Energy):hue;
+        material.SetColor("_BaseColor",hue*(showIdle?.22f:0)+activeHue*10*glow);
         sphere.gameObject.SetActive(showIdle || glow>0);
     }
     void OnDestroy() { if (material != null) Destroy(material); }

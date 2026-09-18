@@ -9,6 +9,9 @@ public sealed class CyclicOrrery : VisualElement
     readonly Main main;
     readonly MidiPlayer midi;
     readonly Mechanism overview,detail;
+    Mechanism overlay;
+    readonly Toggle overlayToggle;
+    readonly Dictionary<SongFormAnalysis.Section,float> sectionEnergy=new();
     readonly Label status,description,message;
     readonly VisualElement sequence,chords;
     readonly DropdownField family;
@@ -27,6 +30,8 @@ public sealed class CyclicOrrery : VisualElement
         AddButton(transport,"Play / pause",()=>{if(midi.IsPlaying)midi.Pause();else midi.Play();});
         AddButton(transport,"Stop",midi.Stop);
         overview=new Mechanism(main,true){name="song-mechanism"};Add(overview);
+        overlayToggle=new Toggle("Float glowing orrery over torus"){value=true};Add(overlayToggle);
+        overlayToggle.RegisterValueChangedCallback(e=>{overview.style.display=e.newValue?DisplayStyle.None:DisplayStyle.Flex;if(overlay!=null)overlay.style.display=e.newValue?DisplayStyle.Flex:DisplayStyle.None;});
         Text(this,@"SUN: KEY · PLANET: SONG
 MOON: SECTION · SMALL MOON: PROGRESSION").AddToClassList("orbit-legend");
         Text(this,"SONG FORM").AddToClassList("eyebrow");
@@ -67,6 +72,13 @@ Repeat names identify the same section family.");
 The outer band follows actual section order. Color bands on each body are built from its chords: I blue, IV red, V green, relative to the key.
 MIDI markers supply names when present. Otherwise boundaries and section letters are estimates. Edit the form to identify verse, chorus and bridge. Chords are estimates from duration-weighted pitched notes.").AddToClassList("muted");
     }
+    public void AttachOverlay(VisualElement root)
+    {
+        overlay=new Mechanism(main,true){name="orrery-overlay",pickingMode=PickingMode.Ignore};
+        overlay.style.position=Position.Absolute;overlay.style.right=18;overlay.style.top=18;
+        overlay.style.width=320;overlay.style.height=320;overlay.style.maxWidth=new Length(34,LengthUnit.Percent);
+        root.Add(overlay);overview.style.display=DisplayStyle.None;
+    }
     void Rebuild(int bars,string map)
     {
         try{midi.RebuildSongForm(bars,map);message.text="Section map applied.";Tick();}
@@ -74,8 +86,8 @@ MIDI markers supply names when present. Otherwise boundaries and section letters
     }
     public void Tick()
     {
-        if(source!=midi.SongForm){source=midi.SongForm;selectedFamily=occurrence=0;RebuildControls();}
-        double beat=midi.Cycles?.BeatAt(midi.Position)??0;
+        if(source!=midi.SongForm){source=midi.SongForm;selectedFamily=occurrence=0;sectionEnergy.Clear();RebuildControls();}
+        double beat=midi.Cycles?.BeatAt(midi.ScorePosition)??0;
         var active=source?.At(beat);
         if(followToggle.value && active!=null && active!=SelectedSection)
         {selectedFamily=active.Family.Id;occurrence=active.Family.Occurrences.IndexOf(active);RefreshSelection();}
@@ -85,7 +97,15 @@ MIDI markers supply names when present. Otherwise boundaries and section letters
         // The solar mechanism ALWAYS follows the song. Inspection only changes the enlargement.
         overview.Section=active;detail.Section=SelectedSection;
         overview.SongPhase=midi.Duration>0?midi.Position/midi.Duration:0;
-        overview.Timing=midi.Cycles;overview.SongDuration=midi.Duration;
+        overview.Timing=midi.Cycles;overview.Transport=midi;overview.SongDuration=midi.Duration;
+        if(source!=null)foreach(var section in source.Sections)
+        {
+            sectionEnergy.TryGetValue(section,out float power);
+            float target=section==active?1-Mathf.Exp(-main.ActiveNotes.Sum(n=>n.Item2)*main.Synth.Volume):0;
+            sectionEnergy[section]=Mathf.Lerp(power,target,1-Mathf.Exp(-Time.unscaledDeltaTime*(target>power?10:2.4f)));
+        }
+        overview.Energy=detail.Energy=sectionEnergy;
+        if(overlay!=null){overlay.Form=source;overlay.Section=active;overlay.Beat=beat;overlay.SongPhase=overview.SongPhase;overlay.Timing=midi.Cycles;overlay.Transport=midi;overlay.SongDuration=midi.Duration;overlay.Energy=sectionEnergy;overlay.MarkDirtyRepaint();}
         overview.MarkDirtyRepaint();detail.MarkDirtyRepaint();
         status.text=source==null?"Load a MIDI file in MIDI FILE below.":$@"{source.Sections.Count} sections · {source.Families.Count} families
 {source.BoundarySource}
@@ -132,7 +152,7 @@ Progression: {s.ProgressionBeats:0.##} beats × {s.Repetitions:0.##}";
     {
         var s=source?.At(beat);if(s==null)return;
         selectedFamily=s.Family.Id;occurrence=s.Family.Occurrences.IndexOf(s);RefreshSelection();
-        midi.Seek(midi.Cycles.SecondsAt(beat));
+        midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(beat)));
     }
     public static double Phase(double beat,double start,double duration)=>duration<=0?0:((beat-start)%duration+duration)%duration/duration;
     public static SongFormAnalysis.ChordStep CurrentChord(SongFormAnalysis.Section s,double beat)
@@ -143,7 +163,7 @@ Progression: {s.ProgressionBeats:0.##} beats × {s.Repetitions:0.##}";
     public static Color ChordColor(SongFormAnalysis.ChordStep chord,int key)
     {
         if(chord==null || chord.Rest)return new Color(.15f,.18f,.22f);
-        return TonalColorField.Pitch(chord.Root,key)*(chord.Quality.StartsWith("m",StringComparison.Ordinal) && !chord.Quality.StartsWith("maj",StringComparison.Ordinal)?.65f:1);
+        return TonalColorField.Chord(chord.Root,key,chord.Quality.StartsWith("m",StringComparison.Ordinal) && !chord.Quality.StartsWith("maj",StringComparison.Ordinal));
     }
     static Label Text(VisualElement parent,string text){var l=new Label(text);l.AddToClassList("details");parent.Add(l);return l;}
     static VisualElement Row(VisualElement parent){var row=new VisualElement();row.AddToClassList("row");parent.Add(row);return row;}
@@ -178,12 +198,19 @@ Progression: {s.ProgressionBeats:0.##} beats × {s.Repetitions:0.##}";
         public SongFormAnalysis.Section Section;
         public double Beat,SongPhase;
         public MidiCycleAnalysis Timing;
+        public MidiPlayer Transport;
         public double SongDuration;
         public Action<double> Seek;
+        public Dictionary<SongFormAnalysis.Section,float> Energy;
+        OrreryBloom bloom;
         static readonly Color Brass=new(.48f,.39f,.25f),Track=new(.20f,.27f,.34f);
         public Mechanism(Main owner,bool all)
         {
             main=owner;overview=all;style.height=all?280:235;style.flexShrink=0;
+            style.backgroundColor=Color.clear;
+            RegisterCallback<AttachToPanelEvent>(_=>{bloom=new OrreryBloom(main);bloom.Place(this);});
+            RegisterCallback<DetachFromPanelEvent>(_=>{bloom?.Dispose();bloom=null;});
+            schedule.Execute(()=>bloom?.Place(this)).Every(50);
             generateVisualContent+=Draw;
             RegisterCallback<PointerDownEvent>(e=>
             {
@@ -200,7 +227,7 @@ Progression: {s.ProgressionBeats:0.##} beats × {s.Repetitions:0.##}";
         {p.lineWidth=1.5f;p.strokeColor=color;p.BeginPath();p.MoveTo(a);p.LineTo(b);p.Stroke();}
         void Pattern(Painter2D p,Vector2 center,float radius,SongFormAnalysis.Section section)
         {
-            Circle(p,center,radius,new Color(.025f,.03f,.04f),true);
+            Circle(p,center,radius,new Color(.025f,.03f,.04f,.2f),true);
             foreach(var chord in section.Chords)Arc(p,center,radius-2,(chord.Start-section.Start)/section.ProgressionBeats,(chord.End-section.Start)/section.ProgressionBeats,ChordColor(chord,main.currentKey),4);
             p.lineWidth=1;Circle(p,center,radius,Brass,false);
         }
@@ -208,9 +235,10 @@ Progression: {s.ProgressionBeats:0.##} beats × {s.Repetitions:0.##}";
         {
             moons.Clear();if(contentRect.width<=0)return;
             var p=ctx.painter2D;Vector2 center=contentRect.center;float r=Mathf.Min(contentRect.width,contentRect.height)*.44f;
-            Circle(p,center,r+9,new Color(.025f,.035f,.052f),true);
-            if(Form==null || Section==null)return;
+            bloom?.Begin(contentRect.width,contentRect.height,true);
+            if(Form==null || Section==null){bloom?.End();return;}
             var s=Section;var current=CurrentChord(s,Beat);
+            float power=Energy!=null&&Energy.TryGetValue(s,out float value)?value:0;
             if(overview)
             {
                 foreach(var section in Form.Sections)
@@ -219,9 +247,11 @@ Progression: {s.ProgressionBeats:0.##} beats × {s.Repetitions:0.##}";
                         foreach(var chord in section.Chords)
                         {
                             double start=cycle+chord.Start-section.Start,end=Math.Min(section.End,cycle+chord.End-section.Start);
-                            Arc(p,center,r,Timing.SecondsAt(start)/SongDuration,Timing.SecondsAt(end)/SongDuration,ChordColor(chord,main.currentKey),5);
+                            Arc(p,center,r,Transport.AudioTime(Timing.SecondsAt(start))/SongDuration,Transport.AudioTime(Timing.SecondsAt(end))/SongDuration,ChordColor(chord,main.currentKey),5);
+                            float sectionPower=Energy!=null&&Energy.TryGetValue(section,out float e)?e:0;
+                            bloom?.Arc(center,r,Transport.AudioTime(Timing.SecondsAt(start))/SongDuration,Transport.AudioTime(Timing.SecondsAt(end))/SongDuration,ChordColor(chord,main.currentKey),sectionPower);
                         }
-                    Arm(p,Point(center,r-5,Timing.SecondsAt(section.Start)/SongDuration),Point(center,r+5,Timing.SecondsAt(section.Start)/SongDuration),Brass);
+                    Arm(p,Point(center,r-5,Transport.AudioTime(Timing.SecondsAt(section.Start))/SongDuration),Point(center,r+5,Transport.AudioTime(Timing.SecondsAt(section.Start))/SongDuration),Brass);
                 }
                 Circle(p,Point(center,r,SongPhase),3,Color.white,true);
                 float songRadius=r*.55f,sectionRadius=r*.24f,progressionRadius=r*.12f;
@@ -236,6 +266,10 @@ Progression: {s.ProgressionBeats:0.##} beats × {s.Repetitions:0.##}";
                 Arm(p,song,sectionMoon,Brass);p.lineWidth=1;Circle(p,sectionMoon,progressionRadius,Track,false);
                 Arm(p,sectionMoon,progression,Brass);
                 Pattern(p,song,12,s);Pattern(p,sectionMoon,7,s);
+                bloom?.Disk(song,9,ChordColor(current,main.currentKey),power*.6f);
+                bloom?.Disk(sectionMoon,6,ChordColor(current,main.currentKey),power);
+                bloom?.Disk(progression,4,ChordColor(current,main.currentKey),power*1.4f);
+                bloom?.Disk(center,8,TonalColorField.Pitch(main.currentKey,main.currentKey),power*.5f);
                 Circle(p,progression,4,ChordColor(current,main.currentKey),true);
                 p.lineWidth=1;Circle(p,progression,5,Color.white,false);
                 Circle(p,center,12,Brass,true);Circle(p,center,8,TonalColorField.Tonic,true);
@@ -251,6 +285,7 @@ Progression: {s.ProgressionBeats:0.##} beats × {s.Repetitions:0.##}";
                 {
                     double start=(chord.Start-s.Start)/s.ProgressionBeats;
                     Arc(p,center,orbit,start,(chord.End-s.Start)/s.ProgressionBeats,ChordColor(chord,main.currentKey),4);
+                    if(chord==current)bloom?.Arc(center,orbit,start,(chord.End-s.Start)/s.ProgressionBeats,ChordColor(chord,main.currentKey),power);
                     Vector2 marker=Point(center,orbit,start);
                     Circle(p,marker,3,ChordColor(chord,main.currentKey),true);
                     if(labelIndex++%labelStride==0 || chord==current)
@@ -259,9 +294,11 @@ Progression: {s.ProgressionBeats:0.##} beats × {s.Repetitions:0.##}";
                 }
                 Vector2 moon=Point(center,orbit,Main.ReducedMotion?0:Phase(Beat,s.Start,s.ProgressionBeats));
                 Arm(p,center,moon,Brass);Circle(p,moon,7,ChordColor(current,main.currentKey),true);
+                bloom?.Disk(moon,7,ChordColor(current,main.currentKey),power);
                 p.lineWidth=1;Circle(p,moon,9,Color.white,false);
                 ctx.DrawText($"×{s.Repetitions:0.##}",center+new Vector2(-10,-5),11,Color.white,null);
             }
+            bloom?.End();
         }
     }
 }

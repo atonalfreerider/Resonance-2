@@ -69,3 +69,7 @@ UserSettings
 Tests/**/bin/
 Tests/**/obj/
 !Tests/ModelChecks/ModelChecks.csproj
+Tools/SongPrep/.venv/
+Tools/SongPrep/__pycache__/
+PreparedSongs/**/fingerprint-cache.npz
+PreparedSongs/**/*.wav

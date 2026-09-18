@@ -43,8 +43,11 @@ public class HarmonyExplorer : MonoBehaviour
         panel.RegisterCallback<GeometryChangedEvent>(_ => { float fraction=Mathf.Clamp(panel.worldBound.width/root.worldBound.width,0,.5f); if(Camera.main!=null)Camera.main.rect=new Rect(fraction,0,1-fraction,1); });
         focusHint=Label(panel,"Click the torus to play / orbit. Click this panel to edit.");
         focusHint.AddToClassList("focus-hint");
+        var dominance=GetComponent<TonalDominance>()??gameObject.AddComponent<TonalDominance>();
+        var recording=GetComponent<SongAudio>()??gameObject.AddComponent<SongAudio>();
+        panel.Add(recording.BuildUI());
         Section(panel,"TRACK ORRERY");
-        orrery=new CyclicOrrery(main,midi);panel.Add(orrery);
+        orrery=new CyclicOrrery(main,midi);panel.Add(orrery);orrery.AttachOverlay(root);
         Section(panel,"TONAL CONTEXT");
         keyChoice=Choice(panel,"Key / tonic",Enumerable.Range(0,12).Select(i=>HarmonyModel.Name(i)).ToList(),main.currentKey,i=> { midi?.Pause(); main.KeySource="Manual"; main.ChangeKey(i); });
         modeChoice=Choice(panel,"Mode",new List<string>{"Major","Natural minor"},0,i=> { main.MinorMode=i==1; main.KeySource="Manual"; main.RefreshView(); Refresh(); });
@@ -74,6 +77,7 @@ public class HarmonyExplorer : MonoBehaviour
         Slider(panel,"Resonance half-life (seconds)",.15f,6,main.ResonanceHalfLife,v=>main.ResonanceHalfLife=v);
         Slider(panel,"Note fade (seconds)",.15f,2,main.NoteReleaseSeconds,v=>main.NoteReleaseSeconds=v);
         Slider(panel,"Chord energy decay (seconds)",.3f,6,main.VisualReleaseSeconds,v=>main.VisualReleaseSeconds=v);
+        Slider(panel,"Primary tone color influence",0,1,dominance.Influence,v=>dominance.Influence=v);
         Slider(panel,"Energy influence",.1f,3,main.ResonanceGain,v=>main.ResonanceGain=v);
         Button(panel,"Clear lingering vibrations",main.ClearVisualMemory);
         Label(panel,"Sustained notes accumulate energy. MIDI velocity and master volume scale the color wash; after release, energy halves over the selected time.");
@@ -88,7 +92,7 @@ public class HarmonyExplorer : MonoBehaviour
         Toggle(panel,"Reduced motion",false,v=>{Main.ReducedMotion=v; main.ChangeKey(main.currentKey,0);});
         Button(panel,"Reset camera",()=>Camera.main.GetComponent<CameraControl>()?.ResetView());
         Slider(panel,"Master volume",0,1,main.Synth.Volume,v=>main.Synth.Volume=v);
-        Section(panel,"MIDI FILE");
+        Section(panel,"MIDI ONLY / FILTERS");
         Choice(panel,"Live MIDI input (Windows)",LiveMidiInput.Devices(),0,i=>live.Connect(i-1));
         path=new TextField("File path"){value=midi!=null?midi.midiPath:""}; panel.Add(path);
         Button(panel,"Open MIDI…",OpenMidi);
@@ -96,8 +100,8 @@ public class HarmonyExplorer : MonoBehaviour
         var mt=Row(panel); Button(mt,"Play / pause",()=>{if(midi.IsPlaying)midi.Pause();else midi.Play();}); Button(mt,"Stop",()=>midi.Stop());
         seek=Slider(panel,"Position",0,1,0,v=>{if(midi.Loaded)midi.Seek(v*midi.Duration);});
         clock=Label(panel,""); midiStatus=Label(panel,"");
-        Slider(panel,"Playback speed",.25f,2,1,v=>midi.SetSpeed(v));
-        Toggle(panel,"Loop MIDI",false,v=>midi.Loop=v);
+        Slider(panel,"MIDI-only speed (recording = 1×)",.25f,2,1,v=>midi.SetSpeed(v));
+        Toggle(panel,"Loop song",false,v=>midi.Loop=v);
         Toggle(panel,"Follow declared key",true,v=>midi.FollowKey=v);
         Toggle(panel,"Exclude percussion (channel 10)",true,v=>{midi.SkipPercussion=v; ReloadMidi();});
         Choice(panel,"Channel",new[]{"All"}.Concat(Enumerable.Range(1,16).Select(i=>i.ToString())).ToList(),0,i=>{midi.ChannelFilter=i;ReloadMidi();});
@@ -108,7 +112,7 @@ public class HarmonyExplorer : MonoBehaviour
         main.StateChanged+=Refresh;
         LoadLesson(0); Refresh();
     }
-    void ReloadMidi() { if(midi.Loaded) { double pos=midi.Position; bool play=midi.IsPlaying; midi.Load(path.value); midi.Seek(pos); if(play)midi.Play(); } }
+    void ReloadMidi() { if(midi.Recording!=null && midi.Recording.Ready){midi.Recording.Save(false);midi.Recording.LoadPair(midi.Recording.AudioPath,midi.midiPath);return;} if(midi.Loaded) { double pos=midi.Position; bool play=midi.IsPlaying; midi.Load(path.value); midi.Seek(pos); if(play)midi.Play(); } }
     void OpenMidi()
     {
 #if UNITY_EDITOR

@@ -125,4 +125,17 @@ bool badMap=false;try{SongFormAnalysis.Build(song,4,"5 Verse\n1 Chorus");}catch(
 Check(badMap,"Reject invalid section boundaries without changing the form");
 song.Markers.Add((0,"Verse"));song.Markers.Add((16,"Chorus"));
 Check(SongFormAnalysis.Build(song).BoundarySource=="MIDI section markers","MIDI markers supply section names and boundaries");
-Console.WriteLine($"PASS: {checks} harmonic, persistence, MIDI and song-form checks");
+var alignment=new SongAlignment{anchors=new(){new(0,.25),new(10,11),new(30,29)}};
+alignment.Validate();
+foreach(double t in new[]{0.0,1,9.5,10,15,29,30,35})Check(Math.Abs(alignment.ToMidi(alignment.ToAudio(t))-t)<1e-9,"Timing inverse round trip across tempo changes");
+Check(Math.Abs(alignment.ToAudio(20)-20)<1e-9,"Piecewise tempo alignment");
+bool badAnchor=false;try{new SongAlignment{anchors=new(){new(0,0),new(2,1),new(1,2)}}.Validate();}catch(ArgumentException){badAnchor=true;}
+Check(badAnchor,"Reject backwards score timing");
+// Distinct synthetic pitches with a known local tempo change, independent audio fixture.
+int sampleRate=11025;double[] scoreEdges={0,1,2,3,4,5,6},audioEdges={0,1.3,2.6,3.9,4.6,5.3,6};
+int[] pitches={57,62,59,64,60,67};var waveform=new float[sampleRate*6];
+for(int s=0;s<6;s++)for(int i=(int)(audioEdges[s]*sampleRate);i<(int)(audioEdges[s+1]*sampleRate);i++)waveform[i]=(float)(.7*Math.Sin(2*Math.PI*440*Math.Pow(2,(pitches[s]-69)/12.0)*i/sampleRate));
+var scoreChroma=new float[61][];for(int i=0;i<61;i++){scoreChroma[i]=new float[12];scoreChroma[i][(pitches[Math.Min(5,i/10)]-21)%12]=1;}
+var warped=SongAlignment.Analyze(waveform,sampleRate,scoreChroma,.1,6,6);
+for(int i=1;i<6;i++)Check(Math.Abs(warped.ToAudio(scoreEdges[i])-audioEdges[i])<.36,"Chroma alignment finds local tempo changes");
+Console.WriteLine($"PASS: {checks} harmonic, persistence, MIDI, song-form and alignment checks");

@@ -20,9 +20,15 @@ public static class FieldInteractionValidation
         int originalKey=main.currentKey;float volume=main.Synth.Volume;
         var notes=main.ActiveNotes.ToList();
         var midi=main.GetComponent<MidiPlayer>();
-        var keyboard=Keyboard.current;
+        var originalKeyboard=Keyboard.current;
+        var keyboard=InputSystem.AddDevice<Keyboard>();keyboard.MakeCurrent();
         var root=main.GetComponent<UIDocument>().rootVisualElement;
         var text=root.Query<TextField>().ToList();var textValues=text.Select(t=>t.value).ToArray();
+        void EnterUI(VisualElement element)
+        {
+            using(var click=PointerDownEvent.GetPooled()){click.target=element;element.SendEvent(click);}
+            element.Focus();
+        }
         void Check(bool pass,string name){if(!pass)throw new Exception(name);results.Add("PASS: "+name);}
         async Task Press(params Key[] keys)
         {
@@ -48,7 +54,7 @@ public static class FieldInteractionValidation
             Check(field.Energy.Sum()>0,"Notes excite the light field");
             Check(vertices.SequenceEqual(mesh.vertices),"Sound does not deform the umbilic geometry");
             var camera=Camera.main.transform;Vector3 position=camera.position;
-            text.Last().Focus();await Task.Delay(60);
+            EnterUI(text.Last());await Task.Delay(60);
             Check(!ExplorerInputFocus.ViewportOwnsKeyboard,"Text field owns shortcuts");
             await Press(Key.A,Key.Digit1,Key.RightArrow,Key.Space,Key.Escape);
             Check(main.currentKey==originalKey,"Typing does not change tonic");
@@ -57,17 +63,29 @@ public static class FieldInteractionValidation
             Check(main.ActiveNotes.Count==3,"UI escape / number input does not silence or play notes");
             foreach(var control in new VisualElement[]{root.Query<IntegerField>().First(),root.Query<Slider>().First(),root.Query<DropdownField>().First(),root.Query<Button>().First()})
             {
-                control.Focus();await Task.Delay(40);Check(!ExplorerInputFocus.ViewportOwnsKeyboard,control.GetType().Name+" owns keyboard");
+                EnterUI(control);await Task.Delay(40);Check(!ExplorerInputFocus.ViewportOwnsKeyboard,control.GetType().Name+" owns keyboard");
             }
             ExplorerInputFocus.ClaimViewport();await Task.Delay(40);
             Check(ExplorerInputFocus.ViewportOwnsKeyboard,"Viewport reclaims shortcuts");
             await Press(Key.RightArrow);
             Check(Vector3.Distance(position,camera.position)>.0001f,"Viewport arrows move camera");
+            ExplorerInputFocus.ClaimViewport();
+            InputSystem.QueueStateEvent(keyboard,new KeyboardState(Key.RightArrow));
+            for(int frame=0;frame<12;frame++)
+            {
+                Vector3 before=camera.position;
+                // Reproduce UI navigation assigning a target while a camera key is held.
+                root.Query<Button>().First().Focus();
+                using(var navigation=NavigationMoveEvent.GetPooled()){navigation.target=root;root.SendEvent(navigation);}
+                await Task.Delay(100);
+                Check(ExplorerInputFocus.ViewportOwnsKeyboard&&Vector3.Distance(before,camera.position)>.0001f,"Held camera arrow survives UI focus/navigation interval "+frame);
+            }
+            InputSystem.QueueStateEvent(keyboard,new KeyboardState());await Task.Delay(40);
             ExplorerInputFocus.ClaimViewport();await Press(Key.A);
             Check(main.currentKey==0,"Viewport tonic shortcut works");
             ExplorerInputFocus.ClaimViewport();InputSystem.QueueStateEvent(keyboard,new KeyboardState(Key.Digit1));await Task.Delay(60);
             Check(main.ActiveNotes.Count==1,"Viewport note keyboard works");
-            text.Last().Focus();await Task.Delay(60);
+            EnterUI(text.Last());await Task.Delay(60);
             Check(main.ActiveNotes.Count==0,"Giving focus to UI releases keyboard notes");
             InputSystem.QueueStateEvent(keyboard,new KeyboardState());await Task.Delay(40);
             main.PlayKeys(chord);await Press(Key.LeftCtrl,Key.Escape);
@@ -77,7 +95,7 @@ public static class FieldInteractionValidation
         catch(Exception e){results.Add("FAIL: "+e);Debug.LogError(e);}
         finally
         {
-            if(keyboard!=null)InputSystem.QueueStateEvent(keyboard,new KeyboardState());
+            InputSystem.RemoveDevice(keyboard);originalKeyboard?.MakeCurrent();
             for(int i=0;i<text.Count;i++)text[i].SetValueWithoutNotify(textValues[i]);
             main.ChangeKey(originalKey,0);main.PlayKeys(notes);main.Synth.Volume=volume;
             Camera.main.GetComponent<CameraControl>().ResetView();ExplorerInputFocus.ClaimViewport();
