@@ -6,6 +6,11 @@
 .muted { color: rgb(164, 179, 198); white-space: normal; margin-bottom: 8px; }
 .details { white-space: normal; margin-top: 8px; margin-bottom: 8px; }
 .focus-hint { font-size: 11px; color: rgb(152, 207, 241); padding: 8px; background-color: rgb(27, 43, 60); border-radius: 4px; }
+.orrery { flex-shrink: 0; }
+.orbit-legend { font-size: 10px; color: rgb(194, 169, 118); white-space: normal; }
+.section-chip, .chord-chip { font-size: 11px; padding: 4px 6px; min-height: 25px; }
+.section-card { width: 120px; max-width: 48%; margin-right: 4px; flex-shrink: 0; }
+.pattern-row { white-space: normal; font-size: 11px; -unity-text-align: middle-left; }
 .row { flex-direction: row; flex-wrap: wrap; }
 Button { background-color: rgb(34, 48, 68); border-width: 1px; border-color: rgb(66, 84, 109); border-radius: 5px; color: rgb(239, 244, 255); padding: 7px 9px; margin: 3px 4px 3px 0; }
 Button:hover { background-color: rgb(55, 75, 102); }

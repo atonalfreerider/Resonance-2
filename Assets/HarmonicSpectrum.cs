@@ -5,7 +5,7 @@ using System.Collections.Generic;
 // This describes the visualization's excitation, not a measurement of the sine synth.
 public static class HarmonicSpectrum
 {
-    public static void Accumulate(IEnumerable<Tuple<int,float>> notes, float[] energy, bool partials)
+    public static void Accumulate(IEnumerable<Tuple<int,float>> notes, float[] energy, bool partials, bool compress=true)
     {
         Array.Clear(energy,0,energy.Length);
         foreach(var note in notes)
@@ -17,6 +17,6 @@ public static class HarmonicSpectrum
             }
         }
         // Soft compression lets additional notes build energy without clipping to a constant.
-        for(int i=0;i<12;i++)energy[i]=1-(float)Math.Exp(-energy[i]);
+        if(compress)for(int i=0;i<12;i++)energy[i]=1-(float)Math.Exp(-energy[i]);
     }
 }

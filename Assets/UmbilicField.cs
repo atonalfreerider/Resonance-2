@@ -11,12 +11,21 @@ public class UmbilicField : MonoBehaviour
     readonly Vector3[] vertices=new Vector3[(Along+1)*(Across+1)];
     readonly Vector4[] anchors=new Vector4[12], colors=new Vector4[12], excitation=new Vector4[12];
     readonly float[] target=new float[12];
+    readonly HarmonicMemory memory=new();
+    int integratedFrame=-1;
     float phase=float.NaN, twist;
     int maskKey=-1;
     bool maskMinor;
     readonly Vector2[] tonalCoverage=new Vector2[(Along+1)*(Across+1)];
     public Mesh SurfaceMesh => mesh;
     public float[] Energy => target;
+    public float[] ResidualEnergy => memory.Energy;
+    public void ClearMemory(){memory.Clear();System.Array.Clear(excitation,0,excitation.Length);}
+    public void Integrate(System.Collections.Generic.IEnumerable<System.Tuple<int,float>> notes,double seconds)
+    {
+        memory.Advance(notes,seconds,main.ResonanceHalfLife,main.ResonanceGain*main.Synth.Volume/.6f,main.ShowHarmonics);
+        integratedFrame=Time.frameCount;
+    }
     public void Initialize(Main owner)
     {
         main=owner; mesh=new Mesh{name="Continuous umbilic field"};mesh.MarkDynamic();
@@ -105,11 +114,11 @@ public class UmbilicField : MonoBehaviour
         if(main==null)return;
         UpdateGeometry();UpdateCoverage();rendererComponent.enabled=main.ShowSurfaces;
         HarmonicSpectrum.Accumulate(main.ActiveNotes,target,main.ShowHarmonics);
-        float blend=1-Mathf.Exp(-Time.unscaledDeltaTime*7);
+        if(integratedFrame!=Time.frameCount)Integrate(main.ActiveNotes,Time.unscaledDeltaTime);
         for(int pc=0;pc<12;pc++)
         {
             Color c=TonalColorField.Pitch(pc,main.currentKey); colors[pc]=new Vector4(c.r,c.g,c.b,1);
-            excitation[pc].x=Mathf.Lerp(excitation[pc].x,target[pc],blend);
+            excitation[pc].x=memory.Energy[pc];
             int rel=HarmonyModel.Mod(pc-main.CollectionRoot);
             excitation[pc].y=rel is 0 or 2 or 4 or 5 or 7 or 9 or 11?1:0;
         }

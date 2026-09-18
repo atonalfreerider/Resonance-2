@@ -62,6 +62,9 @@ public class Main : MonoBehaviour
     public int SelectedSurface = 3;
     public bool ShowHarmonics = true, SurfaceGuide;
     public float FieldDensity = .7f;
+    public float ResonanceHalfLife = 1.8f, ResonanceGain = 1f;
+    public float VisualReleaseSeconds = 2.4f, NoteReleaseSeconds = .7f;
+    public UmbilicField TonalField => tonalField;
     public float VisualRotation => currentVisualRotation;
     public float VisualTwist => currentVisualTwist;
     public Vector3 UmbilicPoint(float t) => UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, Mathf.Repeat(t,1), currentVisualTwist);
@@ -307,11 +310,15 @@ public class Main : MonoBehaviour
                 chord.Init(notes[ia], notes[ib], chord.GetComponent<LineRenderer>());
                 chordLineRenderers.Add(id, chord);
             }
-            var renderer = chord.GetComponent<LineRenderer>();
-            renderer.startColor=TonalColorField.Pitch(ia,currentKey);
-            renderer.endColor=TonalColorField.Pitch(ib,currentKey);
-            renderer.sharedMaterial.SetColor("_BaseColor",Color.white*(2f+5f*(notes[ia].CurrentAmp+notes[ib].CurrentAmp)));
-            if (fifth)
+            chord.Drive(notes[ia].CurrentAmp,notes[ib].CurrentAmp,TonalColorField.Pitch(ia,currentKey),TonalColorField.Pitch(ib,currentKey),VisualReleaseSeconds);
+        }
+        foreach(var entry in chordLineRenderers)
+        {
+            var chord=entry.Value;
+            if(!wanted.Contains(entry.Key))chord.Release();
+            int ia=chord.Note1.Index,ib=chord.Note2.Index;
+            chord.Recolor(TonalColorField.Pitch(ia,currentKey),TonalColorField.Pitch(ib,currentKey));
+            if (HarmonyModel.Mod(ib-ia) is 5 or 7)
             {
                 float t1 = scaleToFifths[ia] % Tones / (float)Tones + currentVisualRotation;
                 float t2 = scaleToFifths[ib] % Tones / (float)Tones + currentVisualRotation;
@@ -321,17 +328,24 @@ public class Main : MonoBehaviour
                 chord.Fifth(curveBuffer);
             }
         }
-        foreach (var id in chordLineRenderers.Keys.Where(id => !wanted.Contains(id)).ToArray())
-        {
-            var chord = chordLineRenderers[id]; chord.gameObject.SetActive(false); chordPool.Push(chord); chordLineRenderers.Remove(id);
-        }
         for (int i=0;i<notes.Count;i++)
         {
             var note = notes[i];
             Color color = TonalColorField.Pitch(i,currentKey);
-            note.SetColor(color * (note.CurrentAmp > 0 ? 3f+note.CurrentAmp*7f : .22f));
-            note.gameObject.SetActive((ShowRegisters || i/12 == 3 || note.CurrentAmp > 0) && (!SoundingOnly || note.CurrentAmp > 0));
+            note.Configure(color,(ShowRegisters || i/12==3) && !SoundingOnly,NoteReleaseSeconds);
         }
+    }
+    void Update()
+    {
+        foreach(var id in chordLineRenderers.Keys.Where(id=>chordLineRenderers[id].TailComplete).ToArray())
+        {
+            var chord=chordLineRenderers[id];chord.gameObject.SetActive(false);chordPool.Push(chord);chordLineRenderers.Remove(id);
+        }
+    }
+    public void ClearVisualMemory()
+    {
+        tonalField?.ClearMemory();foreach(var note in notes)note.ClearTail();
+        foreach(var chord in chordLineRenderers.Values)if(chord.Releasing)chord.ClearTail();
     }
     void OnApplicationFocus(bool focus) { if (!focus && Synth != null) Silence(); }
     void OnDestroy()

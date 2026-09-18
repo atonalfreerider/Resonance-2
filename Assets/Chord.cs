@@ -10,6 +10,19 @@ public class Chord : MonoBehaviour
     LineRenderer line;
     Vector3[] basis, animated;
     bool curved;
+    readonly VisualRelease release=new();
+    float amp1,amp2,peak,releaseSeconds=2.4f;
+    public bool Releasing => !release.Held;
+    public bool TailComplete => Releasing && release.Level<=0;
+    public float VisualAmplitude => release.Level;
+    public void Drive(float a,float b,Color start,Color end,float seconds)
+    {
+        amp1=a;amp2=b;peak=(a+b)*.5f;releaseSeconds=seconds;release.Set(peak);
+        line.startColor=start;line.endColor=end;
+    }
+    public void Release()=>release.Set(0);
+    public void Recolor(Color start,Color end){line.startColor=start;line.endColor=end;}
+    public void ClearTail()=>release.Clear();
     public void Init(Note a, Note b, LineRenderer renderer)
     {
         Note1 = a; Note2 = b; line = renderer;
@@ -17,6 +30,7 @@ public class Chord : MonoBehaviour
         line.alignment = LineAlignment.View;
         line.widthCurve = AnimationCurve.Linear(0, 1, 1, 1);
         curved = false;
+        release.Clear();
         Resize(segmentCount + 1);
     }
     void Resize(int count)
@@ -31,11 +45,14 @@ public class Chord : MonoBehaviour
     void LateUpdate()
     {
         if (Note1 == null || Note2 == null || basis == null) return;
+        release.Advance(Time.unscaledDeltaTime,releaseSeconds);
         if (!curved) for (int i = 0; i < basis.Length; i++)
             basis[i] = Vector3.Lerp(Note1.transform.position, Note2.transform.position, i / (float)(basis.Length - 1));
-        line.startWidth = .004f + Note1.CurrentAmp * .01f;
-        line.endWidth = .004f + Note2.CurrentAmp * .01f;
-        float amp = Main.ReducedMotion ? 0 : (Note1.CurrentAmp + Note2.CurrentAmp) * .5f * amplitudeScale;
+        float fade=peak>0?release.Level/peak:0;
+        line.startWidth = (.004f + amp1 * .01f)*Mathf.Sqrt(fade);
+        line.endWidth = (.004f + amp2 * .01f)*Mathf.Sqrt(fade);
+        line.sharedMaterial.SetColor("_BaseColor",Color.white*((2+5*(amp1+amp2))*fade));
+        float amp = Main.ReducedMotion ? 0 : release.Level * amplitudeScale*(Releasing?fade:1);
         for (int i = 0; i < basis.Length; i++)
         {
             Vector3 direction = basis[Mathf.Min(i + 1, basis.Length - 1)] - basis[Mathf.Max(0, i - 1)];

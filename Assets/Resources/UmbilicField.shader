@@ -40,6 +40,11 @@ Shader "Resonance/UmbilicField"
                 }
                 hue/=weights;
                 membership/=weights;
+                // Persistent energy changes the local hue as well as its brightness.
+                float3 wash=light/max(energy,.00001);
+                hue=lerp(hue,wash,saturate(energy/(.35+energy)));
+                // Compress brightness after mixing, preserving relative energy/color ratios.
+                light*=log(1+energy)/max(energy,.00001);
                 // Streamlines follow the ruled umbilic surface, never displacing its vertices.
                 // Three turns make the visual phase periodic at the t=0/1 seam.
                 float phase=6.2831853*(i.uv.x*3-_Time.y*.075*_Flow);

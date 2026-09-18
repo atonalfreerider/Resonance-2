@@ -14,6 +14,7 @@ public class HarmonyExplorer : MonoBehaviour
     int sequenceStart;
     Label details, trace, sounding, midiStatus, clock, analysis, historyLabel;
     Label focusHint;
+    CyclicOrrery orrery;
     TextField grammar, path;
     DropdownField keyChoice, surfaceChoice, modeChoice;
     Slider seek;
@@ -42,6 +43,8 @@ public class HarmonyExplorer : MonoBehaviour
         panel.RegisterCallback<GeometryChangedEvent>(_ => { float fraction=Mathf.Clamp(panel.worldBound.width/root.worldBound.width,0,.5f); if(Camera.main!=null)Camera.main.rect=new Rect(fraction,0,1-fraction,1); });
         focusHint=Label(panel,"Click the torus to play / orbit. Click this panel to edit.");
         focusHint.AddToClassList("focus-hint");
+        Section(panel,"TRACK ORRERY");
+        orrery=new CyclicOrrery(main,midi);panel.Add(orrery);
         Section(panel,"TONAL CONTEXT");
         keyChoice=Choice(panel,"Key / tonic",Enumerable.Range(0,12).Select(i=>HarmonyModel.Name(i)).ToList(),main.currentKey,i=> { midi?.Pause(); main.KeySource="Manual"; main.ChangeKey(i); });
         modeChoice=Choice(panel,"Mode",new List<string>{"Major","Natural minor"},0,i=> { main.MinorMode=i==1; main.KeySource="Manual"; main.RefreshView(); Refresh(); });
@@ -68,6 +71,12 @@ public class HarmonyExplorer : MonoBehaviour
         Toggle(panel,"Continuous tonal field",true,v=>{main.ShowSurfaces=v; main.RefreshView();});
         Toggle(panel,"Harmonic partials build light",true,v=>main.ShowHarmonics=v);
         Slider(panel,"Field density",.1f,1.5f,main.FieldDensity,v=>main.FieldDensity=v);
+        Slider(panel,"Resonance half-life (seconds)",.15f,6,main.ResonanceHalfLife,v=>main.ResonanceHalfLife=v);
+        Slider(panel,"Note fade (seconds)",.15f,2,main.NoteReleaseSeconds,v=>main.NoteReleaseSeconds=v);
+        Slider(panel,"Chord energy decay (seconds)",.3f,6,main.VisualReleaseSeconds,v=>main.VisualReleaseSeconds=v);
+        Slider(panel,"Energy influence",.1f,3,main.ResonanceGain,v=>main.ResonanceGain=v);
+        Button(panel,"Clear lingering vibrations",main.ClearVisualMemory);
+        Label(panel,"Sustained notes accumulate energy. MIDI velocity and master volume scale the color wash; after release, energy halves over the selected time.");
         Label(panel,"Position blends blue I, red IV and green V. Light adds the first eight ideal partials, folded to pitch classes; it is not a spectrum measurement.");
         Toggle(panel,"Diatonic emphasis (soft)",false,v=>{main.DiatonicStrip=v; main.RefreshView();});
         Toggle(panel,"Selected-surface guide",false,v=>main.SurfaceGuide=v);
@@ -163,6 +172,7 @@ public class HarmonyExplorer : MonoBehaviour
     void Update()
     {
         if(main==null)return;
+        orrery?.Tick();
         if(focusHint!=null)focusHint.text=ExplorerInputFocus.ViewportOwnsKeyboard?"TORUS CONTROLS · click panel to edit":"UI CONTROLS · click torus to play / orbit";
         if(Keyboard.current!=null && Keyboard.current.escapeKey.wasPressedThisFrame && (ExplorerInputFocus.ViewportOwnsKeyboard || Keyboard.current.ctrlKey.isPressed)) { StopLesson();midi?.Stop();live.Disconnect();main.Silence(); }
         if(LessonPlaying && Time.unscaledTimeAsDouble>=nextStep)
