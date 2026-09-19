@@ -1,0 +1,111 @@
+{
+  "description": "Synthetic format guide, not a playable song. SHA values are placeholders. Actual media and generated analysis belong outside Git in PreparedSongs/<song>/.",
+  "aligned.mid.prepared.json": {
+    "version": 1,
+    "audioPath": "recording.wav",
+    "midiPath": "aligned.mid",
+    "reportPath": "report.html",
+    "audioSha256": "<SHA256 of recording.wav>",
+    "midiSha256": "<SHA256 of aligned.mid>",
+    "audioDuration": 32,
+    "stems": []
+  },
+  "song.json": {
+    "Key": 0,
+    "Minor": false,
+    "LeadVocalTrack": 1,
+    "SectionBoundaries": "1 Intro\n3 Verse\n7 Chorus",
+    "SectionSource": "Synthetic example; A-based key numbering"
+  },
+  "aligned.mid.patterns.json": {
+    "description": "Full contract: Assets/PreparedPatternSong.cs. Generated offline by Tools/PatternPrep. Beats for sections/chords/notes; seconds for frames and melody strands.",
+    "Version": 1,
+    "MidiSha256": "<SHA256 of aligned.mid>",
+    "Title": "Synthetic example",
+    "Key": 0,
+    "Minor": false,
+    "Tempos": [
+      {
+        "Beat": 0,
+        "Seconds": 0,
+        "Microseconds": 500000
+      }
+    ],
+    "Notes": [
+      {
+        "Beat": 0,
+        "Length": 1,
+        "Pitch": 69,
+        "Track": 1,
+        "Channel": 1,
+        "Velocity": 0.8
+      }
+    ],
+    "MelodyStrands": [
+      {
+        "Track": 1,
+        "Channel": 1,
+        "Rank": 0,
+        "Notes": [
+          {
+            "Pitch": 69,
+            "Start": 0,
+            "End": 0.5,
+            "Velocity": 0.8
+          }
+        ]
+      }
+    ]
+  },
+  "story.json": {
+    "version": 1,
+    "title": "Synthetic example",
+    "midiSha256": "<SHA256 of aligned.mid>",
+    "audioSha256": "<SHA256 of recording.wav>",
+    "patternsSha256": "<SHA256 of aligned.mid.patterns.json>",
+    "duration": 32,
+    "model": "author or model identifier",
+    "cues": [
+      {
+        "start": 0,
+        "end": 16,
+        "text": "Follow this opening pattern as it repeats.",
+        "view": "Overview",
+        "uncoil": false,
+        "stem": ""
+      },
+      {
+        "start": 16,
+        "end": 32,
+        "text": "The tonal center stays in place as the pattern changes.",
+        "view": "Torus",
+        "uncoil": true,
+        "stem": "",
+        "annotationTarget": "melody",
+        "annotationLabel": "Two paths"
+      }
+    ]
+  },
+  "narration.json": {
+    "version": 1,
+    "storySha256": "<SHA256 of story.json>",
+    "audioSha256": "<SHA256 of recording.wav>",
+    "duration": 32,
+    "audioPath": "narration/<content-id>/narration.wav",
+    "sha256": "<SHA256 of narration WAV>",
+    "mp3Path": "narration/<content-id>/narration.mp3",
+    "sampleRate": 24000,
+    "samples": 768000,
+    "model": "gpt-4o-mini-tts",
+    "voice": "marin",
+    "disclosure": "AI-generated narration",
+    "segments": [
+      {
+        "cue": 0,
+        "start": 0.18,
+        "end": 4.2,
+        "tempoRatio": 1
+      }
+    ]
+  }
+}

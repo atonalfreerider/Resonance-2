@@ -7,6 +7,8 @@ public static class RegionPhases
         bool Valid(SongFormAnalysis.ChordStep c)=>!c.Rest&&!c.Quality.Contains("tone")&&!c.Quality.Contains("dyad");
         foreach(var section in song.Sections){
             var evidence=song.Chords.Where(c=>c.End>section.Start&&c.Start<section.End&&Valid(c)).ToArray();
+            // Keep note/chord events intact, but do not flash the contextual region for a short A-B-A passing chord.
+            evidence=evidence.Where((c,i)=>!(i>0&&i+1<evidence.Length&&c.End-c.Start<.75&&evidence[i-1].Root==evidence[i+1].Root&&evidence[i-1].Quality==evidence[i+1].Quality)).ToArray();
             var current=evidence.FirstOrDefault()??new SongFormAnalysis.ChordStep{Root=song.Key>=0?song.Key:0,Quality=song.Minor?"m":""};
             double start=section.Start;
             string Quality(SongFormAnalysis.ChordStep c)=>c.Quality=="dim"?"dim":c.Quality.StartsWith("m")&&!c.Quality.StartsWith("maj")?"m":"";

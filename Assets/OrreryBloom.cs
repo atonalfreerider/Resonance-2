@@ -58,6 +58,7 @@ public sealed class OrreryBloom : System.IDisposable
         float left=Mathf.Max(bounds.xMin,limit.xMin),top=Mathf.Max(bounds.yMin,limit.yMin);
         float right=Mathf.Min(bounds.xMax,limit.xMax),bottom=Mathf.Min(bounds.yMax,limit.yMax);
         bool visible=owner.visible&&owner.resolvedStyle.display!=DisplayStyle.None&&right>left&&bottom>top;
+        clip.style.opacity=owner.resolvedStyle.opacity;
         camera.enabled=visible;displayRoot.style.display=visible?DisplayStyle.Flex:DisplayStyle.None;
         if(!visible)return;
         clip.style.left=left;clip.style.top=top;clip.style.width=right-left;clip.style.height=bottom-top;

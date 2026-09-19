@@ -24,6 +24,50 @@ public class Main : MonoBehaviour
     readonly List<TextBox> noteTextLabels = new();
 
     readonly List<LineRenderer> fifthsLineRenderer = new();
+    readonly List<LineRenderer> uncoiledRings=new();
+    void EnsureUncoiledAurora(){if(GetComponent<UncoiledAurora>()==null)gameObject.AddComponent<UncoiledAurora>();}
+    public bool Uncoiled {get;private set;}
+    public float UncoilAmount {get;private set;}
+    float unfoldProgress;
+    int uncoilKeyFrom;float keyBlend=1;
+    public bool KeyChanging=>keyBlend<1;
+    public bool UncoilMoving=>Mathf.Abs(unfoldProgress-(Uncoiled?1:0))>.00001f;
+    public float CoiledVisibility=>1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.38f,unfoldProgress));
+    public float TransitionWiden=>Mathf.Sin(Mathf.PI*unfoldProgress);
+    public float OctaveSpread=>Mathf.SmoothStep(0,1,Mathf.InverseLerp(.78f,1,unfoldProgress));
+    public Vector3 MorphUncoil(Vector3 coiled,Vector3 flat)
+    {
+        // The primary umbilical curve winds three times around the major circle.
+        // Collapse register offsets, release those windings, then fan out octaves.
+        float slot=Mathf.Atan2(-flat.x,flat.y)/(320*Mathf.Deg2Rad);
+        float t=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation+slot;
+        float collapse=Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.22f,unfoldProgress));
+        float unwind=Mathf.SmoothStep(0,1,Mathf.InverseLerp(.16f,.78f,unfoldProgress));
+        // Keep signed winding negative throughout; rotate the plane instead of reversing the arc.
+        float angle=Mathf.Lerp(-6*Mathf.PI*t,-Mathf.PI*.5f-slot*320*Mathf.Deg2Rad,unwind);
+        float vertex=2*Mathf.PI*t+currentVisualTwist;
+        float tube=EdgeLength/(2*Mathf.Sin(Mathf.PI/3))*(1-unwind);
+        float radius=Mathf.Lerp(Rad,1.55f,unwind)+tube*Mathf.Cos(vertex);
+        Vector3 primary=new Vector3(radius*Mathf.Cos(angle),tube*Mathf.Sin(vertex),radius*Mathf.Sin(angle));
+        primary=Quaternion.AngleAxis(90*unwind,Vector3.right)*primary;
+        Vector3 start=UmbilicPoint(t);
+        return Vector3.Lerp(primary+(coiled-start)*(1-collapse),flat,OctaveSpread);
+    }
+    public bool UncoilActive=>Uncoiled||UncoilAmount>.001f;
+    public void SetUncoiled(bool value){Uncoiled=value;EnsureUncoiledAurora();GetComponent<FeaturedInstrument>()?.ResetPosition();GetComponent<VisualizationViews>()?.ReframeTorus();}
+    public float UncoiledSlot(int pitch)=>AnimatedUncoilSlot(HarmonyModel.Mod(pitch*5)/12f);
+    float AnimatedUncoilSlot(float fifth){
+        float to=Mathf.Repeat(fifth-HarmonyModel.Mod(currentKey*5)/12f+.5f,1)-.5f;
+        float from=Mathf.Repeat(fifth-HarmonyModel.Mod(uncoilKeyFrom*5)/12f+.5f,1)-.5f;
+        return keyBlend>=1?to:-Mathf.LerpAngle(-from*320,-to*320,keyBlend)/320;
+    }
+    public Vector3 UncoiledPoint(float slot,float register)
+    {
+        float angle=-slot*Mathf.Deg2Rad*320,radius=.45f+1.8f*register;
+        return new Vector3(Mathf.Sin(angle)*radius,Mathf.Cos(angle)*radius,0);
+    }
+    public bool UncoiledChordAllowed(int a,int b)=>HarmonyModel.Mod(b-a)==0||
+        ((HarmonyModel.Mod(b-a) is 5 or 7)&&Mathf.Abs(UncoiledSlot(a)-UncoiledSlot(b))<.126f);
     UmbilicField tonalField;
 
     LineRenderer chromaticLineRenderer;
@@ -70,6 +114,7 @@ public class Main : MonoBehaviour
     public Vector3 UmbilicPoint(float t) => UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, Mathf.Repeat(t,1), currentVisualTwist);
     public MusicSynth Synth { get; private set; }
     public IReadOnlyList<Tuple<int, float>> ActiveNotes => lastActiveKeys;
+    public bool NotesUseSynth {get;private set;}
     public event Action StateChanged;
     readonly Stack<Chord> chordPool = new();
     readonly List<Vector3> curveBuffer = new(41);
@@ -89,6 +134,8 @@ public class Main : MonoBehaviour
     void Awake()
     {
         if(GetComponent<DominantChordOutline>()==null)gameObject.AddComponent<DominantChordOutline>();
+        if(GetComponent<ChordAurora>()==null)gameObject.AddComponent<ChordAurora>();
+        if(GetComponent<FeaturedInstrument>()==null)gameObject.AddComponent<FeaturedInstrument>();
         visualKeyForRendering = currentKey;
         currentKey = HarmonyModel.Mod(currentKey); currentVisualRotation = pathMap[currentKey].x / (float)Tones; currentVisualTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
 
@@ -136,6 +183,11 @@ public class Main : MonoBehaviour
         GameObject chromGo = new("chromatic");
         chromGo.transform.SetParent(transform, false);
         chromaticLineRenderer = NewLineRenderer(chromGo, chromaticMat, .007f, true);
+        for(int octave=0;octave<Octaves;octave++){
+            var go=new GameObject("Uncoiled octave "+octave);go.transform.SetParent(transform,false);
+            var mat=new Material(Resources.Load<Shader>("HarmonicGlow"));mat.SetColor("_BaseColor",Color.white);
+            var ring=NewLineRenderer(go,mat,.004f,false);ring.positionCount=161;ring.enabled=false;uncoiledRings.Add(ring);
+        }
 
         SetUmbilic();
         var fieldGo = new GameObject("Umbilic tonal field"); fieldGo.transform.SetParent(transform,false);
@@ -195,6 +247,19 @@ public class Main : MonoBehaviour
         chromaticLineRenderer.gameObject.SetActive(false);
 
         UpdateTorusPoints(currentVisualRotation, visualKeyForRendering);
+        foreach(var line in fifthsLineRenderer)line.enabled=ShowStructure&&!UncoilActive;
+        for(int octave=0;octave<uncoiledRings.Count;octave++){
+            var line=uncoiledRings[octave];line.enabled=ShowStructure&&UncoilActive&&(octave==7||OctaveSpread>.001f);
+            if(!line.enabled)continue;
+            line.startColor=line.endColor=Color.Lerp(new Color(.48f,.68f,.9f),new Color(.32f,.43f,.56f),OctaveSpread)*(octave==7?1:OctaveSpread);
+            line.widthMultiplier=1;line.startWidth=line.endWidth=Mathf.Lerp(.025f,.008f,OctaveSpread);
+            if(octave==7){
+                var keys=new GradientColorKey[8];for(int k=0;k<8;k++){float u=k/7f;int pitch=currentKey+Mathf.RoundToInt((u-.5f)*12)*7;keys[k]=new GradientColorKey(TonalColorField.Pitch(pitch,currentKey)*Mathf.Lerp(3f,1.1f,OctaveSpread),u);}
+                var gradient=new Gradient();gradient.SetKeys(keys,new[]{new GradientAlphaKey(1,0),new GradientAlphaKey(1,1)});line.colorGradient=gradient;
+            }
+            float register=(octave+1)/(float)Octaves,keyT=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation;
+            for(int point=0;point<161;point++){float slot=point/160f-.5f;line.SetPosition(point,MorphUncoil(CoiledPointAt(keyT+slot,register),UncoiledPoint(slot,register)));}
+        }
         UpdateLabelStyles();
     }
 
@@ -217,11 +282,11 @@ public class Main : MonoBehaviour
                 Vector3 centroid = CentroidAt(t);
 
                 // Update the position of the chromatic note object
-                notes[chromaticIndex].transform.localPosition = Vector3.Lerp(centroid, umbilicPosition, (float)(j + 1) / Octaves);
+                notes[chromaticIndex].transform.localPosition = GetPointAt(t,(float)(j+1)/Octaves);
 
                 if (j == 0)
                 {
-                    noteTextLabels[i].transform.localPosition = Vector3.LerpUnclamped(umbilicPosition, centroid, -.2f);
+                    noteTextLabels[i].transform.localPosition = Vector3.Lerp(Vector3.LerpUnclamped(umbilicPosition, centroid, -.2f),UncoiledPoint(UncoiledSlot(i),1.12f),UncoilAmount);
                 }
             }
         }
@@ -229,6 +294,11 @@ public class Main : MonoBehaviour
     }
 
     Vector3 GetPointAt(float t, float factor)
+    {
+        float slot=AnimatedUncoilSlot(Mathf.Repeat(t-currentVisualRotation,1));
+        return MorphUncoil(CoiledPointAt(t,factor),UncoiledPoint(slot,factor));
+    }
+    Vector3 CoiledPointAt(float t,float factor)
     {
         float wt = t % 1.0f; if (wt < 0) wt += 1.0f;
         Vector3 umbilicPos = UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, wt, currentVisualTwist);
@@ -243,10 +313,12 @@ public class Main : MonoBehaviour
     public void ChangeKey(int newKey, float duration = .7f)
     {
         if (keyChangeCoroutine != null) StopCoroutine(keyChangeCoroutine);
+        uncoilKeyFrom=currentKey;keyBlend=0;
         currentKey = HarmonyModel.Mod(newKey);
         visualKeyForRendering = currentKey;
         if (ReducedMotion || duration <= 0)
         {
+            keyBlend=1;
             currentVisualRotation = pathMap[currentKey].x / (float)Tones;
             currentVisualTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
             RefreshView(); keyChangeCoroutine = null;
@@ -262,30 +334,35 @@ public class Main : MonoBehaviour
         float elapsed = 0;
         while (elapsed < duration)
         {
-            elapsed += Time.unscaledDeltaTime;
             float t = Mathf.SmoothStep(0, 1, Mathf.Clamp01(elapsed / duration));
+            keyBlend=t;
             currentVisualRotation = Mathf.Lerp(rotation, targetRotation, t);
             currentVisualTwist = Mathf.Lerp(twist, targetTwist, t);
-            RefreshView(); yield return null;
+            RefreshView(); yield return null;elapsed += Time.unscaledDeltaTime;
         }
-        keyChangeCoroutine = null;
+        currentVisualRotation=targetRotation;currentVisualTwist=targetTwist;
+        keyBlend=1;RefreshView();keyChangeCoroutine = null;
     }
     public void RefreshView()
     {
         SetUmbilic(); UpdateText();
-        foreach (var line in fifthsLineRenderer) line.enabled = ShowStructure;
+        foreach (var line in fifthsLineRenderer) line.enabled = ShowStructure&&!UncoilActive;
         RenderKeys();
     }
     public void PlayKeys(List<Tuple<int, float>> values) => SetNotes(values, true);
     public void SetNotes(List<Tuple<int, float>> values, bool audio)
     {
+        NotesUseSynth=audio;
         lastActiveKeys = values.Where(n => n.Item1 >= 0 && n.Item1 < notes.Count && n.Item2 > 0 && !float.IsNaN(n.Item2))
             .GroupBy(n => n.Item1).Select(g => Tuple.Create(g.Key, Mathf.Clamp01(g.Max(n => n.Item2)))).ToList();
         RenderKeys();
         if (audio && Synth != null) { Synth.ResetVoices(); Synth.Schedule(AudioSettings.dspTime, lastActiveKeys); }
         StateChanged?.Invoke();
     }
-    public void StrikeNote(int index,float velocity){if(index>=0&&index<notes.Count){notes[index].Strike(velocity);foreach(var chord in chordLineRenderers.Values)if(!chord.Releasing&&(chord.Note1.Index==index||chord.Note2.Index==index))chord.Strike();}}
+    public void StrikeNote(int index,float velocity){GetComponent<ChordAurora>()?.Strike(index,velocity);if(index>=0&&index<notes.Count){notes[index].Strike(velocity);foreach(var chord in chordLineRenderers.Values)if(!chord.Releasing&&(chord.Note1.Index==index||chord.Note2.Index==index))chord.Strike();}}
+    public void FeatureNotes(HashSet<int> pitches){foreach(var note in notes)note.Featured=pitches.Contains(note.Index);}
+    public void NoteHistoryPath(int from,int to,List<Vector3> path)=>ShortSurfaceRoute(HarmonyModel.Mod(from*5)/12f+currentVisualRotation,HarmonyModel.Mod(to*5)/12f+currentVisualRotation,(from/12+1)/(float)Octaves,(to/12+1)/(float)Octaves,path);
+    public float HistoryCircumference=>2*Mathf.PI*Rad*transform.lossyScale.x;
     public void Silence() => PlayKeys(new List<Tuple<int, float>>());
     void RenderKeys()
     {
@@ -296,6 +373,7 @@ public class Main : MonoBehaviour
         {
             int ia = lastActiveKeys[a].Item1, ib = lastActiveKeys[b].Item1;
             int interval = HarmonyModel.Mod(ib - ia);
+            if(UncoilActive&&!UncoiledChordAllowed(ia,ib))continue;
             bool fifth = interval is 5 or 7;
             bool border = interval is 4 or 8;
             bool diagonal = interval is 3 or 9 or 1 or 11;
@@ -319,7 +397,7 @@ public class Main : MonoBehaviour
         foreach(var entry in chordLineRenderers)
         {
             var chord=entry.Value;
-            if(!wanted.Contains(entry.Key))chord.Release();
+            if(!wanted.Contains(entry.Key)){chord.Release();if(UncoilActive&&!UncoiledChordAllowed(chord.Note1.Index,chord.Note2.Index))chord.ClearTail();}
             int ia=chord.Note1.Index,ib=chord.Note2.Index;
             chord.Recolor(TonalColorField.Pitch(ia,currentKey),TonalColorField.Pitch(ib,currentKey));
             // Only octave/radial lines and the major-third triangle edges share
@@ -347,7 +425,10 @@ public class Main : MonoBehaviour
     {
         int bestShift=SurfaceRouteShift(from,to,fromRegister,toRegister);
         result.Clear();
-        for(int j=0;j<=40;j++)result.Add(transform.TransformPoint(SurfaceRoutePoint(from,to+bestShift/3f,bestShift,fromRegister,toRegister,j/40f)));
+        float keyT=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation;
+        float sa=Mathf.Repeat(from-keyT+.5f,1)-.5f,sb=Mathf.Repeat(to-keyT+.5f,1)-.5f;
+        for(int j=0;j<=40;j++){float u=j/40f;var coiled=SurfaceRoutePoint(from,to+bestShift/3f,bestShift,fromRegister,toRegister,u);
+            result.Add(transform.TransformPoint(MorphUncoil(coiled,UncoiledPoint(Mathf.Lerp(sa,sb,u),Mathf.Lerp(fromRegister,toRegister,u)))));}
     }
     int SurfaceRouteShift(float from,float to,float fromRegister,float toRegister)
     {
@@ -368,19 +449,35 @@ public class Main : MonoBehaviour
         int shift=SurfaceRouteShift(from,to,1,1),corner=(((-shift)%3)+3)%3;if(corner==2)corner=-1;
         return new Vector2(to+shift/3f,corner);
     }
-    public Vector3 ChordRegionPoint(Vector2 uv)
+    public Vector3 CoiledNoteEmissionPoint(int index)=>transform.TransformPoint(CoiledPointAt(HarmonyModel.Mod(index*5)/12f+currentVisualRotation,(index/12+1)/(float)Octaves));
+    public Vector3 NoteEmissionPoint(int index)=>transform.TransformPoint(GetPointAt(HarmonyModel.Mod(index*5)/12f+currentVisualRotation,(index/12+1)/(float)Octaves));
+    public Vector3 NoteEmissionNormal(int index)=>ChordRegionNormal(ChordRegionCoordinate(HarmonyModel.Mod(index),HarmonyModel.Mod(index)));
+    public Vector3 ChordRegionPoint(Vector2 uv,bool coiled=false)
     {
         int side=Mathf.FloorToInt(uv.y);
-        return transform.TransformPoint(Vector3.Lerp(GetPointAt(uv.x+side/3f,1),GetPointAt(uv.x+(side+1)/3f,1),uv.y-side));
+        return transform.TransformPoint(Vector3.Lerp(coiled?CoiledPointAt(uv.x+side/3f,1):GetPointAt(uv.x+side/3f,1),coiled?CoiledPointAt(uv.x+(side+1)/3f,1):GetPointAt(uv.x+(side+1)/3f,1),uv.y-side));
+    }
+    public Vector3 ChordRegionNormal(Vector2 uv,bool coiled=false)
+    {
+        const float e=.0001f;
+        var du=ChordRegionPoint(uv+Vector2.right*e,coiled)-ChordRegionPoint(uv-Vector2.right*e,coiled);
+        var dv=ChordRegionPoint(uv+Vector2.up*e,coiled)-ChordRegionPoint(uv-Vector2.up*e,coiled);
+        var normal=Vector3.Cross(du.normalized,dv.normalized).normalized;
+        var local=transform.InverseTransformPoint(ChordRegionPoint(uv,coiled));
+        var center=new Vector3(local.x,0,local.z).normalized*Rad;
+        if(Vector3.Dot(normal,transform.TransformVector(local-center))<0)normal=-normal;
+        return normal;
     }
     Vector3 SurfaceRoutePoint(float from,float to,int shift,float ra,float rb,float u)
     {
         int corner=(((-shift)%3)+3)%3;if(corner==2)corner=-1;
         float edge=corner*u;int side=Mathf.FloorToInt(edge);float t=Mathf.Lerp(from,to,u),register=Mathf.Lerp(ra,rb,u);
-        return Vector3.Lerp(GetPointAt(t+side/3f,register),GetPointAt(t+(side+1)/3f,register),edge-side);
+        return Vector3.Lerp(CoiledPointAt(t+side/3f,register),CoiledPointAt(t+(side+1)/3f,register),edge-side);
     }
     void Update()
     {
+        float target=Uncoiled?1:0;
+        if(unfoldProgress!=target){unfoldProgress=Mathf.MoveTowards(unfoldProgress,target,ReducedMotion?1:Time.unscaledDeltaTime/5.85f);UncoilAmount=unfoldProgress*unfoldProgress*unfoldProgress*(unfoldProgress*(unfoldProgress*6-15)+10);RefreshView();}
         foreach(var id in chordLineRenderers.Keys.Where(id=>chordLineRenderers[id].TailComplete).ToArray())
         {
             var chord=chordLineRenderers[id];chord.gameObject.SetActive(false);chordPool.Push(chord);chordLineRenderers.Remove(id);
@@ -396,6 +493,7 @@ public class Main : MonoBehaviour
     {
         if (cameraControl != null) cameraControl.MovementUpdater -= UpdateText;
 
+        foreach(var lr in uncoiledRings)if(lr!=null)Destroy(lr.sharedMaterial);
         foreach (var lr in fifthsLineRenderer) if (lr != null) Destroy(lr.sharedMaterial);
 
         if (chromaticLineRenderer != null) Destroy(chromaticLineRenderer.sharedMaterial);

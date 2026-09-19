@@ -4,8 +4,11 @@ public sealed class SongSettings
 {
     public int Key=-1,LeadVocalTrack=-1;
     public bool Minor;
+    public bool InferKeyChanges=true;
+    public double PatternTimingToleranceBeats=0;
     public string KeySource="",SectionBoundaries="",SectionSource="";
     public string[] SectionParents=Array.Empty<string>();
+    public Dictionary<string,string> TrackAliases=new();
 }
 
 // Lossless musical reconstruction: quantization chooses template candidates;
@@ -50,8 +53,15 @@ public static class SectionCompression
                         string key=$"{lane.Key.Track}:{lane.Key.Channel}:{Q(z-a)}:"+Signature(hits,a);
                         if(!keys.TryGetValue(key,out int id))
                         {
-                            id=templates.Count;keys.Add(key,id);variants.Add(new());variantKeys.Add(new());
-                            templates.Add(new(){Id=id,Track=lane.Key.Track,Channel=lane.Key.Channel,Beats=z-a,Slots=hits.Select(h=>new MidiCycleAnalysis.Hit{Beat=h.Beat-a,Length=h.Length,Pitch=h.Pitch,Velocity=h.Velocity,Track=h.Track,Channel=h.Channel}).ToArray()});
+                            // Neural timing jitter belongs in lossless variant residuals, not a new wheel.
+                            double tolerance=Math.Clamp(settings.PatternTimingToleranceBeats,0,.5);
+                            var related=tolerance>0?templates.FirstOrDefault(t=>t.Track==lane.Key.Track&&t.Channel==lane.Key.Channel&&Math.Abs(t.Beats-(z-a))<1e-6&&t.Slots.Length==hits.Length&&
+                                hits.Select((h,i)=>Math.Abs(h.Beat-a-t.Slots[i].Beat)<=tolerance&&Math.Abs(h.Length-t.Slots[i].Length)<=tolerance*2).All(v=>v)):null;
+                            if(related!=null){id=related.Id;keys.Add(key,id);}
+                            else {
+                                id=templates.Count;keys.Add(key,id);variants.Add(new());variantKeys.Add(new());
+                                templates.Add(new(){Id=id,Track=lane.Key.Track,Channel=lane.Key.Channel,Beats=z-a,Slots=hits.Select(h=>new MidiCycleAnalysis.Hit{Beat=h.Beat-a,Length=h.Length,Pitch=h.Pitch,Velocity=h.Velocity,Track=h.Track,Channel=h.Channel}).ToArray()});
+                            }
                         }
                         var slots=templates[id].Slots;int transpose=hits[0].Pitch-slots[0].Pitch;
                         var delta=hits.Select((h,i)=>h.Pitch-slots[i].Pitch-transpose).ToArray();
@@ -68,10 +78,32 @@ public static class SectionCompression
         }
         for(int i=0;i<templates.Count;i++)templates[i].Variants=variants[i].ToArray();
         song.Templates=templates.ToArray();song.TemplateNoteCount=templates.Sum(t=>t.Slots.Length);
+        if(settings.SectionParents.Length==0)GroupRepeatedForms(song);
         BuildHierarchy(song);
         Verify(song,pitched);
     }
-    static void BuildHierarchy(PreparedPatternSong song)
+    public static void GroupRepeatedForms(PreparedPatternSong song)
+    {
+        var sections=song.Sections;var occupied=new bool[sections.Length];
+        while(true){
+            int bestScore=0,bestLength=0;List<int> bestStarts=null;
+            for(int length=2;length<=sections.Length/2;length++)for(int start=0;start+length<=sections.Length;start++){
+                if(Enumerable.Range(start,length).Any(i=>occupied[i]))continue;
+                var sequence=sections.Skip(start).Take(length).Select(s=>s.Family).ToArray();
+                if(sequence.Distinct().Count()<2)continue;
+                var matches=new List<int>();
+                for(int i=0;i+length<=sections.Length;i++){
+                    if(Enumerable.Range(0,length).All(j=>!occupied[i+j]&&sections[i+j].Family==sequence[j])){matches.Add(i);i+=length-1;}
+                }
+                int score=(matches.Count-1)*(length-1);
+                if(matches.Count>=2&&score>bestScore){bestScore=score;bestLength=length;bestStarts=matches;}
+            }
+            if(bestStarts==null)break;
+            string name=string.Join(" + ",sections.Skip(bestStarts[0]).Take(bestLength).Select(s=>s.Name.Replace('/','-')));
+            foreach(int start in bestStarts)for(int j=0;j<bestLength;j++){sections[start+j].ParentPath="Song/"+name;occupied[start+j]=true;}
+        }
+    }
+    public static void BuildHierarchy(PreparedPatternSong song)
     {
         var nodes=new List<PreparedPatternSong.FormNode>{new(){Id=0,Name="Song",Path="Song"}};
         int Group(string path)

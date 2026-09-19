@@ -15,6 +15,7 @@ public sealed class SongAudio : MonoBehaviour
         public int version;
         public string audioPath,midiPath,reportPath,sourceAudioPath,sourceAudioSha256,audioSha256,midiSha256,status;
         public double audioDuration,featureResolutionMs;
+        public StemPlayback.Stem[] stems;
     }
     [Serializable] sealed class Sections { public int bars=8; public string boundaries=""; }
     public AudioSource Source {get;private set;}
@@ -55,10 +56,11 @@ public sealed class SongAudio : MonoBehaviour
         midi=GetComponent<MidiPlayer>();main=GetComponent<Main>();
         var go=new GameObject("Recording audio (master clock)");go.transform.SetParent(transform,false);
         Source=go.AddComponent<AudioSource>();Source.playOnAwake=false;Source.spatialBlend=0;
+        if(GetComponent<StemPlayback>()==null)gameObject.AddComponent<StemPlayback>();
     }
     public void Unload()
     {
-        generation++;Busy=false;Source.Stop();if(Source.clip!=null)Destroy(Source.clip);
+        generation++;Busy=false;Source.Stop();GetComponent<StemPlayback>()?.Clear();if(Source.clip!=null)Destroy(Source.clip);
         Source.clip=null;Alignment=null;ReportPath=null;RecordingName=null;AudioPath="";
         if(main.Synth!=null)main.Synth.GetComponent<AudioSource>().mute=false;
     }
@@ -109,6 +111,8 @@ public sealed class SongAudio : MonoBehaviour
             Status=$"Prepared song · {manifest.featureResolutionMs:0} ms fingerprint grid\n{manifest.status}\nRecording is the sole audio source; no runtime timing warp.";
         }
         catch(Exception e){Status="Song loaded; section map: "+e.Message;}
+        yield return GetComponent<StemPlayback>().Preload(manifest.stems,Path.GetDirectoryName(Path.GetFullPath(score)));
+        if(version!=generation)yield break;
         Busy=false;midi.Seek(0);
         audioField?.SetValueWithoutNotify(AudioPath);midiField?.SetValueWithoutNotify(score);
         PlayerPrefs.SetString("Resonance.LastAudio",AudioPath);PlayerPrefs.SetString("Resonance.LastMidi",score);PlayerPrefs.Save();
@@ -121,16 +125,18 @@ public sealed class SongAudio : MonoBehaviour
     }
     public VisualElement BuildUI()
     {
-        var box=new Foldout{text="SONG · preprocessed recording + MIDI",value=true};
+        var box=new VisualElement{name="song-loading"};
         string libraryPath=Path.GetFullPath(Path.Combine(Application.dataPath,"../PreparedSongs"));
         var songs=Directory.Exists(libraryPath)?new System.Collections.Generic.List<string>(Directory.GetFiles(libraryPath,"*.patterns.json",SearchOption.AllDirectories)):new System.Collections.Generic.List<string>();
         // Prefer a completed recording bundle over its duplicate restored-score entry.
-        songs=songs.Where(s=>!s.Contains(Path.DirectorySeparatorChar+"Recordings"+Path.DirectorySeparatorChar)||File.Exists(s.Substring(0,s.Length-".patterns.json".Length)+".prepared.json"))
+        songs=songs.Where(s=>!s.Contains(Path.DirectorySeparatorChar+"stems"+Path.DirectorySeparatorChar)).Where(s=>!s.Contains(Path.DirectorySeparatorChar+"Recordings"+Path.DirectorySeparatorChar)||File.Exists(s.Substring(0,s.Length-".patterns.json".Length)+".prepared.json"))
             .GroupBy(s=>Path.GetFileName(Path.GetDirectoryName(s)),StringComparer.OrdinalIgnoreCase)
             .Select(g=>g.OrderByDescending(s=>File.Exists(s.Substring(0,s.Length-".patterns.json".Length)+".prepared.json")).First()).ToList();
         songs.Sort(StringComparer.OrdinalIgnoreCase);
         var choices=new System.Collections.Generic.List<string>();foreach(var song in songs){string score=song.Substring(0,song.Length-".patterns.json".Length);choices.Add(Path.GetFileName(Path.GetDirectoryName(score))+(File.Exists(score+".prepared.json")?" · recording":" · restored score"));}
         if(songs.Count>0){string last=StartupScore.Replace('/',Path.DirectorySeparatorChar)+".patterns.json";int selected=Math.Max(0,songs.FindIndex(s=>string.Equals(s,last,StringComparison.OrdinalIgnoreCase)));var library=new DropdownField("Prepared library",choices,selected);box.Add(library);
+            string displayedPath=midi.midiPath;
+            box.schedule.Execute(()=>{if(displayedPath==midi.midiPath)return;displayedPath=midi.midiPath;int index=songs.FindIndex(s=>string.Equals(s,displayedPath+".patterns.json",StringComparison.OrdinalIgnoreCase));if(index>=0)library.SetValueWithoutNotify(choices[index]);}).Every(250);
             box.Add(new Button(()=>{string score=songs[library.index];score=score.Substring(0,score.Length-".patterns.json".Length);if(File.Exists(score+".prepared.json"))LoadPair("",score);else {midi.Load(score);midiField.SetValueWithoutNotify(score);Status="Restored score preview. A recording requires offline fingerprint preparation.";}}){text="Load selected pattern bundle"});}
         var files=new Foldout{text="Load companion files",value=false};box.Add(files);
         var hint=new Label("Prepare the song outside Unity, then load aligned.mid. Its manifest selects the exact decoded recording.");hint.style.whiteSpace=WhiteSpace.Normal;files.Add(hint);
@@ -141,11 +147,8 @@ public sealed class SongAudio : MonoBehaviour
         row.Add(new Button(()=>Browse(audioField,"mp3,wav")){text="Choose audio…"});row.Add(new Button(()=>Browse(midiField,"mid,midi")){text="Choose MIDI…"});
         files.Add(new Button(()=>LoadPair(audioField.value,midiField.value)){text="Load preprocessed song"});
         box.Add(new Button(()=>{if(!string.IsNullOrEmpty(ReportPath)&&File.Exists(ReportPath))Application.OpenURL(new Uri(ReportPath).AbsoluteUri);}){text="Open offline fingerprint report"});
-        var transport=new VisualElement();transport.AddToClassList("row");box.Add(transport);
-        transport.Add(new Button(()=>{if(midi.IsPlaying)midi.Pause();else midi.Play();}){text="Play / pause"});transport.Add(new Button(midi.Stop){text="Stop"});
-        var position=new Slider("Recording position",0,1);position.RegisterValueChangedCallback(e=>{if(midi.Loaded)midi.Seek(e.newValue*midi.Duration);});box.Add(position);
-        var clock=new Label();box.Add(clock);var recordingLabel=new Label(){name="linked-recording"};recordingLabel.style.whiteSpace=WhiteSpace.Normal;box.Add(recordingLabel);
-        box.schedule.Execute(()=>{position.SetValueWithoutNotify(midi.Duration>0?(float)(midi.Position/midi.Duration):0);clock.text=$"{midi.Position:0.00}s / {midi.Duration:0.00}s";recordingLabel.text=Ready?$"{(midi.IsPlaying?"Playing recording":"Linked recording")}: {RecordingName}\nWAV audio · MIDI drives visualization":Busy?"Loading recording…":"MIDI preview · no recording linked";}).Every(100);
+        var recordingLabel=new Label(){name="linked-recording"};recordingLabel.style.whiteSpace=WhiteSpace.Normal;box.Add(recordingLabel);
+        box.schedule.Execute(()=>{recordingLabel.text=Ready?$"Linked recording: {RecordingName}":Busy?"Loading recording…":"MIDI preview · no recording linked";}).Every(100);
         status=new Label(Status);status.style.whiteSpace=WhiteSpace.Normal;box.Add(status);
         return box;
     }
@@ -157,6 +160,6 @@ public sealed class SongAudio : MonoBehaviour
         ExplorerInputFocus.ClaimUI();field.Focus();
 #endif
     }
-    void Update(){if(status!=null)status.text=Status;if(main.Synth!=null){Source.volume=main.Synth.Volume;Source.pitch=1;main.Synth.GetComponent<AudioSource>().mute=Ready&&midi.IsPlaying;}}
+    void Update(){if(status!=null)status.text=Status;if(main.Synth!=null){Source.volume=main.Synth.Volume*(GetComponent<StemPlayback>()?.MasterGain??1)*(GetComponent<SongNarration>()?.MusicGain??1);Source.pitch=1;main.Synth.GetComponent<AudioSource>().mute=Ready&&midi.IsPlaying;}}
     void OnDestroy(){generation++;if(Source!=null&&Source.clip!=null)Destroy(Source.clip);}
 }

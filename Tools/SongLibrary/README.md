@@ -1,0 +1,207 @@
+# Resonance Song Workshop
+
+Double-click **Start Song Workshop.cmd** in the project root, or run:
+
+```powershell
+./Tools/SongLibrary/song-library.ps1
+```
+
+This opens the loopback-only manager at http://127.0.0.1:8765. Upload an MP3/WAV, enter an artist/title, and optionally supply a MIDI. The recording is processed locally. Online lookup sends only the search title to BitMidi; it never uploads audio.
+
+## Pipeline
+
+1. SHA-256 identifies an already prepared recording and reuses its validated bundle.
+2. Search the local MIDI catalog, then the public BitMidi catalog when enabled. Embedded artist/title tags are used by the CLI when no title is supplied. This is title/metadata lookup plus musical validation, **not** a universal audio song-identification service.
+3. Compare duration and chroma fingerprints before accepting a lookup candidate. A provided MIDI bypasses candidate selection but still goes through alignment and its diagnostic report.
+4. A matching MIDI uses SongPrep's existing offline pitch/onset fingerprint alignment. Weak windows remain visible in `analysis.json` and `report.html`; ambiguous matches are not certified perfect.
+5. If no candidate passes, YourMT3 transcribes the complete recording locally into instrument and drum tracks. The verified checkpoint is cached on this machine. Neural timing is preserved; an audio-estimated beat grid supplies musical bars without a second DTW warp.
+6. PatternPrep generates section families, chord progressions, per-channel rhythm templates with pitch/timing/velocity variants, bar-sized drum families, and continuous harmonic region phases. Similar neural rhythms tolerate up to a quarter beat of jitter when choosing a template, while residuals reconstruct **every original note exactly**. This is lossless pattern representation, not a claim that every noisy transcription compresses well.
+7. Demucs 4.0.1 (`htdemucs`) separates vocals, bass, drums and accompaniment. When reviewed MIDI has a `StemTracks` mapping in `song.json`, stem visuals are extracted from those existing tracks with exact event ticks preserved; no transcription runs. Otherwise YourMT3 transcribes each isolated stem in one local model session. The exact master tempo/meter map supplies ticks without warping note timestamps. High/low accompaniment views split at C4 (261.63 Hz) using complementary zero-phase filtering; these are register views, not inferred instruments. All-instruments combines bass, drums and accompaniment.
+8. Validate MIDI/audio hashes, reconstructed notes, and section-region coverage, then publish the completed bundle atomically. Failed work remains in `SongLibraryData/jobs`; Unity never sees half-prepared analysis.
+9. Review key, mode, lead vocal and section starts in the manager. Save creates a separate compiled revision. Export creates a ZIP under `Builds/SongBundles` with relative portable paths.
+
+## Playback and review
+
+Completed imports live in `PreparedSongs/Library`. Restart Unity playback to refresh its prepared-song choices, select the new bundle, and load it. All expensive processing happens ahead of playback. Unity plays `recording.wav`, not synthesized MIDI. **Listen / visualize** selects a solo stem and its prepared pattern data. Full mix restores the original recording and score. Audio and visual stem data preload with the song. Solo changes crossfade synchronized sources without pausing or loading; stems use the same sample rate and exact sample count. The authoritative full-song key, chord progression and region shading remain in force, including while a stem is silent.
+
+Automatic section boundaries are initially eight-bar candidates, with repeated-family and chord-cycle analysis. They do **not** reliably identify semantic verse/chorus/bridge roles. Review the recording and enter one section start per line:
+
+```text
+1 Intro
+5 Verse
+13 Chorus
+21 Verse
+29 Chorus
+38 Bridge
+```
+
+Repeated labels share a section family. For larger forms, the settings JSON supports `SectionParents`, for example `Song/Movement I/Exposition`. Bar numbers refer to the prepared MIDI's bar grid. Neural meter defaults to the selected 4/4 or 3/4; beat/downbeat inference is provisional. The CLI review settings support `Meter` for rebuilding a neural bundle. For irregular/changing meters, provide a MIDI with an authored meter map.
+
+Key uses the application's A-based pitch classes: A=0, B=2, C=3, D=5, E=7, F=8, G=10. An exact known recording keeps its previously reviewed key. A model track named Singing Voice is highlighted provisionally; use the review selector to correct lead-vocal assignment.
+
+To use an export with the portable Windows player, extract it **beside Resonance.exe**, so its `PreparedSongs/<song>/` folder joins the player's existing library. Keep the WAV, MIDI, patterns, and manifest together.
+
+Use **Add / rebuild stems** beside an existing song in Song Workshop to create a separate stem-enabled revision. New imports include stems automatically. The original bundle stays playable if separation or transcription fails.
+
+## CLI examples
+
+```powershell
+./Tools/SongLibrary/song-library.ps1 ingest 'D:/Music/song.mp3' --title 'Artist - Song'
+./Tools/SongLibrary/song-library.ps1 ingest 'D:/Music/song.mp3' --midi 'D:/Scores/song.mid'
+./Tools/SongLibrary/song-library.ps1 ingest 'D:/Music/song.mp3' --neural --offline --meter 3
+./Tools/SongLibrary/song-library.ps1 stems 'PreparedSongs/TicketToRide-Restored'
+./Tools/SongLibrary/song-library.ps1 index 'D:/My MIDI Collection'
+./Tools/SongLibrary/song-library.ps1 search 'Ticket to Ride'
+./Tools/SongLibrary/song-library.ps1 review 'PreparedSongs/Library/my-song' 'review-settings.json'
+./Tools/SongLibrary/song-library.ps1 export 'PreparedSongs/Library/my-song' 'Builds/SongBundles/my-song.zip'
+./Tools/SongLibrary/song-library.ps1 doctor
+```
+
+`--offline` disables public lookup. `--neural` bypasses lookup/cache and runs a new transcription. Local MIDI catalog imports remain indexed across sessions. The public provider can be unavailable; its error is recorded and local transcription proceeds.
+
+## Setup / dependencies
+
+Already installed on this machine: GPU PyTorch 2.7.1 CUDA 12.6, YourMT3 model, and the existing SongPrep environment. GPU tested: RTX 2080 Ti. A fresh setup needs Python 3.12, .NET SDK and FFmpeg/FFprobe on PATH:
+
+```powershell
+./Tools/SongLibrary/setup.ps1 -Python 'C:/Path/to/python.exe'
+# For machines without an NVIDIA GPU:
+./Tools/SongLibrary/setup.ps1 -Python 'C:/Path/to/python.exe' -Cpu
+```
+
+Setup uses two isolated environments; inference dependencies do not replace the existing alignment runtime. CUDA wheels need about 3 GB download, checkpoint about 536 MB, plus installed files and per-song WAV/analysis storage. CPU fallback works through the same model adapter but is substantially slower. The setup script pins the model wrapper to a source commit and verifies checkpoint SHA-256 before inference. Model/cache/job state is git-ignored.
+
+## Bundle files
+
+| File | Purpose |
+|---|---|
+| `recording.wav` | Portable playback audio |
+| `aligned.mid` | Timed score; pitches are not silently transposed |
+| `aligned.mid.patterns.json` | Unity's precomputed visualization contract |
+| `aligned.mid.prepared.json` | Relative paths, hashes, audio duration |
+| `stems/*.wav`, `stems/*.mid`, `stems/*.patterns.json` | Sample-aligned solo audio and offline isolated scores / wheels |
+| `stems/separation.json` | Separator model, weight hashes, clock and register-filter provenance |
+| `song.json` | Editable key, vocal and form settings |
+| `library.json` | Method, model hash, lookup scores, provenance, review status |
+| `analysis.json`, `report.html` | Quality evidence and review notes |
+| `transcription.mid` | Original local neural output, where applicable |
+| `timing-map.csv`, `fingerprints.png` | Companion-MIDI alignment diagnostics, where applicable |
+
+CSV is useful for alignment inspection, but JSON is the authoritative analysis format because the section/template/variant hierarchy is nested.
+
+## Verification
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe -m unittest discover -s Tools/SongLibrary -p 'test_*.py' -v
+```
+
+Tests cover timing/payload preservation, drums, meter, bundle hashes and continuous regions, catalog identity, provider link mapping, wrong-harmony rejection, and path containment. PatternPrep independently verifies lossless reconstruction on every build.
+
+The full Ticket to Ride recording was tested through local inference: 3,430 detected notes, including 2,166 drum hits. This demonstrates end-to-end execution, not transcription correctness. The established companion-MIDI bundle remains available and preferred for normal playback.
+
+## Model and provider provenance
+
+- [Demucs](https://github.com/facebookresearch/demucs): MIT-licensed separation implementation, pinned `demucs==4.0.1`; official `htdemucs` weights cached locally (~80 MB). Four instrument stems are estimates and can have leakage. The six-stem model was not chosen because its piano separation is documented as experimental.
+- [MT3-Infer](https://github.com/openmirlab/mt3-infer), pinned commit `3675ad860ea7c0adcaec8498b798ff605d0a0f42`; upstream inference software is alpha.
+- [YourMT3 checkpoint/source](https://huggingface.co/spaces/mimbres/YourMT3), YPTF MoE multi-instrument no-pitch-shift checkpoint, SHA-256 `ae38e415c79efd5592dcb9b658cdb99ddb11d4c4e1eaa364cab04a052473fc25`.
+- [BitMidi API implementation](https://github.com/feross/bitmidi.com): published search and download fields; no page scraping or invented download links. Availability was intermittent during setup.
+
+Model, wrapper, MIDI arrangements, and recordings have separate upstream licenses/rights. The song export includes the user's recording and derived score, not the model runtime or weights. Neural note/instrument/drum errors, uncertain downbeats, and semantic section labels still require listening and review.
+
+
+Repeated section sequences are grouped offline into composite orrery carriers, including verse/chorus and longer repeating forms. The active child remains featured at full size while companion wheels stay dimmed nearby.
+
+Prepared pattern bundles include `MelodyStrands`: independent, pitch-ordered voice histories per track/channel, with exact score-second onsets and ends. Simultaneous notes are assigned from low to high; missing voices retain nearest-register continuity. This assumes non-crossing harmony parts, not semantic singer recognition. Runtime only follows these prepared routes. `song.json` accepts `TrackAliases` (original MIDI name to display name); Ticket to Ride maps `Lead Organ` to `Lead Vocals`. Re-run PatternPrep when changing these settings.
+
+Ticket to Ride uses the reviewed companion MIDI for all solo visuals: 515 vocal notes in two strands (320 lower / 195 upper), 305 bass notes, 1,569 drum hits and 2,375 accompaniment notes. The duplicate vocal doubling track is excluded. The original master MIDI is unchanged. All seven audio views contain exactly 8,385,536 stereo samples at 44.1 kHz. Audio and prepared visual frames preload at song load; switching uses synchronized sources without decoding or seeking. High/low audio sums back to accompaniment within floating-point precision. Lookup was tested live against BitMidi on 2026-09-19 and returned two Ticket to Ride arrangements. Public MIDI availability does not imply transcription quality; the existing fingerprint gate still applies.
+
+## Existing recording-folder batch
+
+`Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/process_existing_folder.py "C:/Users/johnb/Desktop/resonance-music/StreamingAssets/WAV"` enriches the six already aligned recordings with local Demucs stems and prepared solo views. It verifies source recording hashes, preserves the existing MIDI bytes, derives stem track membership from authored track names, and publishes completed revisions under `PreparedSongs/Library/*-prepared-stems`. It does not run neural retranscription. Failed or interrupted work remains resumable under `SongLibraryData/jobs/current-song-folder`; `batch-report.json` records each result and inherited alignment confidence. New/unmatched recordings require the regular ingest command.
+# Listening stories and Director Mode
+
+After alignment, pattern compilation and stem preparation, generate the story:
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/library.py story PreparedSongs/<song> --key-file C:/private/openai-key.txt
+```
+
+The key file contains only the API key. It is read by the offline request process;
+it is never copied into a bundle, Unity, request logs or Git. The Responses API
+receives a compact analysis summary (section timing, estimated stable chords,
+scored vocal intervals and available stems), not recordings, MIDI, local paths or
+lyrics. Requests use `store: false`. The model defaults to `gpt-4.1` and can be
+changed with `--model`. Generation is a separate, explicit API operation, never
+part of playback or an automatic retranscription of existing scores.
+
+For the workshop's **Generate listening story** action, launch:
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/library.py serve --story-key-file C:/private/openai-key.txt
+```
+
+For the normal desktop launcher, an optional local `SongLibraryData/settings.json`
+can hold `{"storyKeyFile":"C:/private/openai-key.txt"}`. This ignored file stores
+only the path; the key stays in its original private file. Restart an already
+running workshop after configuring it.
+
+Review the generated `story.json` captions before presentation: generated musical
+interpretations can be wrong even with valid JSON. Timings are recording seconds;
+`stem: ""` means full mix. Views are `Overview`, `Torus`, `Timeline`, `Drums`.
+Only Torus supports `uncoil`. Short uncoil passages are suppressed so the animation
+can settle. The script is bound to audio, MIDI and pattern-analysis hashes; edits
+to the analysis require regenerating the story. Existing valid stories survive a
+failed request. Exports include the story automatically.
+
+In Unity, open **Song structure → Director mode**. Bottom captions, views and audio
+plus visual solos follow the recording clock, including seeks and replay. Turn it
+off to restore the previous view and solo. **Reload prepared story** reads edits
+without reloading audio. Full-song chord colors remain authoritative during solos.
+
+Song media and all generated scores/analysis belong in local `PreparedSongs/` and
+`SongLibraryData/`; per-song reports belong in `Reports/SongProcessing/`. These are
+ignored by Git. Keep only the synthetic `Examples/SongBundle/format-guide.json` as
+a format specimen, alongside the analysis code and tests. Removing files from Git
+tracking does not erase older commits or local media.
+
+## Feeling-led stories, voice and guide arrows
+
+Optional `story.context.json` supplies an `interpretiveLens`, verified `sources`
+(id/title/HTTPS URL), and `facts` with supporting `sourceIds`. History stays sourced;
+metaphors are presented as listening interpretations. An optional `scenePlan`
+fixes timing and choreography while the model writes the captions. Allow about
+0.4 seconds per spoken word, plus pauses. Review before rendering speech.
+
+Generate a cached AI voice track after approving the story:
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/library.py narrate PreparedSongs/<song> --key-file C:/private/openai-key.txt
+```
+
+The workshop also offers **Generate AI narration** using the same private key-file
+configuration. Only narration text is sent to the speech API. Default voice is
+`onyx` using `gpt-4o-mini-tts`, directed as a deep masculine baritone; no artist impersonation. Prepared WAV and MP3 files
+contain narration and timed silence, without the song mixed in. `narration.json`
+binds the WAV to the story and recording hashes. Long speech is gently fitted
+without pitch changes; excessively long captions are rejected for editing.
+
+In Unity, reload the story and enable **Director mode → AI voice narration**.
+The voice follows the recording DSP clock through playback, seeks and pauses.
+Music dips during speech and returns between passages. Playback needs no API key
+or network. The UI explicitly identifies the voice as AI-generated.
+
+Optional cue fields `annotationTarget` (`none`, `melody`, `drums`, `patterns`) and
+`annotationLabel` draw curved arrows to the featured visual. Two vocal strands
+receive separate pointers. Labels stay at a fixed upper-left reading anchor; only the pointer tips follow moving notes. Arrows hide during coil transitions and can be disabled
+with **Story guide arrows**. No visual-tree changes occur inside paint callbacks.
+
+## Recovering a missed bass stem
+
+If separation leaves bass in accompaniment, review the bass MIDI assignment first,
+then run `library.py repair-bass PreparedSongs/<song>`. This extracts recorded
+energy around the reviewed bass notes and their harmonics, subtracting the same
+signal from accompaniment to preserve the combined mix. It does not synthesize
+bass or rewrite MIDI. Shared harmonics can retain instrumental bleed. Backups and
+hashes are retained under ignored local data; a repeated identical repair is a
+no-op. Rebuilding separation requires reviewing/reapplying the repair. New stem
+jobs warn when bass energy is unusually low compared with low-register audio.
