@@ -1,9 +1,0 @@
-{
-  "source": "C:\\Users\\johnb\\Desktop\\resonance-music\\StreamingAssets\\CSV\\Drank.csv",
-  "sourceSha256": "46521b2d71744b7ec1123bb5c32efef7700848fc97ec3f34655b3f3aa6d43c89",
-  "format": "authored patterns",
-  "notes": 2166,
-  "warnings": [
-    "Authored CSV has no velocities/programs: velocity 100 and default programs used. - is base pitch; x is rest; explicit pitch is substitution. C0=MIDI0. Empty sequence slots use one DivDownbeat cycle. Section names remain offline estimates."
-  ]
-}

@@ -1,9 +1,0 @@
-{
-  "source": "C:\\Users\\johnb\\Desktop\\resonance-music\\StreamingAssets\\CSV\\TouchxBeMyBaby.csv",
-  "sourceSha256": "71219bc4eacdc3b188096a605f44ebcda87315dc7a722378d90d714e8f390489",
-  "format": "authored patterns",
-  "notes": 1924,
-  "warnings": [
-    "Authored CSV has no velocities/programs: velocity 100 and default programs used. - is base pitch; x is rest; explicit pitch is substitution. C0=MIDI0. Empty sequence slots use one DivDownbeat cycle. Section names remain offline estimates."
-  ]
-}

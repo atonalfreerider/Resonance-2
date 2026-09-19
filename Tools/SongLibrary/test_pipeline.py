@@ -6,11 +6,23 @@ from unittest.mock import patch
 import mido
 import pretty_midi
 import numpy as np
-from common import validate_bundle,ROOT,atomic_json
+from common import validate_bundle,ROOT,atomic_json,sha
 from features import regrid,match_midi
 from catalog import Catalog,bitmidi_search
 
 class PipelineTests(unittest.TestCase):
+    def synthetic_bundle(self, folder):
+        import soundfile as sf
+        folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
+        midi=mido.MidiFile();midi.tracks.append(mido.MidiTrack([
+            mido.Message('note_on',note=69,velocity=80),mido.Message('note_off',note=69,time=480)]))
+        midi.save(folder/'aligned.mid');sf.write(folder/'recording.wav',np.zeros(8000),8000)
+        midi_hash=sha(folder/'aligned.mid');audio_hash=sha(folder/'recording.wav')
+        atomic_json(folder/'aligned.mid.prepared.json',dict(version=1,midiPath='aligned.mid',audioPath='recording.wav',
+            midiSha256=midi_hash,audioSha256=audio_hash,sourceAudioSha256=audio_hash,sourceAudioPath='Synthetic Test.wav'))
+        atomic_json(folder/'aligned.mid.patterns.json',dict(MidiSha256=midi_hash,Notes=[dict(Pitch=69)],
+            Sections=[dict(Start=0,End=4)],RegionPhases=[dict(Start=0,End=4)]))
+        return folder,audio_hash
     def test_beat_grid_preserves_notes_drums_programs_and_seconds(self):
         with tempfile.TemporaryDirectory() as folder:
             source=Path(folder)/'source.mid';dest=Path(folder)/'grid.mid'
@@ -28,15 +40,18 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(b.time_signature_changes[0].numerator,3)
 
     def test_prepared_bundle_hash_and_regions(self):
-        song=validate_bundle(ROOT/'PreparedSongs/TicketToRide-Restored')
-        self.assertGreater(len(song['Notes']),5000)
-        self.assertGreater(len(song['RegionPhases']),0)
+        with tempfile.TemporaryDirectory() as folder:
+            bundle,_=self.synthetic_bundle(folder);song=validate_bundle(bundle)
+            self.assertEqual(song['Notes'][0]['Pitch'],69)
+            (bundle/'aligned.mid').write_bytes(b'changed')
+            with self.assertRaises(ValueError):validate_bundle(bundle)
 
     def test_catalog_exact_recording_and_title(self):
         with tempfile.TemporaryDirectory() as folder:
-            c=Catalog(folder);c.index([ROOT/'PreparedSongs/TicketToRide-Restored'])
-            self.assertTrue(c.search('Ticket To Ride'))
-            self.assertEqual(len(c.exact('3cfba5aa32c256a2cf59979242da7e2feda0cf226a2c70bb0239db413dfc8cae')),1)
+            bundle,audio_hash=self.synthetic_bundle(Path(folder)/'bundle')
+            c=Catalog(folder);c.index([bundle])
+            self.assertTrue(c.search('Synthetic Test'))
+            self.assertEqual(len(c.exact(audio_hash)),1)
 
     def test_provider_uses_published_download_link(self):
         with patch('catalog.requests.get') as get:

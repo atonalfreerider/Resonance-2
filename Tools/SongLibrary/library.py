@@ -11,15 +11,19 @@ def main():
     p=sub.add_parser('ingest');p.add_argument('audio');p.add_argument('--midi');p.add_argument('--title');p.add_argument('--offline',action='store_true');p.add_argument('--neural',action='store_true');p.add_argument('--meter',type=int,choices=[3,4],default=4)
     p=sub.add_parser('index');p.add_argument('directories',nargs='+')
     p=sub.add_parser('stems');p.add_argument('bundle')
+    p=sub.add_parser('story');p.add_argument('bundle');p.add_argument('--key-file',required=True);p.add_argument('--model',default='gpt-4.1')
     p=sub.add_parser('search');p.add_argument('title');p.add_argument('--online',action='store_true')
     p=sub.add_parser('export');p.add_argument('bundle');p.add_argument('zip')
     p=sub.add_parser('review');p.add_argument('bundle');p.add_argument('settings',help='JSON with Key, Minor, LeadVocalTrack, SectionBoundaries, SectionParents')
-    p=sub.add_parser('serve');p.add_argument('--port',type=int,default=8765);p.add_argument('--no-browser',action='store_true')
+    p=sub.add_parser('serve');p.add_argument('--port',type=int,default=8765);p.add_argument('--no-browser',action='store_true');p.add_argument('--story-key-file')
     sub.add_parser('doctor');sub.add_parser('list')
     a=parser.parse_args()
     if a.command=='ingest':
         from pipeline import ingest
         result=ingest(a.audio,a.midi,a.title,not a.offline,a.neural,a.meter,lambda s:print(s,flush=True))
+    elif a.command=='story':
+        from story import generate
+        result=generate(a.bundle,a.key_file,a.model)
     elif a.command=='index':result={'indexed':Catalog().index(a.directories)}
     elif a.command=='stems':
         from stems import enrich
@@ -37,7 +41,7 @@ def main():
         result=review(a.bundle,read_json(a.settings))
     elif a.command=='serve':
         from server import serve
-        serve(a.port,not a.no_browser);return
+        serve(a.port,not a.no_browser,a.story_key_file);return
     elif a.command=='list':
         result=[str(p.parent) for p in (ROOT/'PreparedSongs').rglob('aligned.mid.prepared.json')]
     else:

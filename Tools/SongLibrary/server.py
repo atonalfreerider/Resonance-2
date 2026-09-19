@@ -68,7 +68,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self.authorized():return self.respond({'error':'Invalid session'},403)
             if path=='/api/state':
                 with LOCK:jobs=list(JOBS.values())
-                return self.respond(dict(bundles=bundles(),jobs=jobs))
+                return self.respond(dict(bundles=bundles(),jobs=jobs,storyEnabled=bool(getattr(self.server,'story_key_file',None))))
             if path=='/api/bundle':
                 p=bundle_path(parse_qs(urlparse(self.path).query)['id'][0]);patterns=read_json(p/'aligned.mid.patterns.json')
                 def seconds(beat):
@@ -122,11 +122,17 @@ class Handler(BaseHTTPRequestHandler):
                 from pipeline import export
                 p=bundle_path(body['id'])
                 return self.respond(dict(job=enqueue(lambda notify:export(p,ROOT/'Builds/SongBundles'/(p.name+'.zip')))))
+            if path=='/api/story':
+                from story import generate
+                p=bundle_path(body['id']);key_file=getattr(self.server,'story_key_file',None)
+                if not key_file:raise ValueError('Start Song Workshop with --story-key-file to enable story generation')
+                return self.respond(dict(job=enqueue(lambda notify:generate(p,key_file))))
             return self.respond({'error':'Not found'},404)
         except Exception as error:self.respond({'error':str(error)},400)
 
-def serve(port=8765,browser=True):
+def serve(port=8765,browser=True,story_key_file=None):
     DATA.mkdir(parents=True,exist_ok=True)
+    story_key_file=story_key_file or read_json(DATA/'settings.json',{}).get('storyKeyFile')
     for p in (DATA/'ui-jobs').glob('*.json'):
         job=read_json(p)
         if job['state'] in ('queued','running'):job.update(state='interrupted',message='Worker stopped; re-import to retry. Original inputs are preserved.')
@@ -140,6 +146,7 @@ def serve(port=8765,browser=True):
             with urlopen(url,timeout=2) as response:
                 if b'Song workshop' in response.read(65536):webbrowser.open(url);return
         raise
+    server.story_key_file=story_key_file
     url=f'http://127.0.0.1:{server.server_port}'
     print('Song manager: '+url,flush=True)
     if browser:webbrowser.open(url)

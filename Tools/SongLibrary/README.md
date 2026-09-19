@@ -22,7 +22,7 @@ This opens the loopback-only manager at http://127.0.0.1:8765. Upload an MP3/WAV
 
 ## Playback and review
 
-Completed imports live in `PreparedSongs/Library`. Restart Unity playback to refresh its prepared-song choices, select the new bundle, and load it. All expensive processing happens ahead of playback. Unity plays `recording.wav`, not synthesized MIDI. **Listen / visualize** selects a solo stem and its prepared pattern data. Full mix restores the original recording and score. Solo changes pause briefly for local loading, preserve the playhead, and resume if playing; stems use the same sample rate and exact sample count. The authoritative full-song key, chord progression and region shading remain in force, including while a stem is silent.
+Completed imports live in `PreparedSongs/Library`. Restart Unity playback to refresh its prepared-song choices, select the new bundle, and load it. All expensive processing happens ahead of playback. Unity plays `recording.wav`, not synthesized MIDI. **Listen / visualize** selects a solo stem and its prepared pattern data. Full mix restores the original recording and score. Audio and visual stem data preload with the song. Solo changes crossfade synchronized sources without pausing or loading; stems use the same sample rate and exact sample count. The authoritative full-song key, chord progression and region shading remain in force, including while a stem is silent.
 
 Automatic section boundaries are initially eight-bar candidates, with repeated-family and chord-cycle analysis. They do **not** reliably identify semantic verse/chorus/bridge roles. Review the recording and enter one section start per line:
 
@@ -114,3 +114,52 @@ Repeated section sequences are grouped offline into composite orrery carriers, i
 Prepared pattern bundles include `MelodyStrands`: independent, pitch-ordered voice histories per track/channel, with exact score-second onsets and ends. Simultaneous notes are assigned from low to high; missing voices retain nearest-register continuity. This assumes non-crossing harmony parts, not semantic singer recognition. Runtime only follows these prepared routes. `song.json` accepts `TrackAliases` (original MIDI name to display name); Ticket to Ride maps `Lead Organ` to `Lead Vocals`. Re-run PatternPrep when changing these settings.
 
 Ticket to Ride uses the reviewed companion MIDI for all solo visuals: 515 vocal notes in two strands (320 lower / 195 upper), 305 bass notes, 1,569 drum hits and 2,375 accompaniment notes. The duplicate vocal doubling track is excluded. The original master MIDI is unchanged. All seven audio views contain exactly 8,385,536 stereo samples at 44.1 kHz. Audio and prepared visual frames preload at song load; switching uses synchronized sources without decoding or seeking. High/low audio sums back to accompaniment within floating-point precision. Lookup was tested live against BitMidi on 2026-09-19 and returned two Ticket to Ride arrangements. Public MIDI availability does not imply transcription quality; the existing fingerprint gate still applies.
+
+## Existing recording-folder batch
+
+`Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/process_existing_folder.py "C:/Users/johnb/Desktop/resonance-music/StreamingAssets/WAV"` enriches the six already aligned recordings with local Demucs stems and prepared solo views. It verifies source recording hashes, preserves the existing MIDI bytes, derives stem track membership from authored track names, and publishes completed revisions under `PreparedSongs/Library/*-prepared-stems`. It does not run neural retranscription. Failed or interrupted work remains resumable under `SongLibraryData/jobs/current-song-folder`; `batch-report.json` records each result and inherited alignment confidence. New/unmatched recordings require the regular ingest command.
+# Listening stories and Director Mode
+
+After alignment, pattern compilation and stem preparation, generate the story:
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/library.py story PreparedSongs/<song> --key-file C:/private/openai-key.txt
+```
+
+The key file contains only the API key. It is read by the offline request process;
+it is never copied into a bundle, Unity, request logs or Git. The Responses API
+receives a compact analysis summary (section timing, estimated stable chords,
+scored vocal intervals and available stems), not recordings, MIDI, local paths or
+lyrics. Requests use `store: false`. The model defaults to `gpt-4.1` and can be
+changed with `--model`. Generation is a separate, explicit API operation, never
+part of playback or an automatic retranscription of existing scores.
+
+For the workshop's **Generate listening story** action, launch:
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/library.py serve --story-key-file C:/private/openai-key.txt
+```
+
+For the normal desktop launcher, an optional local `SongLibraryData/settings.json`
+can hold `{"storyKeyFile":"C:/private/openai-key.txt"}`. This ignored file stores
+only the path; the key stays in its original private file. Restart an already
+running workshop after configuring it.
+
+Review the generated `story.json` captions before presentation: generated musical
+interpretations can be wrong even with valid JSON. Timings are recording seconds;
+`stem: ""` means full mix. Views are `Overview`, `Torus`, `Timeline`, `Drums`.
+Only Torus supports `uncoil`. Short uncoil passages are suppressed so the animation
+can settle. The script is bound to audio, MIDI and pattern-analysis hashes; edits
+to the analysis require regenerating the story. Existing valid stories survive a
+failed request. Exports include the story automatically.
+
+In Unity, open **Song structure → Director mode**. Bottom captions, views and audio
+plus visual solos follow the recording clock, including seeks and replay. Turn it
+off to restore the previous view and solo. **Reload prepared story** reads edits
+without reloading audio. Full-song chord colors remain authoritative during solos.
+
+Song media and all generated scores/analysis belong in local `PreparedSongs/` and
+`SongLibraryData/`; per-song reports belong in `Reports/SongProcessing/`. These are
+ignored by Git. Keep only the synthetic `Examples/SongBundle/format-guide.json` as
+a format specimen, alongside the analysis code and tests. Removing files from Git
+tracking does not erase older commits or local media.

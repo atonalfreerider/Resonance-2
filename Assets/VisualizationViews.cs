@@ -86,7 +86,7 @@ public sealed class VisualizationViews : MonoBehaviour
         overlay.style.visibility=timelineOpacity<.005f?Visibility.Hidden:Visibility.Visible;
         TorusOpacity=Mathf.Lerp(TorusOpacity,Current==View.Overview||Current==View.Torus?1:0,blend);
         var shape=GetComponent<Main>();
-        bool showDrums=Current==View.Drums||(Current==View.Torus&&shape.Uncoiled&&!shape.UncoilMoving&&shape.UncoilAmount>.9999f);
+        bool showDrums=Current==View.Overview||Current==View.Drums||(Current==View.Torus&&shape.Uncoiled&&!shape.UncoilMoving&&shape.UncoilAmount>.9999f);
         DrumOpacity=showDrums?Mathf.Lerp(DrumOpacity,1,blend):0;
         if(Current==View.Drums||Current==View.Timeline||cameraMoving){
             Vector3 position=overviewPosition;Quaternion rotation=overviewRotation;

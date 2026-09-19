@@ -91,3 +91,23 @@ Toggle { min-height: 27px; flex-shrink: 0; }
 .side-tabs .unity-tab-view__next-button, .side-tabs .unity-tab-view__previous-button { visibility: hidden; }
 .side-tab-page Slider { height: 58px; min-height: 58px; }
 .side-tab-page Slider > .unity-base-field__input { height: 24px; min-height: 24px; flex-grow: 0; padding: 0; border-width: 0; background-color: transparent; }
+#song-director-controls {
+    margin-top: 8px;
+    margin-bottom: 14px;
+}
+#song-story-footer {
+    position: absolute;
+    bottom: 18px;
+    right: 24px;
+    padding: 12px 20px;
+    background-color: rgba(9, 18, 29, 0.84);
+    border-radius: 12px;
+    border-top-width: 1px;
+    border-top-color: rgba(130, 190, 240, 0.4);
+}
+#song-story-caption {
+    white-space: normal;
+    font-size: 17px;
+    color: rgb(235, 243, 250);
+    -unity-text-align: middle-center;
+}
