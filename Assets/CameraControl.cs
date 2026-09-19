@@ -5,6 +5,17 @@ public class CameraControl : MonoBehaviour
 {
     public float Speed = 0.3f;          // Speed of movement and rotation
     public Vector3 center = new Vector3(0,-.4f,0); // Frame the torus and the percussion player below it.
+    public Vector3 OrbitState=>new Vector3(rad,alpha,phi);
+    public void RestoreOrbit(Vector3 state){rad=state.x;alpha=state.y;phi=state.z;}
+    public bool Centered {get;private set;}
+    public void AdoptView(Vector3 target,bool centered)
+    {
+        Centered=centered;
+        if(centered)center=target;
+        var offset=transform.position-FrameTarget;rad=Mathf.Max(.3f,offset.magnitude);
+        alpha=Mathf.Acos(Mathf.Clamp(offset.y/rad,-1,1));phi=Mathf.Atan2(offset.z,offset.x);
+    }
+    public void OverviewFraming(){Centered=false;center=new Vector3(0,-.4f,0);}
     float rad = 5.0f;
     float alpha = 42f * Mathf.Deg2Rad;
     float phi = 45f * Mathf.Deg2Rad;        // Azimuthal angle (around Y-axis) - set to 45 degrees
@@ -36,7 +47,7 @@ public class CameraControl : MonoBehaviour
         transform.LookAt(FrameTarget); // Ensure the camera always looks at the center
     }
 
-    public void ResetView() { center=new Vector3(0,-.4f,0);rad=5.0f; alpha=42f*Mathf.Deg2Rad; phi=45f*Mathf.Deg2Rad; UpdateCameraPosition(); transform.LookAt(FrameTarget); MovementUpdater?.Invoke(); }
+    public void ResetView() { if(Centered){center=Vector3.zero;rad=4.3f;alpha=42f*Mathf.Deg2Rad;phi=45f*Mathf.Deg2Rad;UpdateCameraPosition();transform.LookAt(FrameTarget);MovementUpdater?.Invoke();return;}center=new Vector3(0,-.4f,0);rad=5.0f; alpha=42f*Mathf.Deg2Rad; phi=45f*Mathf.Deg2Rad; UpdateCameraPosition(); transform.LookAt(FrameTarget); MovementUpdater?.Invoke(); }
     void MoveCamera()
     {
         bool isMoving = false; // Flag to check if any movement key is pressed
@@ -102,7 +113,7 @@ public class CameraControl : MonoBehaviour
     /// <summary>
     /// Updates the camera's position based on the current spherical coordinates.
     /// </summary>
-    Vector3 FrameTarget => center + new Vector3(Mathf.Sin(phi),0,-Mathf.Cos(phi))*.95f
+    Vector3 FrameTarget => Centered?center:center + new Vector3(Mathf.Sin(phi),0,-Mathf.Cos(phi))*.95f
         - new Vector3(-Mathf.Cos(alpha)*Mathf.Cos(phi),Mathf.Sin(alpha),-Mathf.Cos(alpha)*Mathf.Sin(phi))*.55f;
 
     void UpdateCameraPosition()

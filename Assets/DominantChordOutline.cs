@@ -11,6 +11,9 @@ public sealed class DominantChordOutline : MonoBehaviour
     float visibility;int root,third=4,fifth=7;Color hue;
     public bool RegionVisible=>visibility>0;
     public int RegionRoot=>root;
+    public int RegionThird=>third;
+    public int RegionFifth=>fifth;
+    public Color RegionColor=>hue;
     public static SongFormAnalysis.ChordStep PhaseAt(SongFormAnalysis.ChordStep[] phases,double beat)
     {
         if(phases==null)return null;
@@ -39,8 +42,8 @@ public sealed class DominantChordOutline : MonoBehaviour
         if(main==null)main=GetComponent<Main>();if(dominance==null)dominance=GetComponent<TonalDominance>();var camera=Camera.main;if(main==null||dominance==null||camera==null||fillObject==null)return;
         if(midi==null)midi=GetComponent<MidiPlayer>();
         bool show=dominance.HasChord,minor=dominance.ChordMinor;string quality=dominance.ChordQuality;int nextRoot=dominance.ChordRoot;
-        if(midi!=null&&midi.isActiveAndEnabled&&midi.Loaded&&midi.Cycles!=null){
-            var phase=PhaseAt(midi.Prepared.RegionPhases,midi.Cycles.BeatAt(midi.ScorePosition));show=phase!=null;
+        if(midi!=null&&midi.isActiveAndEnabled&&midi.Loaded&&midi.Cycles!=null&&!(main.NotesUseSynth&&main.ActiveNotes.Count>0)){
+            var phase=PhaseAt(midi.Prepared?.RegionPhases,midi.Cycles.BeatAt(midi.ScorePosition));show=phase!=null;
             if(show){nextRoot=phase.Root;quality=phase.Quality;minor=quality.StartsWith("m")&&!quality.StartsWith("maj");}
         }
         if(show){root=nextRoot;third=minor||quality=="dim"?3:4;fifth=quality=="dim"?6:7;hue=TonalColorField.Chord(root,main.currentKey,minor);}

@@ -8,8 +8,9 @@ using UnityEngine.UIElements;
 public sealed class PatternWheelDeck : VisualElement
 {
     readonly Main main;readonly MidiPlayer midi;readonly Label status;
-    readonly WheelCanvas canvas;readonly VisualElement chapters;readonly DropdownField level,vocal;int[] vocalTracks=Array.Empty<int>();
+    readonly WheelCanvas canvas;readonly VisualElement chapters;readonly DropdownField level;
     PreparedPatternSong source;int[] levels=Array.Empty<int>();
+    public VisualElement Overlay=>canvas;
     public int SelectedLevel=>canvas.Level;
     public double RackTurns=>canvas.Turns;
     public float RackPixels=>canvas.RackScroll;
@@ -17,6 +18,7 @@ public sealed class PatternWheelDeck : VisualElement
     public Vector2 MetaCenter=>canvas.metaCenter;
     public Vector2 FeaturedCenter=>canvas.featuredCenter;
     public int LeadVocalTrack=>canvas.LeadTrack;
+    public float FeaturedRadius=>canvas.FeaturedRadius;
         public static Color NoteColor(PreparedPatternSong.Section section,double onset,int key,bool lead)
         {
             if(lead)return Color.white;
@@ -31,8 +33,6 @@ public sealed class PatternWheelDeck : VisualElement
         var hint=new Label("SECTION WHEELS · all instruments together\nThe rack advances the song form. The active section plays at the center; other wheels dim. Pitch variants slide in radial slots. Percussion strikes below the torus.");hint.style.whiteSpace=WhiteSpace.Normal;Add(hint);
         level=new DropdownField("Form level",new List<string>{"Song"},0);Add(level);
         level.RegisterValueChangedCallback(_=>{if(level.index>=0&&level.index<levels.Length)canvas.Level=levels[level.index];});
-        vocal=new DropdownField("Lead vocal · brightest lane",new List<string>{"Choose a track"},0);Add(vocal);
-        vocal.RegisterValueChangedCallback(_=>{if(source==null||vocal.index<0||vocal.index>=vocalTracks.Length)return;canvas.LeadTrack=vocalTracks[vocal.index];PlayerPrefs.SetInt("Resonance.Vocal."+source.MidiSha256,canvas.LeadTrack);});
         chapters=new VisualElement();Add(chapters);
         canvas=new WheelCanvas(main,midi){name="pattern-wheel-overlay",pickingMode=PickingMode.Ignore};
         var toggle=new Toggle("Show rack and section wheels"){value=true};toggle.RegisterValueChangedCallback(e=>canvas.style.display=e.newValue?DisplayStyle.Flex:DisplayStyle.None);Add(toggle);
@@ -41,7 +41,7 @@ public sealed class PatternWheelDeck : VisualElement
     public void AttachOverlay(VisualElement root)
     {
         canvas.style.position=Position.Absolute;canvas.style.left=336;canvas.style.top=8;
-        root.RegisterCallback<GeometryChangedEvent>(_=>{var controls=root.Q<ScrollView>("controls");canvas.style.left=(controls?.layout.width??328)+8;});
+
         canvas.style.width=510;canvas.style.height=620;canvas.style.maxWidth=new Length(49,LengthUnit.Percent);root.Add(canvas);
     }
     public void Tick()
@@ -49,17 +49,11 @@ public sealed class PatternWheelDeck : VisualElement
         if(source!=midi.Prepared)
         {
             source=midi.Prepared;canvas.Load(source);chapters.Clear();
-            vocalTracks=new[]{-1}.Concat(source?.Sections.SelectMany(s=>s.Lanes).Where(l=>l.Channel!=10).Select(l=>l.Track).Distinct().OrderBy(t=>t)??Enumerable.Empty<int>()).ToArray();
-            string TrackName(int track)=>source?.TrackNames!=null&&track>=0&&track<source.TrackNames.Length&&!string.IsNullOrWhiteSpace(source.TrackNames[track])?source.TrackNames[track]:$"Track {track+1}";
-            vocal.choices=vocalTracks.Select(t=>t<0?"No vocal / instrumental":TrackName(t)).ToList();
-            int suggested=source?.LeadVocalTrack??-1;
-            if(suggested<0)suggested=vocalTracks.Where(t=>t>=0&&TrackName(t).IndexOf("lead",StringComparison.OrdinalIgnoreCase)>=0&&TrackName(t).IndexOf("dbl",StringComparison.OrdinalIgnoreCase)<0).DefaultIfEmpty(-1).First();
-            canvas.LeadTrack=source==null?-1:PlayerPrefs.GetInt("Resonance.Vocal."+source.MidiSha256,suggested);
-            vocal.SetValueWithoutNotify(vocal.choices[Math.Max(0,Array.IndexOf(vocalTracks,canvas.LeadTrack))]);
             levels=source?.Form?.Where(n=>n.Children.Length>0).Select(n=>n.Id).ToArray()??Array.Empty<int>();
             level.choices=levels.Length==0?new List<string>{"Song"}:levels.Select(id=>source.Form[id].Path).ToList();level.SetValueWithoutNotify(level.choices[0]);canvas.Level=0;
             if(source!=null)foreach(var section in source.Sections){var s=section;var button=new Button(()=>midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(s.Start)))){text=$"{s.Name} · bar {s.FirstBar+1}"};chapters.Add(button);}
         }
+        var feature=main.GetComponent<FeaturedInstrument>();feature.EnsureLoaded(source);canvas.LeadTrack=feature.Track;canvas.LeadChannel=feature.Channel;
         var active=midi.SongForm?.At(midi.Cycles?.BeatAt(midi.ScorePosition)??0);
         status.text=source?.Templates==null?"Prepare the section-wheel analysis offline.":$"{source.Sections.Length} section visits · {source.Form.Count(n=>n.Family>=0)} family wheels\n{source.TemplateNoteCount} rhythm slots represent {source.PatternNoteCount} note events\n{active?.Family.Name} · {midi.Position:0.0}s / {midi.Duration:0.0}s\n{source.Provenance}";
         canvas.TickControls();canvas.MarkDirtyRepaint();
@@ -68,9 +62,10 @@ public sealed class PatternWheelDeck : VisualElement
     {
         readonly Main main;readonly MidiPlayer midi;OrreryBloom bloom;
         PreparedPatternSong source;readonly Dictionary<string,float> pitchPositions=new();
+        readonly Dictionary<int,(Vector2 center,float radius)> wheelPositions=new();
         readonly VisualElement rackInput;readonly Button transport;int dragPointer=-1;float dragY;double dragTime;
         public double SeekTimeForDrag(float pixels)=>Math.Clamp(dragTime-pixels*Math.Max(1,Math.Min(75,midi.Duration))/Math.Max(100,contentRect.height-100),0,midi.Duration);
-        public int Level,ActiveNode=-1,LeadTrack=-1;public double Turns;public float RackScroll;
+        public int Level,ActiveNode=-1,LeadTrack=-1,LeadChannel=-1;public double Turns;public float RackScroll;
         public WheelCanvas(Main main,MidiPlayer midi)
         {
             this.main=main;this.midi=midi;generateVisualContent+=Draw;
@@ -88,7 +83,7 @@ public sealed class PatternWheelDeck : VisualElement
             schedule.Execute(()=>bloom?.Place(this)).Every(50);
         }
         public void TickControls(){transport.text=midi.IsPlaying?"Pause":"Play";transport.SetEnabled(midi.Loaded);}
-        public void Load(PreparedPatternSong data){source=data;pitchPositions.Clear();Level=0;}
+        public void Load(PreparedPatternSong data){source=data;pitchPositions.Clear();wheelPositions.Clear();Level=0;}
         static Vector2 At(Vector2 c,float radius,double phase){float a=(float)phase*Mathf.PI*2;return c+new Vector2(Mathf.Sin(a)*radius,-Mathf.Cos(a)*radius);}
         static void Line(Painter2D p,Vector2 a,Vector2 b,Color color,float width=1){p.strokeColor=color;p.lineWidth=width;p.BeginPath();p.MoveTo(a);p.LineTo(b);p.Stroke();}
         static void Ring(Painter2D p,Vector2 c,float r,Color color,float width=1,double start=0,double end=1)
@@ -101,7 +96,7 @@ public sealed class PatternWheelDeck : VisualElement
         }
         static Color Dim(Color color,float strength)=>new Color(color.r*strength,color.g*strength,color.b*strength,color.a);
         readonly List<(Vector2 anchor,Vector2 direction,string text,bool bright)> labels=new();
-        public Vector2 metaCenter,featuredCenter;
+        public Vector2 metaCenter,featuredCenter;public float FeaturedRadius;
         void RadialLabel(Vector2 anchor,string text,bool bright=false){var direction=(anchor-metaCenter).normalized;if(direction.sqrMagnitude<.1f)direction=Vector2.up;labels.Add((anchor,direction,text,bright));}
         void DrawLabels(MeshGenerationContext ctx,Painter2D p,float w,float h){
             foreach(bool right in new[]{false,true}){
@@ -147,14 +142,66 @@ public sealed class PatternWheelDeck : VisualElement
                 var c=center+new Vector2(Mathf.Cos((float)angle*Mathf.PI*2),Mathf.Sin((float)angle*Mathf.PI*2))*orbit;
                 bool active=child==ActiveNode;float radius=active?w*.19f:w*.055f;if(active){c=center;featuredCenter=c;}
                 Line(p,center,c,new Color(.23f,.34f,.44f,active?.8f:.25f));
-                var node=source.Form[child];var sample=active?dockSection:source.Sections.FirstOrDefault(s=>s.Node==child);
-                DrawSection(ctx,p,node,sample,c,radius,active,beat);
+                DrawNode(ctx,p,child,c,radius,active,beat,si,0);
             }
             ctx.DrawText($"{parent.Path} · {midi.Position/midi.Duration*100:0}%",new Vector2(rackX+18,h-34),12,new Color(.62f,.76f,.86f));
             ctx.DrawText("Pitch slides radially · rhythm stays in its slot",new Vector2(rackX+18,h-16),10,new Color(.48f,.6f,.7f));
             DrawLabels(ctx,p,w,h);bloom.End();
         }
-        void DrawSection(MeshGenerationContext ctx,Painter2D p,PreparedPatternSong.FormNode node,PreparedPatternSong.Section section,Vector2 center,float radius,bool active,double beat)
+        bool DescendsFrom(int leaf,int ancestor)
+        {
+            for(int guard=0;leaf>=0&&guard<source.Form.Length;guard++){
+                if(leaf==ancestor)return true;leaf=source.Form[leaf].Parent;
+            }
+            return false;
+        }
+        void DrawNode(MeshGenerationContext ctx,Painter2D p,int id,Vector2 center,float radius,bool active,double beat,int sectionIndex,int depth)
+        {
+            if(wheelPositions.TryGetValue(id,out var shown)){
+                float blend=Main.ReducedMotion?1:1-Mathf.Exp(-Time.unscaledDeltaTime*14);
+                center=Vector2.Lerp(shown.center,center,blend);radius=Mathf.Lerp(shown.radius,radius,blend);
+            }
+            wheelPositions[id]=(center,radius);
+            var node=source.Form[id];
+            if(node.Children.Length==0){
+                if(active){featuredCenter=center;FeaturedRadius=radius;}
+                var sample=active&&source.Sections[sectionIndex].Node==id?source.Sections[sectionIndex]:source.Sections.FirstOrDefault(s=>s.Node==id);
+                DrawSection(ctx,p,node,sample,center,radius,active,beat,depth>0);return;
+            }
+            if(active){
+                Gear(p,center,radius+7,beat/32,new Color(.32f,.48f,.62f,.7f),56);
+                int powered=node.Children.FirstOrDefault(child=>DescendsFrom(source.Sections[sectionIndex].Node,child));
+                var companions=node.Children.Where(child=>child!=powered).ToArray();
+                float small=radius*Mathf.Clamp(.36f-companions.Length*.025f,.16f,.31f);
+                for(int i=0;i<companions.Length;i++){
+                    float angle=companions.Length==1?0:Mathf.Lerp(-1.1f,1.1f,i/(float)(companions.Length-1));
+                    var position=center+new Vector2(Mathf.Cos(angle),Mathf.Sin(angle))*radius*(1.43f+depth*.1f);
+                    Line(p,center,position,new Color(.25f,.38f,.5f,.5f));
+                    if(depth<12)DrawNode(ctx,p,companions[i],position,small,false,beat,sectionIndex,depth+1);
+                }
+                if(depth<12)DrawNode(ctx,p,powered,center,radius,true,beat,sectionIndex,depth+1);
+                ctx.DrawText(node.Name,center+new Vector2(-radius*.8f,radius+22+depth*13),11,new Color(.7f,.8f,.9f));
+                return;
+            }
+            float dim=active?1:.35f;
+            Gear(p,center,radius,active?beat/32:0,Dim(new Color(.42f,.62f,.77f),dim),48);
+            Ring(p,center,radius*.94f,Dim(new Color(.26f,.43f,.57f),dim));
+            // The carrier stays visible; its child gears share the current section's power.
+            int count=node.Children.Length;float childRadius=count==2?radius*.46f:radius/3.1f;
+            float orbit=count==2?radius*.48f:radius-childRadius-3;
+            for(int i=0;i<count;i++){
+                int child=node.Children[i];bool powered=active&&DescendsFrom(source.Sections[sectionIndex].Node,child);
+                double angle=count==2?i*.5+.75:i/(double)count;
+                var position=At(center,orbit,angle);
+                Line(p,center,position,Dim(new Color(.34f,.51f,.64f),powered?1:.35f));
+                if(depth<5)DrawNode(ctx,p,child,position,childRadius,powered,beat,sectionIndex,depth+1);
+            }
+            if(active){
+                ctx.DrawText(node.Name,center+new Vector2(-radius*.75f,radius+12),11,Color.white);
+                Dot(p,center,3,new Color(.65f,.82f,.94f));
+            }else RadialLabel(center+(center-metaCenter).normalized*radius,node.Name);
+        }
+        void DrawSection(MeshGenerationContext ctx,Painter2D p,PreparedPatternSong.FormNode node,PreparedPatternSong.Section section,Vector2 center,float radius,bool active,double beat,bool nested=false)
         {
             float dim=active?1:.32f;
             Dot(p,center,radius,new Color(.008f,.015f,.024f,active?.92f:.55f));
@@ -166,10 +213,10 @@ public sealed class PatternWheelDeck : VisualElement
             {
                 foreach(var chord in section.Chords){double a=(chord.Start-section.Start)/section.ProgressionBeats-spin,b=(chord.End-section.Start)/section.ProgressionBeats-spin;Ring(p,center,radius*.88f,Dim(CyclicOrrery.ChordColor(chord,main.currentKey),dim),active?4:2,a,b);}
                 int li=0;int laneCount=section.Lanes.Count(l=>l.Channel!=10);
-                foreach(var lane in section.Lanes.Where(l=>l.Channel!=10).OrderBy(l=>l.Track==LeadTrack?1:0))
+                foreach(var lane in section.Lanes.Where(l=>l.Channel!=10).OrderBy(l=>l.Track==LeadTrack&&l.Channel==LeadChannel?1:0))
                 {
                     var play=active?lane.Plays.LastOrDefault(v=>v.Start<=beat&&beat<v.End):lane.Plays.FirstOrDefault();if(play==null){li++;continue;}
-                    bool lead=lane.Track==LeadTrack;float laneLight=lead?1.65f:.48f;
+                    bool lead=lane.Track==LeadTrack&&lane.Channel==LeadChannel;float laneLight=lead?1.65f:.48f;
                     var template=source.Templates[play.Template];var variation=template.Variants[play.Variant];double position=active?beat-play.Start:0;
                     for(int i=0;i<template.Slots.Length;i++)
                     {
@@ -193,8 +240,8 @@ public sealed class PatternWheelDeck : VisualElement
                             Line(p,At(center,r,a),At(center,r,b),Dim(hue,strength),active?2.4f:1.1f);
                         }
                         if(active&&span>1.001)ctx.DrawText($"{span:0.#}×",pt+new Vector2(4,3),8,Dim(hue,.75f));
-                        Dot(p,pt,(active?2.3f:1.2f)+energy*2,Color.Lerp(Dim(hue,dim*laneLight),lead?Color.white:Dim(hue,.8f),energy));
-                        if(active)bloom.Disk(pt,lead?2.2f:1.2f,hue,energy*variation.Velocities[i]*(lead?1.5f:.12f));
+                        Dot(p,pt,(active?2.3f:1.2f)+energy*2,Color.Lerp(Dim(hue,dim*laneLight),Color.white,energy));
+                        if(active)bloom.Disk(pt,lead?2.2f:1.2f,Color.Lerp(hue,Color.white,energy),energy*variation.Velocities[i]*(lead?.75f:.06f));
                     }
                     if(active){var badge=At(center,radius*.98f,(li+.5)/Math.Max(1,laneCount));Ring(p,badge,5,new Color(.6f,.64f,.69f));Line(p,badge,At(badge,4,(play.Variant%12+1)/12.0),Color.white);}li++;
                 }
@@ -208,7 +255,8 @@ public sealed class PatternWheelDeck : VisualElement
             var hand=At(dial,dr*.53f,(visit+1)/(double)(digits+2));Line(p,dial,hand,active?Color.white:new Color(.45f,.57f,.66f),active?2:1);Dot(p,dial,2,Color.white);
             if(active)ctx.DrawText($"TAKE {visit+1}",dial+new Vector2(-20,dr+4),9,new Color(.62f,.8f,.94f));
             Dot(p,center,radius*.15f,new Color(.012f,.023f,.035f));
-            if(active)ctx.DrawText(node.Name,center+new Vector2(-radius*.38f,-6),15,Color.white);else RadialLabel(center+(center-metaCenter).normalized*radius,node.Name);
+            if(nested&&!active)ctx.DrawText(node.Name,center+new Vector2(-radius*.65f,-radius-14),10,new Color(.57f,.66f,.73f));
+            else if(active)ctx.DrawText(node.Name,center+new Vector2(-radius*.38f,-6),15,Color.white);else RadialLabel(center+(center-metaCenter).normalized*radius,node.Name);
             if(active){var needle=At(center,radius*.88f,0);Dot(p,needle,3,Color.white);if(midi.IsPlaying)bloom.Disk(needle,2,Color.white,.7f);}
             if(node.Children.Length>0)ctx.DrawText($"{node.Children.Length} subforms",center+new Vector2(-25,15),10,Dim(Color.white,dim));
         }

@@ -4,5 +4,8 @@
   "LeadVocalTrack": 5,
   "KeySource": "Reviewed song context: A major (same recording fingerprint)",
   "SectionSource": "Repeated-pattern families; automatic eight-bar boundaries, review required",
-  "PatternTimingToleranceBeats": 0.25
+  "PatternTimingToleranceBeats": 0.25,
+  "TrackAliases": {
+    "Lead Organ": "Lead Vocals"
+  }
 }

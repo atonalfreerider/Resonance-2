@@ -100,3 +100,8 @@ The full Ticket to Ride recording was tested through local inference: 3,430 dete
 - [BitMidi API implementation](https://github.com/feross/bitmidi.com): published search and download fields; no page scraping or invented download links. Availability was intermittent during setup.
 
 Model, wrapper, MIDI arrangements, and recordings have separate upstream licenses/rights. The song export includes the user's recording and derived score, not the model runtime or weights. Neural note/instrument/drum errors, uncertain downbeats, and semantic section labels still require listening and review.
+
+
+Repeated section sequences are grouped offline into composite orrery carriers, including verse/chorus and longer repeating forms. The active child remains featured at full size while companion wheels stay dimmed nearby.
+
+Prepared pattern bundles include `MelodyStrands`: independent, pitch-ordered voice histories per track/channel, with exact score-second onsets and ends. Simultaneous notes are assigned from low to high; missing voices retain nearest-register continuity. This assumes non-crossing harmony parts, not semantic singer recognition. Runtime only follows these prepared routes. `song.json` accepts `TrackAliases` (original MIDI name to display name); Ticket to Ride maps `Lead Organ` to `Lead Vocals`. Re-run PatternPrep when changing these settings.

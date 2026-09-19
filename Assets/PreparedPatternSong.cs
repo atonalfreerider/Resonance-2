@@ -17,6 +17,9 @@ using System.Linq;
     public SongFormAnalysis.ChordStep[] Chords;
     public SongFormAnalysis.ChordStep[] RegionPhases=Array.Empty<SongFormAnalysis.ChordStep>();
     public Frame[] Frames;
+    public MelodyStrand[] MelodyStrands=Array.Empty<MelodyStrand>();
+    [Serializable] public sealed class MelodyStrand { public int Track,Channel,Rank;public MelodyNote[] Notes; }
+    [Serializable] public sealed class MelodyNote { public int Pitch;public double Start,End;public float Velocity; }
     public DrumBar[] DrumBars=Array.Empty<DrumBar>();
     public DrumFamily[] DrumFamilies=Array.Empty<DrumFamily>();
     [Serializable] public sealed class DrumFamily { public int Id,Numerator,Denominator;public MidiCycleAnalysis.Hit[] Slots; }

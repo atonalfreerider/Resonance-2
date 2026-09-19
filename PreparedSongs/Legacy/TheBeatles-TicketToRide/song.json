@@ -3,5 +3,8 @@
   "Minor": false,
   "KeySource": "Reviewed song context: A major",
   "SectionBoundaries": "1 Intro\n5 Verse\n13 Chorus\n21 Verse\n29 Chorus\n38 Bridge\n47 Verse\n55 Chorus\n63 Bridge\n72 Verse\n80 Chorus\n88 Outro",
-  "SectionSource": "Estimated pop form from repeated harmonic passages; labels and boundaries editable offline"
+  "SectionSource": "Estimated pop form from repeated harmonic passages; labels and boundaries editable offline",
+  "TrackAliases": {
+    "Lead Organ": "Lead Vocals"
+  }
 }

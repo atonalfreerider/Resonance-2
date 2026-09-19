@@ -13,6 +13,7 @@ var form=SongFormAnalysis.Build(cycles,8,settings.SectionBoundaries);
 var data=PreparedPatternSong.Capture(cycles,form);
 data.TrackNames=Enumerable.Range(0,midi.Tracks).Select(t=>midi.Events[t].OfType<TextEvent>().FirstOrDefault(e=>e.MetaEventType==MetaEventType.SequenceTrackName)?.Text??"").ToArray();
 data.LeadVocalTrack=settings.LeadVocalTrack;
+for(int i=0;i<data.TrackNames.Length;i++)if(settings.TrackAliases.TryGetValue(data.TrackNames[i],out var alias))data.TrackNames[i]=alias;
 if(data.LeadVocalTrack<0)data.LeadVocalTrack=Array.FindIndex(data.TrackNames,n=>n.Contains("vocal",StringComparison.OrdinalIgnoreCase)&&!n.Contains("back",StringComparison.OrdinalIgnoreCase));
 data.Key=settings.Key;data.Minor=settings.Minor;data.KeySource=settings.KeySource;
 if(!string.IsNullOrWhiteSpace(settings.SectionSource))data.Provenance=settings.SectionSource;
@@ -64,5 +65,6 @@ foreach(var hit in data.Notes.Concat(data.Disks.SelectMany(d=>d.Hits.Concat(d.Vi
 SectionCompression.Build(data,settings);
 DrumCompression.Build(data);
 RegionPhases.Build(data);
+MelodyStratification.Build(data,cycles.SecondsAt);
 string output=path+".patterns.json",temporary=output+".tmp";File.WriteAllText(temporary,JsonSerializer.Serialize(data,jsonOptions));File.Move(temporary,output,true);
 Console.WriteLine($"{output}: {data.Notes.Length} notes, {data.Templates.Length} rhythm templates / {data.TemplateNoteCount} stored slots, {data.Sections.Length} sections; lossless reconstruction verified");

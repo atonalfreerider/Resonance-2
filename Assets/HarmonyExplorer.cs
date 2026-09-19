@@ -41,14 +41,16 @@ public class HarmonyExplorer : MonoBehaviour
         root.pickingMode=PickingMode.Ignore;
         root.style.unityFont=Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         var panel=root.Q<ScrollView>("controls");
-        panel.RegisterCallback<GeometryChangedEvent>(_ => { float fraction=Mathf.Clamp(panel.worldBound.width/root.worldBound.width,0,.5f); if(Camera.main!=null)Camera.main.rect=new Rect(fraction,0,1-fraction,1); });
+
         focusHint=Label(panel,"Click the torus to play / orbit. Click this panel to edit.");
         focusHint.AddToClassList("focus-hint");
         var dominance=GetComponent<TonalDominance>()??gameObject.AddComponent<TonalDominance>();
         var recording=GetComponent<SongAudio>()??gameObject.AddComponent<SongAudio>();
+        panel.Add(GetComponent<FeaturedInstrument>().BuildUI());
         panel.Add(recording.BuildUI());
         Section(panel,"PATTERN CD CHANGER");
         orrery=new PatternWheelDeck(main,midi);panel.Add(orrery);orrery.AttachOverlay(root);
+        gameObject.AddComponent<VisualizationViews>().Bind(root,panel,orrery);
         Section(panel,"TONAL CONTEXT");
         keyChoice=Choice(panel,"Key / tonic",Enumerable.Range(0,12).Select(i=>HarmonyModel.Name(i)).ToList(),main.currentKey,i=> { midi?.Pause(); main.KeySource="Manual"; main.ChangeKey(i); });
         modeChoice=Choice(panel,"Mode",new List<string>{"Major","Natural minor"},0,i=> { main.MinorMode=i==1; main.KeySource="Manual"; main.RefreshView(); Refresh(); });

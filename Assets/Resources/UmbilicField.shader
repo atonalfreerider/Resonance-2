@@ -1,6 +1,6 @@
 Shader "Resonance/UmbilicField"
 {
-    Properties { _Opacity("Field density",Range(0,2))=.7 }
+    Properties { _ViewOpacity ("View opacity",Float)=1 _Opacity("Field density",Range(0,2))=.7 }
     SubShader
     {
         Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
@@ -22,6 +22,7 @@ Shader "Resonance/UmbilicField"
             float4 _Primary;
             float _Dominance;
             CBUFFER_END
+            float _ViewOpacity;
             struct A { float4 positionOS:POSITION; float2 uv:TEXCOORD0; float2 coverage:TEXCOORD1; float4 color:COLOR; };
             struct V { float4 positionCS:SV_POSITION; float3 positionOS:TEXCOORD0; float2 uv:TEXCOORD1; float2 coverage:TEXCOORD2; float3 local:TEXCOORD3; };
             V Vert(A i) { V o; o.positionCS=TransformObjectToHClip(i.positionOS.xyz);o.positionOS=i.positionOS.xyz;o.uv=i.uv;o.coverage=i.coverage;o.local=i.color.rgb;return o; }
@@ -60,7 +61,7 @@ Shader "Resonance/UmbilicField"
                 float density=lerp(1,.18+.82*membership,_Diatonic);
                 float ambient=lerp(.18,0,_SoundingOnly);
                 float3 field=hue*(ambient+.025*ribbon*lerp(1,saturate(energy),_SoundingOnly))+light*(.55+.25*ribbon);
-                return half4(field*_Opacity*density*saturate(i.coverage.x),1);
+                return half4(field*_Opacity*_ViewOpacity*density*saturate(i.coverage.x),1);
             }
             ENDHLSL
         }

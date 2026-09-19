@@ -70,6 +70,7 @@ public class Main : MonoBehaviour
     public Vector3 UmbilicPoint(float t) => UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, Mathf.Repeat(t,1), currentVisualTwist);
     public MusicSynth Synth { get; private set; }
     public IReadOnlyList<Tuple<int, float>> ActiveNotes => lastActiveKeys;
+    public bool NotesUseSynth {get;private set;}
     public event Action StateChanged;
     readonly Stack<Chord> chordPool = new();
     readonly List<Vector3> curveBuffer = new(41);
@@ -89,6 +90,8 @@ public class Main : MonoBehaviour
     void Awake()
     {
         if(GetComponent<DominantChordOutline>()==null)gameObject.AddComponent<DominantChordOutline>();
+        if(GetComponent<ChordAurora>()==null)gameObject.AddComponent<ChordAurora>();
+        if(GetComponent<FeaturedInstrument>()==null)gameObject.AddComponent<FeaturedInstrument>();
         visualKeyForRendering = currentKey;
         currentKey = HarmonyModel.Mod(currentKey); currentVisualRotation = pathMap[currentKey].x / (float)Tones; currentVisualTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
 
@@ -279,13 +282,17 @@ public class Main : MonoBehaviour
     public void PlayKeys(List<Tuple<int, float>> values) => SetNotes(values, true);
     public void SetNotes(List<Tuple<int, float>> values, bool audio)
     {
+        NotesUseSynth=audio;
         lastActiveKeys = values.Where(n => n.Item1 >= 0 && n.Item1 < notes.Count && n.Item2 > 0 && !float.IsNaN(n.Item2))
             .GroupBy(n => n.Item1).Select(g => Tuple.Create(g.Key, Mathf.Clamp01(g.Max(n => n.Item2)))).ToList();
         RenderKeys();
         if (audio && Synth != null) { Synth.ResetVoices(); Synth.Schedule(AudioSettings.dspTime, lastActiveKeys); }
         StateChanged?.Invoke();
     }
-    public void StrikeNote(int index,float velocity){if(index>=0&&index<notes.Count){notes[index].Strike(velocity);foreach(var chord in chordLineRenderers.Values)if(!chord.Releasing&&(chord.Note1.Index==index||chord.Note2.Index==index))chord.Strike();}}
+    public void StrikeNote(int index,float velocity){GetComponent<ChordAurora>()?.Strike(index,velocity);if(index>=0&&index<notes.Count){notes[index].Strike(velocity);foreach(var chord in chordLineRenderers.Values)if(!chord.Releasing&&(chord.Note1.Index==index||chord.Note2.Index==index))chord.Strike();}}
+    public void FeatureNotes(HashSet<int> pitches){foreach(var note in notes)note.Featured=pitches.Contains(note.Index);}
+    public void NoteHistoryPath(int from,int to,List<Vector3> path)=>ShortSurfaceRoute(HarmonyModel.Mod(from*5)/12f+currentVisualRotation,HarmonyModel.Mod(to*5)/12f+currentVisualRotation,(from/12+1)/(float)Octaves,(to/12+1)/(float)Octaves,path);
+    public float HistoryCircumference=>2*Mathf.PI*Rad*transform.lossyScale.x;
     public void Silence() => PlayKeys(new List<Tuple<int, float>>());
     void RenderKeys()
     {
@@ -368,10 +375,23 @@ public class Main : MonoBehaviour
         int shift=SurfaceRouteShift(from,to,1,1),corner=(((-shift)%3)+3)%3;if(corner==2)corner=-1;
         return new Vector2(to+shift/3f,corner);
     }
+    public Vector3 NoteEmissionPoint(int index)=>transform.TransformPoint(GetPointAt(HarmonyModel.Mod(index*5)/12f+currentVisualRotation,(index/12+1)/(float)Octaves));
+    public Vector3 NoteEmissionNormal(int index)=>ChordRegionNormal(ChordRegionCoordinate(HarmonyModel.Mod(index),HarmonyModel.Mod(index)));
     public Vector3 ChordRegionPoint(Vector2 uv)
     {
         int side=Mathf.FloorToInt(uv.y);
         return transform.TransformPoint(Vector3.Lerp(GetPointAt(uv.x+side/3f,1),GetPointAt(uv.x+(side+1)/3f,1),uv.y-side));
+    }
+    public Vector3 ChordRegionNormal(Vector2 uv)
+    {
+        const float e=.0001f;
+        var du=ChordRegionPoint(uv+Vector2.right*e)-ChordRegionPoint(uv-Vector2.right*e);
+        var dv=ChordRegionPoint(uv+Vector2.up*e)-ChordRegionPoint(uv-Vector2.up*e);
+        var normal=Vector3.Cross(du.normalized,dv.normalized).normalized;
+        var local=transform.InverseTransformPoint(ChordRegionPoint(uv));
+        var center=new Vector3(local.x,0,local.z).normalized*Rad;
+        if(Vector3.Dot(normal,transform.TransformVector(local-center))<0)normal=-normal;
+        return normal;
     }
     Vector3 SurfaceRoutePoint(float from,float to,int shift,float ra,float rb,float u)
     {

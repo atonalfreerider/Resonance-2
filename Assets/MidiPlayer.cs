@@ -16,6 +16,8 @@ public class MidiPlayer : MonoBehaviour
     public string Status { get; private set; } = "Load a MIDI file";
     public int TrackCount { get; private set; }
     public bool IsPlaying { get; private set; }
+    public bool IsAudible=>IsPlaying&&AudioSettings.dspTime>=originDsp;
+    bool primeVisuals;
     public double ScoreDuration { get; private set; }
     public SongAudio Recording => GetComponent<SongAudio>();
     public double Duration => Recording != null && Recording.Ready ? Recording.Source.clip.length : ScoreDuration;
@@ -29,7 +31,12 @@ public class MidiPlayer : MonoBehaviour
     public bool MatchPatternPitch;
     double memoryPosition;
     int memoryIndex;
-    public double Position => IsPlaying ? (Recording != null && Recording.Ready ? (AudioSettings.dspTime < originDsp ? originPosition : (double)Recording.Source.timeSamples / Recording.Source.clip.frequency) : Math.Min(Duration, originPosition + Math.Max(0,AudioSettings.dspTime-originDsp)*playbackSpeed)) : originPosition;
+    // PlayScheduled and all visual deadlines use the same continuous DSP clock.
+    public static double ScheduledPosition(double start,double dspStart,double dspNow,float speed,double duration)=>Math.Min(duration,start+Math.Max(0,dspNow-dspStart)*speed);
+    public double Position => IsPlaying?ScheduledPosition(originPosition,originDsp,AudioSettings.dspTime,playbackSpeed,Duration):originPosition;
+    double frameScorePosition;int sampledFrame=-1;
+    public double VisualScorePosition=>sampledFrame==Time.frameCount?frameScorePosition:ScorePosition;
+
     sealed class Frame
     {
         public double Time;
@@ -99,7 +106,7 @@ public class MidiPlayer : MonoBehaviour
     }
     void Rebase(double position)
     {
-        originPosition=Math.Clamp(position,0,Duration); originDsp=AudioSettings.dspTime+.05;
+        sampledFrame=-1;originPosition=Math.Clamp(position,0,Duration); originDsp=AudioSettings.dspTime+.05;
         main.Synth.ResetVoices(); visualIndex=0;
         bool recorded=Recording!=null && Recording.Ready;
         double scorePosition=recorded?Recording.Alignment.ToMidi(originPosition):originPosition;
@@ -108,7 +115,7 @@ public class MidiPlayer : MonoBehaviour
         audioIndex=visualIndex;
         memoryPosition=scorePosition; memoryIndex=visualIndex;
         var notes=visualIndex>0?frames[visualIndex-1].Notes:new List<Tuple<int,float>>();
-        if(!recorded)main.Synth.Schedule(originDsp,notes); main.SetNotes(notes,false);
+        if(!recorded)main.Synth.Schedule(originDsp,notes);main.SetNotes(new List<Tuple<int,float>>(),false);primeVisuals=true;
         ApplyKey(visualIndex>0?frames[visualIndex-1]:null);
     }
     void ApplyKey(Frame frame)
@@ -120,12 +127,13 @@ public class MidiPlayer : MonoBehaviour
     }
     public void Pause()
     {
-        double position=Position; IsPlaying=false; originPosition=position; Recording?.Source.Pause(); main.Silence();
+        double position=Position;sampledFrame=-1; IsPlaying=false; originPosition=position; Recording?.Source.Pause(); main.Silence();
     }
-    public void Stop() { Recording?.Source.Stop(); IsPlaying=false; originPosition=0; visualIndex=audioIndex=0; if (main!=null) main.Silence(); }
+    public void Stop() { sampledFrame=-1; Recording?.Source.Stop(); IsPlaying=false; originPosition=0; visualIndex=audioIndex=0; GetComponent<FeaturedInstrument>()?.ResetPosition();if (main!=null) main.Silence(); }
     public void Seek(double seconds)
     {
         if (!Loaded || main.Synth==null) return;
+        GetComponent<FeaturedInstrument>()?.ResetPosition();
         bool playing=IsPlaying; main.Silence();main.ClearVisualMemory(); Rebase(seconds); if (!playing) main.Synth.ResetVoices();
     }
     public void SetSpeed(float speed)
@@ -137,8 +145,8 @@ public class MidiPlayer : MonoBehaviour
     {
         if (Keyboard.current!=null && Keyboard.current.spaceKey.wasPressedThisFrame && ExplorerInputFocus.ViewportOwnsKeyboard)
         { if (IsPlaying) Pause(); else Play(); }
-        if (!IsPlaying) return;
-        double position=ScorePosition;
+        if (!IsAudible) return;
+        double position=ScorePosition;frameScorePosition=position;sampledFrame=Time.frameCount;
         // Integrate every MIDI snapshot, including notes shorter than a rendered frame.
         while(memoryIndex<frames.Count && frames[memoryIndex].Time<=position)
         {
@@ -154,7 +162,8 @@ public class MidiPlayer : MonoBehaviour
         }
         int previous=visualIndex;
         while (visualIndex<frames.Count && frames[visualIndex].Time<=position) { foreach(var attack in frames[visualIndex].Attacks) main.StrikeNote(attack.Pitch-21,attack.Velocity);visualIndex++; }
-        if (visualIndex!=previous && visualIndex>0) { var frame=frames[visualIndex-1]; main.SetNotes(frame.Notes,false); ApplyKey(frame); }
+        if ((visualIndex!=previous||primeVisuals) && visualIndex>0) { var frame=frames[visualIndex-1]; main.SetNotes(frame.Notes,false); ApplyKey(frame); }
+        primeVisuals=false;
         if (Position>=Duration-.025 || (Recording!=null && Recording.Ready && AudioSettings.dspTime>originDsp+.1 && !Recording.Source.isPlaying)) { if (Loop) { originPosition=0; Rebase(0); } else Stop(); }
     }
     void OnApplicationFocus(bool focus) { if (!focus && IsPlaying) Pause(); }
