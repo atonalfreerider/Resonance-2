@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -23,6 +24,7 @@ public sealed class SongAudio : MonoBehaviour
     public string Status="Load a recording and its offline-preprocessed MIDI.";
     public string AudioPath="";
     public string ReportPath {get;private set;}
+    public string RecordingName {get;private set;}
     MidiPlayer midi;Main main;int generation;
     TextField audioField,midiField;Label status;
     string Library=>Path.Combine(Application.persistentDataPath,"Songs");
@@ -57,7 +59,7 @@ public sealed class SongAudio : MonoBehaviour
     public void Unload()
     {
         generation++;Busy=false;Source.Stop();if(Source.clip!=null)Destroy(Source.clip);
-        Source.clip=null;Alignment=null;ReportPath=null;
+        Source.clip=null;Alignment=null;ReportPath=null;RecordingName=null;AudioPath="";
         if(main.Synth!=null)main.Synth.GetComponent<AudioSource>().mute=false;
     }
     IEnumerator Start()
@@ -74,7 +76,7 @@ public sealed class SongAudio : MonoBehaviour
         try{manifest=ValidatePrepared(audio,score,out canonical,out report);}
         catch(Exception e){Status=e.Message;yield break;}
         if(!midi.Load(score)){Status=midi.Status;yield break;}
-        Busy=true;int version=generation;Status="Loading fingerprint-aligned song…";AudioPath=canonical;ReportPath=report;midi.playbackSpeed=1;
+        Busy=true;int version=generation;Status="Loading fingerprint-aligned song…";AudioPath=canonical;RecordingName=Path.GetFileName(manifest.sourceAudioPath);ReportPath=report;midi.playbackSpeed=1;
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
         string decodePath=canonical;
         var decode=Task.Run(()=>
@@ -120,6 +122,10 @@ public sealed class SongAudio : MonoBehaviour
         var box=new Foldout{text="SONG · preprocessed recording + MIDI",value=true};
         string libraryPath=Path.GetFullPath(Path.Combine(Application.dataPath,"../PreparedSongs"));
         var songs=Directory.Exists(libraryPath)?new System.Collections.Generic.List<string>(Directory.GetFiles(libraryPath,"*.patterns.json",SearchOption.AllDirectories)):new System.Collections.Generic.List<string>();
+        // Prefer a completed recording bundle over its duplicate restored-score entry.
+        songs=songs.Where(s=>!s.Contains(Path.DirectorySeparatorChar+"Recordings"+Path.DirectorySeparatorChar)||File.Exists(s.Substring(0,s.Length-".patterns.json".Length)+".prepared.json"))
+            .GroupBy(s=>Path.GetFileName(Path.GetDirectoryName(s)),StringComparer.OrdinalIgnoreCase)
+            .Select(g=>g.OrderByDescending(s=>File.Exists(s.Substring(0,s.Length-".patterns.json".Length)+".prepared.json")).First()).ToList();
         songs.Sort(StringComparer.OrdinalIgnoreCase);
         var choices=new System.Collections.Generic.List<string>();foreach(var song in songs){string score=song.Substring(0,song.Length-".patterns.json".Length);choices.Add(Path.GetFileName(Path.GetDirectoryName(score))+(File.Exists(score+".prepared.json")?" · recording":" · restored score"));}
         if(songs.Count>0){string last=PlayerPrefs.GetString("Resonance.LastMidi").Replace('/',Path.DirectorySeparatorChar)+".patterns.json";int selected=Math.Max(0,songs.FindIndex(s=>string.Equals(s,last,StringComparison.OrdinalIgnoreCase)));var library=new DropdownField("Prepared library",choices,selected);box.Add(library);
@@ -136,8 +142,8 @@ public sealed class SongAudio : MonoBehaviour
         var transport=new VisualElement();transport.AddToClassList("row");box.Add(transport);
         transport.Add(new Button(()=>{if(midi.IsPlaying)midi.Pause();else midi.Play();}){text="Play / pause"});transport.Add(new Button(midi.Stop){text="Stop"});
         var position=new Slider("Recording position",0,1);position.RegisterValueChangedCallback(e=>{if(midi.Loaded)midi.Seek(e.newValue*midi.Duration);});box.Add(position);
-        var clock=new Label();box.Add(clock);
-        box.schedule.Execute(()=>{position.SetValueWithoutNotify(midi.Duration>0?(float)(midi.Position/midi.Duration):0);clock.text=$"{midi.Position:0.00}s / {midi.Duration:0.00}s";}).Every(100);
+        var clock=new Label();box.Add(clock);var recordingLabel=new Label(){name="linked-recording"};recordingLabel.style.whiteSpace=WhiteSpace.Normal;box.Add(recordingLabel);
+        box.schedule.Execute(()=>{position.SetValueWithoutNotify(midi.Duration>0?(float)(midi.Position/midi.Duration):0);clock.text=$"{midi.Position:0.00}s / {midi.Duration:0.00}s";recordingLabel.text=Ready?$"{(midi.IsPlaying?"Playing recording":"Linked recording")}: {RecordingName}\nWAV audio · MIDI drives visualization":Busy?"Loading recording…":"MIDI preview · no recording linked";}).Every(100);
         status=new Label(Status);status.style.whiteSpace=WhiteSpace.Normal;box.Add(status);
         return box;
     }

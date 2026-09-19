@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "audioPath": "recording.wav",
+  "midiPath": "aligned.mid",
+  "reportPath": "report.html",
+  "sourceAudioPath": "C:\\Users\\johnb\\Desktop\\resonance-music\\StreamingAssets\\WAV\\JustAnotherInterlude.wav",
+  "sourceAudioSha256": "498a2c2074d9eb4186aee881cba9fd6138e3b021076890f3f9f159c687babf4e",
+  "sourceMidiSha256": "9f281c404b2520c47b8e2891fab5388eeef3a9e795039fb0cb38615f3dffe003",
+  "audioSha256": "de01fae8fdc5a1ccb47153b25f8db0696514bfad3ad477b95066f539df3c3e17",
+  "midiSha256": "f5543fa204f59f0e5037ff74096ec8f90831c0ccfe7de2a470766e64393cb2cc",
+  "featureResolutionMs": 10.0,
+  "status": "fingerprint-aligned; review weak windows",
+  "audioDuration": 185.83437641723356
+}

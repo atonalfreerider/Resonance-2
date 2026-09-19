@@ -110,3 +110,19 @@ Non-cross-section chord intervals now always use sampled umbilic curves. Octaves
 - Default UI Toolkit layout is imported, with dark popup inner-container styling to prevent overlapping or low-contrast song choices.
 - Drum ripple origins follow the twelve-o'clock instrument-lane collision point. Saved GM classifications control size, frequency and decay; these are not measured audio spectra.
 - Validation: 785 model checks, five Python preparation/restoration/compression tests, per-bundle reconstruction checks, and Unity section/key/popup/drum/rack/route integration checks. See `Temp/ResonanceChecks/section-wheels.txt` for the latest runtime result.
+
+
+## Overhead framing, moving rack and supplied recordings
+
+Camera reset now frames the torus farther right/lower with a 48-degree elevation. Drum impacts emit a wide low-frequency bass crest and two weaker trailing crests; other instruments use quieter thin waves. The playhead is a small triangle.
+
+Rack teeth scroll continuously from recording time. Boundary pins pass a fixed trigger and select the saved section route. Section take dials and channel pattern/variant dials retain the mechanical-clock metaphor. Button text/enabled updates run in TickControls, outside generateVisualContent, fixing the reported render-tree mutation exception.
+
+All six WAVs from the legacy StreamingAssets/WAV folder are prepared under PreparedSongs/Recordings. Library entries prefer complete recording bundles and show the actual source filename. Extreme automatic fingerprint knots are merged to satisfy MIDI’s tempo encoding limit, with deviations recorded explicitly; finer PPQ retains sub-2ms export precision. One dangling terminal percussion note does not block pitched fingerprint extraction. Original inputs and MIDI payloads are preserved. These exports are not certified musically exact: many fingerprint windows are weak and need reviewed anchors.
+
+
+## Upper-right torus and overhead percussion
+
+The default/reset camera is closer (5-unit radius) and frames the torus in the upper right. Percussion is isolated on layer 30 and rendered by a square, orthographic, straight-down camera in the bottom right. Main-camera orbit no longer changes the drum view. Kicks use a single broad crest with a 0.24-second envelope; follow crests are disabled for kicks only.
+
+Chord creation/retrigger starts a white HDR flash with a fast exponential decay into the harmonic color. Pattern notes retain their onset dots plus a fading circular duration ribbon calculated from each saved slot length and variant length residual. Notes longer than a full cycle carry a cycle-count label.

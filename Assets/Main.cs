@@ -282,7 +282,7 @@ public class Main : MonoBehaviour
         if (audio && Synth != null) { Synth.ResetVoices(); Synth.Schedule(AudioSettings.dspTime, lastActiveKeys); }
         StateChanged?.Invoke();
     }
-    public void StrikeNote(int index,float velocity){if(index>=0&&index<notes.Count)notes[index].Strike(velocity);}
+    public void StrikeNote(int index,float velocity){if(index>=0&&index<notes.Count){notes[index].Strike(velocity);foreach(var chord in chordLineRenderers.Values)if(!chord.Releasing&&(chord.Note1.Index==index||chord.Note2.Index==index))chord.Strike();}}
     public void Silence() => PlayKeys(new List<Tuple<int, float>>());
     void RenderKeys()
     {

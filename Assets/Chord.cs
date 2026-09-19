@@ -13,12 +13,15 @@ public class Chord : MonoBehaviour
     TonalDominance dominance;
     Color startHue,endHue;
     readonly VisualRelease release=new();
-    float amp1,amp2,peak,releaseSeconds=2.4f;
+    float amp1,amp2,peak,releaseSeconds=2.4f,attackAge=10;
+    public float AttackFlash=>Mathf.Exp(-attackAge*16);
+    public void Strike()=>attackAge=0;
     public bool Releasing => !release.Held;
     public bool TailComplete => Releasing && release.Level<=0;
     public float VisualAmplitude => release.Level;
     public void Drive(float a,float b,Color start,Color end,float seconds)
     {
+        if(!release.Held)Strike();
         amp1=a;amp2=b;peak=(a+b)*.5f;releaseSeconds=seconds;release.Set(peak);
         startHue=start;endHue=end;line.startColor=start;line.endColor=end;
     }
@@ -33,7 +36,7 @@ public class Chord : MonoBehaviour
         line.alignment = LineAlignment.View;
         line.widthCurve = AnimationCurve.Linear(0, 1, 1, 1);
         curved = false;
-        release.Clear();
+        release.Clear();attackAge=10;
         Resize(segmentCount + 1);
     }
     void Resize(int count)
@@ -54,9 +57,11 @@ public class Chord : MonoBehaviour
         float fade=peak>0?release.Level/peak:0;
         line.startColor=dominance!=null?dominance.Blend(startHue,dominance.Energy):startHue;
         line.endColor=dominance!=null?dominance.Blend(endHue,dominance.Energy):endHue;
-        line.startWidth = (.004f + amp1 * .01f)*Mathf.Sqrt(fade);
-        line.endWidth = (.004f + amp2 * .01f)*Mathf.Sqrt(fade);
-        line.sharedMaterial.SetColor("_BaseColor",Color.white*((2+5*(amp1+amp2))*fade));
+        float flash=AttackFlash;attackAge+=Time.unscaledDeltaTime;
+        line.startColor=Color.Lerp(line.startColor,Color.white,flash);line.endColor=Color.Lerp(line.endColor,Color.white,flash);
+        line.startWidth = (.004f + amp1 * .01f)*Mathf.Sqrt(fade)*(1+flash*.6f);
+        line.endWidth = (.004f + amp2 * .01f)*Mathf.Sqrt(fade)*(1+flash*.6f);
+        line.sharedMaterial.SetColor("_BaseColor",Color.white*((2+5*(amp1+amp2))*(1+flash*1.8f)*fade));
         float amp = Main.ReducedMotion ? 0 : release.Level * amplitudeScale*3.2f*(Releasing?Mathf.Sqrt(fade):1);
         for (int i = 0; i < basis.Length; i++)
         {

@@ -36,7 +36,7 @@ dotnet run --project Tools/PatternPrep/PatternPrep.csproj -- "PreparedSongs/MySo
 
 `Tools/SongPrep/prepare-song.ps1` now runs this step automatically after fingerprint alignment, and uses authored pattern data beside the source MIDI when present.
 
-The restored Ticket to Ride score is fingerprint-prepared with its recording in `PreparedSongs/TicketToRide-Restored`: 5,279 notes including 1,569 drum hits. Its first 3,710 pitched notes match the earlier percussion-free score. The other restored library entries are score previews. The attempted Come First recording alignment was rejected because its computed tempo map exceeded MIDI encoding limits; it is not offered as an aligned recording. It needs reviewed matching cues before pairing.
+The restored Ticket to Ride score is fingerprint-prepared with its recording in `PreparedSongs/TicketToRide-Restored`: 5,279 notes including 1,569 drum hits. Its first 3,710 pitched notes match the earlier percussion-free score. Six supplied WAVs now have recording bundles in `PreparedSongs/Recordings`: ComeFirst, Drank, JustAnotherInterlude, SaySo, Sexual, and TouchxBeMyBaby. The library prefers these to duplicate score previews. Other entries without supplied recordings remain score previews. Automatic alignment reports contain substantial weak regions; review the listening previews and use matching anchors for tighter synchronization.
 
 ## Display
 
@@ -46,7 +46,7 @@ An optional `song.json` beside the MIDI supplies `Key` (A-based pitch class, A=0
 
 The compiler deduplicates rhythm slots across transposition and chord-quality changes, storing exact timing, pitch and velocity residuals. It reconstructs and compares every event before saving. Ticket to Ride's 5,279 notes use 977 rhythm slots in 105 templates, plus variations and occurrences. This is structural reuse, not a claim that the complete JSON is smaller than MIDI.
 
-The drum changer sits below the torus in the XZ plane. Dimple positions use the saved drum notes, and strikes trigger from the same recording clock that rotates the disc. White waves originate at each instrument lane’s twelve-o’clock strike point and stay in the disc plane. Kick waves are large, snare/tom waves smaller, hats and shakers tiny and short-lived, and cymbals intermediate. Broad kick pulses, denser snare waves, and fine hat/cymbal ripples use precomputed **General MIDI instrument-band classifications**, not measured spectra of individual recording hits. Pause/seek/loop clear obsolete waves.
+The drum changer sits below the torus in the XZ plane. Dimple positions use the saved drum notes, and strikes trigger from the same recording clock that rotates the disc. A small triangle marks twelve o’clock. A broad bass-drum crest and subtler trailing pond ripples replace the bright radial playhead and sharp single rings. White waves originate at each instrument lane’s twelve-o’clock strike point and stay in the disc plane. Kick waves are large, snare/tom waves smaller, hats and shakers tiny and short-lived, and cymbals intermediate. Broad kick pulses, denser snare waves, and fine hat/cymbal ripples use precomputed **General MIDI instrument-band classifications**, not measured spectra of individual recording hits. Pause/seek/loop clear obsolete waves.
 
 Section names without MIDI markers are estimates; they are not asserted to be verse/chorus labels. Fingerprint reports distinguish encoding precision from musical matching confidence.
 

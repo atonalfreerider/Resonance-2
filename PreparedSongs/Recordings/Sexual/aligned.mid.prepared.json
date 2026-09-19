@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "audioPath": "recording.wav",
+  "midiPath": "aligned.mid",
+  "reportPath": "report.html",
+  "sourceAudioPath": "C:\\Users\\johnb\\Desktop\\resonance-music\\StreamingAssets\\WAV\\Sexual.wav",
+  "sourceAudioSha256": "c2d5082a2e013f78abdfd7228283af84e4bf9f7c380a6a13e9a7bfcd9c89fb04",
+  "sourceMidiSha256": "56110f81e55087ae567c62eddef7ad8f713e1b99e26e150b368c25548487e534",
+  "audioSha256": "3bc0adc26e75fda673b8f6be9735d5926c7985c6b5d8ac1d033d7f27d9742844",
+  "midiSha256": "abcabcb1bd09b520bb3231d1f8822fefb338bf7dc7ee2a1844e03af8292dc62c",
+  "featureResolutionMs": 10.0,
+  "status": "fingerprint-aligned; review weak windows",
+  "audioDuration": 188.97244897959183
+}

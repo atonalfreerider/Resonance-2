@@ -5,8 +5,8 @@ public class CameraControl : MonoBehaviour
 {
     public float Speed = 0.3f;          // Speed of movement and rotation
     public Vector3 center = new Vector3(0,-.4f,0); // Frame the torus and the percussion player below it.
-    float rad = 5.4f;
-    float alpha = 65f * Mathf.Deg2Rad;
+    float rad = 5.0f;
+    float alpha = 42f * Mathf.Deg2Rad;
     float phi = 45f * Mathf.Deg2Rad;        // Azimuthal angle (around Y-axis) - set to 45 degrees
     
     public delegate void MovementUpdate();
@@ -15,7 +15,7 @@ public class CameraControl : MonoBehaviour
     void Start()
     {
         UpdateCameraPosition();
-        transform.LookAt(center);
+        transform.LookAt(FrameTarget);
     }
 
     void Update()
@@ -33,10 +33,10 @@ public class CameraControl : MonoBehaviour
             if(Mathf.Abs(scroll)>.01f){rad=Mathf.Clamp(rad-scroll*.0015f,.5f,10);changed=true;}
             if(changed){UpdateCameraPosition();MovementUpdater?.Invoke();}
         }
-        transform.LookAt(center); // Ensure the camera always looks at the center
+        transform.LookAt(FrameTarget); // Ensure the camera always looks at the center
     }
 
-    public void ResetView() { center=new Vector3(0,-.4f,0);rad=5.4f; alpha=65f*Mathf.Deg2Rad; phi=45f*Mathf.Deg2Rad; UpdateCameraPosition(); transform.LookAt(center); MovementUpdater?.Invoke(); }
+    public void ResetView() { center=new Vector3(0,-.4f,0);rad=5.0f; alpha=42f*Mathf.Deg2Rad; phi=45f*Mathf.Deg2Rad; UpdateCameraPosition(); transform.LookAt(FrameTarget); MovementUpdater?.Invoke(); }
     void MoveCamera()
     {
         bool isMoving = false; // Flag to check if any movement key is pressed
@@ -102,10 +102,13 @@ public class CameraControl : MonoBehaviour
     /// <summary>
     /// Updates the camera's position based on the current spherical coordinates.
     /// </summary>
+    Vector3 FrameTarget => center + new Vector3(Mathf.Sin(phi),0,-Mathf.Cos(phi))*.95f
+        - new Vector3(-Mathf.Cos(alpha)*Mathf.Cos(phi),Mathf.Sin(alpha),-Mathf.Cos(alpha)*Mathf.Sin(phi))*.55f;
+
     void UpdateCameraPosition()
     {
         // Convert spherical coordinates to Cartesian coordinates
-        Vector3 newPosition = center + new Vector3(
+        Vector3 newPosition = FrameTarget + new Vector3(
             rad * Mathf.Sin(alpha) * Mathf.Cos(phi), // X component
             rad * Mathf.Cos(alpha),                  // Y component
             rad * Mathf.Sin(alpha) * Mathf.Sin(phi)  // Z component

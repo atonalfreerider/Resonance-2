@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 // Percussion has its own XZ-plane player below the torus. It never enters tonal voices.
 public sealed class DrumPatternDeck : MonoBehaviour
 {
-    MidiPlayer midi;Main main;PreparedPatternSong source;
+    MidiPlayer midi;Main main;PreparedPatternSong source;Camera drumCamera;int originalMask;
+    public Camera OverheadCamera=>drumCamera;
     Transform deck;Material material,discMaterial;Mesh discMesh;readonly List<LineRenderer> rings=new();readonly List<Transform> pins=new();
     readonly List<LineRenderer> waves=new();readonly List<Ripple> ripples=new();
     PreparedPatternSong.Disk[] disks=Array.Empty<PreparedPatternSong.Disk>();
@@ -19,6 +21,12 @@ public sealed class DrumPatternDeck : MonoBehaviour
     {
         midi=GetComponent<MidiPlayer>();main=GetComponent<Main>();
         deck=new GameObject("Percussion CD changer · twelve o'clock playhead").transform;deck.SetParent(transform,false);deck.localPosition=new Vector3(0,-1.3f,0);
+        originalMask=Camera.main.cullingMask;Camera.main.cullingMask &= ~(1<<30);
+        var cameraObject=new GameObject("Drum overhead view");drumCamera=cameraObject.AddComponent<Camera>();
+        drumCamera.orthographic=true;drumCamera.orthographicSize=1.85f;drumCamera.nearClipPlane=.1f;drumCamera.farClipPlane=20;
+        drumCamera.cullingMask=1<<30;drumCamera.clearFlags=CameraClearFlags.SolidColor;drumCamera.backgroundColor=Color.black;drumCamera.depth=10;
+        drumCamera.allowHDR=true;drumCamera.GetUniversalAdditionalCameraData().renderPostProcessing=true;
+        drumCamera.GetUniversalAdditionalCameraData().volumeLayerMask=Camera.main.GetUniversalAdditionalCameraData().volumeLayerMask;
         material=new Material(Resources.Load<Shader>("HarmonicGlow"));material.SetColor("_BaseColor",Color.white*2);
         discMaterial=new Material(Shader.Find("Universal Render Pipeline/Unlit"));discMaterial.SetColor("_BaseColor",new Color(.014f,.022f,.032f));
         var vertices=new List<Vector3>();var triangles=new List<int>();
@@ -26,8 +34,17 @@ public sealed class DrumPatternDeck : MonoBehaviour
         discMesh=new Mesh{name="Percussion disc annulus"};discMesh.SetVertices(vertices);discMesh.SetTriangles(triangles,0);discMesh.RecalculateNormals();
         for(int layer=0;layer<4;layer++){var disc=new GameObject("Stacked rhythm disc");disc.transform.SetParent(deck,false);disc.transform.localPosition=new Vector3(0,-layer*.065f-.006f,0);disc.AddComponent<MeshFilter>().sharedMesh=discMesh;disc.AddComponent<MeshRenderer>().sharedMaterial=discMaterial;}
         for(int i=0;i<10;i++)rings.Add(Line("Disc groove",.009f));
-        for(int i=0;i<32;i++){var line=Line("Percussion energy ripple",.012f);line.enabled=false;waves.Add(line);}
-        var needle=Line("Drum playhead",.025f);needle.positionCount=2;needle.SetPositions(new[]{new Vector3(0,.025f,.2f),new Vector3(0,.025f,1.23f)});needle.startColor=needle.endColor=Color.white;
+        for(int i=0;i<96;i++){var line=Line("Percussion energy ripple",.012f);line.enabled=false;waves.Add(line);}
+        var needle=Line("Drum twelve o’clock triangle",.014f);needle.positionCount=4;needle.SetPositions(new[]{new Vector3(-.065f,.025f,1.27f),new Vector3(0,.025f,1.16f),new Vector3(.065f,.025f,1.27f),new Vector3(-.065f,.025f,1.27f)});needle.startColor=needle.endColor=new Color(.6f,.7f,.78f);
+    }
+    void LateUpdate()
+    {
+        if(drumCamera==null||deck==null)return;
+        drumCamera.enabled=deck.gameObject.activeSelf;
+        float size=Mathf.Min(Screen.height*.40f,Screen.width*.29f);
+        drumCamera.pixelRect=new Rect(Screen.width-size-14,10,size,size);
+        drumCamera.transform.position=deck.position+Vector3.up*8;drumCamera.transform.rotation=Quaternion.Euler(90,0,0);
+        foreach(var t in deck.GetComponentsInChildren<Transform>(true))t.gameObject.layer=30;
     }
     LineRenderer Line(string name,float width)
     {var go=new GameObject(name);go.transform.SetParent(deck,false);var l=go.AddComponent<LineRenderer>();l.sharedMaterial=material;l.useWorldSpace=false;l.widthMultiplier=width;l.positionCount=points.Length;l.startColor=l.endColor=new Color(.17f,.28f,.4f);return l;}
@@ -44,7 +61,7 @@ public sealed class DrumPatternDeck : MonoBehaviour
         double beat=midi.Cycles.BeatAt(midi.ScorePosition),now=midi.ScorePosition;
         bool jump=now<previous||Math.Abs(now-previous)>.3||(!wasPlaying&&midi.IsPlaying);
         if(jump){ripples.Clear();nextHit=Array.FindIndex(hits,h=>h.Beat>=beat-.00001);if(nextHit<0)nextHit=hits.Length;}
-        if(midi.IsPlaying)while(nextHit<hits.Length&&hits[nextHit].Beat<=beat){var hit=hits[nextHit++];ripples.Add(new Ripple{Start=midi.Cycles.SecondsAt(hit.Beat),Frequency=hit.RippleFrequency,Decay=hit.DecaySeconds,Velocity=hit.Velocity,Radius=hit.RippleRadius,Width=hit.RippleWidth,Origin=new Vector3(0,.015f,hit.StrikeRadius)});}
+        if(midi.IsPlaying)while(nextHit<hits.Length&&hits[nextHit].Beat<=beat){var hit=hits[nextHit++];ripples.Add(new Ripple{Start=midi.Cycles.SecondsAt(hit.Beat),Frequency=hit.RippleFrequency,Decay=hit.RippleFrequency==4?.24f:hit.DecaySeconds,Velocity=hit.Velocity,Radius=hit.RippleRadius,Width=hit.RippleWidth,Origin=new Vector3(0,.015f,hit.StrikeRadius)});}
         if(!midi.IsPlaying)ripples.Clear();previous=now;wasPlaying=midi.IsPlaying;
         PreparedPatternSong.Disk current=null;PreparedPatternSong.Visit visit=null;
         foreach(var d in disks)foreach(var v in d.Visits)if(v.Beat<=beat&&beat<v.Beat+d.Beats){current=d;visit=v;}
@@ -62,19 +79,28 @@ public sealed class DrumPatternDeck : MonoBehaviour
             float energy=midi.IsPlaying&&elapsed>=0?(float)Math.Exp(-elapsed*12):0;
             pins[i].localPosition=new Vector3(Mathf.Sin(angle)*radius,.025f,Mathf.Cos(angle)*radius);
             pins[i].localScale=Vector3.one*(.025f+.05f*energy)*Mathf.Sqrt(hit.Velocity);
-            block.SetColor("_BaseColor",Color.white*(.55f+energy*18));pins[i].GetComponent<Renderer>().SetPropertyBlock(block);
+            block.SetColor("_BaseColor",Color.white*(.3f+energy*1.8f));pins[i].GetComponent<Renderer>().SetPropertyBlock(block);
         }
-        ripples.RemoveAll(r=>now-r.Start>r.Decay);
-        if(ripples.Count>waves.Count)ripples.RemoveRange(0,ripples.Count-waves.Count);
+        ripples.RemoveAll(r=>now-r.Start>r.Decay*1.3f);
+        if(ripples.Count>waves.Count/3)ripples.RemoveRange(0,ripples.Count-waves.Count/3);
         for(int n=0;n<waves.Count;n++)
         {
-            var line=waves[n];line.enabled=n<ripples.Count;if(!line.enabled)continue;
-            var wave=ripples[n];float age=(float)(now-wave.Start);int frequency=wave.Frequency;
-            float progress=Mathf.Clamp01(age/Mathf.Max(.05f,wave.Decay));float decay=Mathf.Exp(-progress*4);float radius=wave.Radius*(1-Mathf.Exp(-progress*3));
-            for(int i=0;i<points.Length;i++){float a=i*Mathf.PI*2/(points.Length-1);float corrugation=Main.ReducedMotion?0:Mathf.Sin(a*frequency-age*frequency*8)*Mathf.Min(.035f,radius*.07f)*decay;float r=radius+corrugation;points[i]=wave.Origin+new Vector3(Mathf.Sin(a)*r,0,Mathf.Cos(a)*r);}
-            line.SetPositions(points);line.widthMultiplier=wave.Width*decay;
-            line.startColor=line.endColor=Color.white*(decay*wave.Velocity*(frequency==4?8:5));
+            var line=waves[n];int hitIndex=n/3,follow=n%3;line.enabled=hitIndex<ripples.Count;if(!line.enabled)continue;
+            var wave=ripples[hitIndex];bool kick=wave.Frequency==4;
+            if(kick&&follow>0){line.enabled=false;continue;}
+            float lag=follow*wave.Decay*.12f,age=(float)(now-wave.Start)-lag;
+            if(age<=0){line.enabled=false;continue;}
+            float progress=Mathf.Clamp01(age/Mathf.Max(.05f,wave.Decay));
+            float envelope=Mathf.Exp(-progress*3)*Mathf.Pow(.38f,follow)*Mathf.Clamp01(age/.015f);
+            float radius=wave.Radius*(1-Mathf.Exp(-progress*(kick?4.5f:2.4f)));
+            for(int i=0;i<points.Length;i++){
+                float a=i*Mathf.PI*2/(points.Length-1);
+                float corrugation=Main.ReducedMotion?0:Mathf.Sin(a*wave.Frequency-age*wave.Frequency*2)*Mathf.Min(kick?.008f:.002f,radius*.015f)*envelope;
+                float r=radius+corrugation;points[i]=wave.Origin+new Vector3(Mathf.Sin(a)*r,0,Mathf.Cos(a)*r);
+            }
+            line.SetPositions(points);line.widthMultiplier=wave.Width*(kick?3.2f:.65f)*(1-progress*.6f)*(follow==0?1:.6f);
+            line.startColor=line.endColor=new Color(.82f,.91f,1f)*(envelope*wave.Velocity*(kick?2.2f:.65f));
         }
     }
-    void OnDestroy(){if(material!=null)Destroy(material);if(discMaterial!=null)Destroy(discMaterial);if(discMesh!=null)Destroy(discMesh);if(deck!=null)Destroy(deck.gameObject);}
+    void OnDestroy(){if(Camera.main!=null)Camera.main.cullingMask=originalMask;if(drumCamera!=null)Destroy(drumCamera.gameObject);if(material!=null)Destroy(material);if(discMaterial!=null)Destroy(discMaterial);if(discMesh!=null)Destroy(discMesh);if(deck!=null)Destroy(deck.gameObject);}
 }

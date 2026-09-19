@@ -58,7 +58,7 @@ def read_score(path):
                 if msg.channel != 9:
                     notes.append(dict(start=start, duration=max(.001, time-start), pitch=msg.note,
                                       velocity=velocity, instrument=str(track)))
-    if pending and any(pending.values()):
+    if any(voices for (_, channel, _), voices in pending.items() if channel != 9):
         raise ValueError('Unmatched MIDI note-on events; repair the score before alignment.')
     if not notes:
         raise ValueError('No pitched notes to align.')
@@ -67,9 +67,32 @@ def read_score(path):
     return midi, events, pd.DataFrame(notes), np.array(tempo_ticks), np.array(tempo_times)
 
 
+def encodable_time_map(tempo_ticks, tempo_times, score_times, audio_times, ppq):
+    """Merge pathological DTW knots until MIDI's 24-bit tempo can encode each span.
+
+    Preserve start/end and monotonicity. The report records the deviation; this
+    is regularization of an uncertain automatic match, not a measured cue.
+    """
+    ticks = np.interp(score_times, tempo_times, tempo_ticks)
+    keep = [0]
+    limit = 0xffffff * .90 / (ppq * 1e6)
+    for i in range(1, len(ticks)):
+        if ticks[i] > ticks[keep[-1]] and (audio_times[i]-audio_times[keep[-1]])/(ticks[i]-ticks[keep[-1]]) <= limit:
+            keep.append(i)
+    if keep[-1] != len(ticks)-1:
+        while len(keep)>1 and (audio_times[-1]-audio_times[keep[-1]])/max(1e-12,ticks[-1]-ticks[keep[-1]]) > limit:
+            keep.pop()
+        if (audio_times[-1]-audio_times[keep[-1]])/max(1e-12,ticks[-1]-ticks[keep[-1]]) > limit:
+            raise ValueError('The full score cannot fit the recording within MIDI tempo limits.')
+        keep.append(len(ticks)-1)
+    adjusted=np.interp(score_times,score_times[keep],audio_times[keep])
+    deviation=float(np.max(np.abs(adjusted-audio_times)))
+    return score_times[keep],audio_times[keep],len(ticks)-len(keep),deviation
+
+
 def retime(midi, events, tempo_ticks, tempo_times, score_times, audio_times, output):
     """Replace the tempo map, preserving musical ticks and all other event payloads."""
-    factor = max(1, int(np.ceil(1920/midi.ticks_per_beat)))
+    factor = max(1, min(32767//midi.ticks_per_beat, int(np.ceil(15360/midi.ticks_per_beat))))
     ppq = midi.ticks_per_beat * factor
     ticks = np.rint(np.interp(score_times, tempo_times, tempo_ticks)*factor).astype(int)
     unique = np.r_[True, np.diff(ticks) > 0]
@@ -176,6 +199,8 @@ def main():
     keep = (score_times > 0) & (score_times < tempo_times[-1]) & (audio_times > 0) & (audio_times < duration)
     score_times = np.r_[0., score_times[keep], tempo_times[-1]]
     audio_times = np.r_[0., audio_times[keep], duration]
+    score_times,audio_times,merged_knots,regularization_error = encodable_time_map(tempo_ticks,tempo_times,score_times,audio_times,midi.ticks_per_beat)
+    print(f'Merged {merged_knots} unencodable fingerprint knots; maximum map adjustment {regularization_error:.3f}s',flush=True)
     print('4/5 Bake recording timing into MIDI tempo events; verify all note/controller payloads', flush=True)
     exported = retime(midi, events, tempo_ticks, tempo_times, score_times, audio_times, aligned)
     expected = np.interp(notes.start, score_times, audio_times)
@@ -198,7 +223,7 @@ def main():
     metrics = dict(sourceDuration=float(tempo_times[-1]), audioDuration=duration, noteCount=len(notes),
                    featureResolutionMs=1000/rate, tuningCents=float(tuning), suggestedPitchClassShift=shift,
                    linearPitchSimilarity=float(before.mean()), alignedPitchSimilarity=float(matches.mean()),
-                   maxMidiExportErrorMs=float(errors.max()*1000), weakWindows=windows, verifiedPerfect=False)
+                   maxMidiExportErrorMs=float(errors.max()*1000), mergedFingerprintKnots=merged_knots, maxTimingRegularizationSeconds=regularization_error, weakWindows=windows, verifiedPerfect=False)
     (output/'analysis.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
     print('5/5 Export fingerprint plots, listening preview and Unity manifest', flush=True)
     import matplotlib
@@ -225,7 +250,7 @@ def main():
 <p>Pitch similarity: linear {before.mean():.1%} → aligned {matches.mean():.1%}. MIDI export timing error ≤ {errors.max()*1000:.3f} ms. This export error measures encoding fidelity, not musical alignment accuracy.</p>
 <p><b>Not certified perfect.</b> Missing/extra notes, performance differences and repeated harmony remain ambiguous. Suggested pitch-class shift: {shift}; pitches were preserved. Inspect the weak windows and use matching cues with --anchors to rerun offline.</p>
 <img src="fingerprints.png"><h2>Listening check</h2><p>Left: recording. Right: retimed note attacks. This preview is for checking alignment only; Unity plays the recording alone.</p><audio controls src="alignment-audition.wav"></audio>
-<h2>Weak fingerprint windows</h2><ul>{weak_rows or '<li>No windows below the diagnostic threshold.</li>'}</ul>
+<p>Tempo regularization merged {merged_knots} extreme fingerprint knots; maximum map adjustment {regularization_error:.3f}s. Review these automatic matches before relying on precise timing.</p><h2>Weak fingerprint windows</h2><ul>{weak_rows or '<li>No windows below the diagnostic threshold.</li>'}</ul>
 <p><a href="timing-map.csv">Timing map</a> · <a href="analysis.json">Metrics</a></p>''', encoding='utf-8')
     manifest = dict(version=1, audioPath='recording.wav', midiPath='aligned.mid', reportPath='report.html',
                     sourceAudioPath=str(audio_path), sourceAudioSha256=audio_hash, sourceMidiSha256=midi_hash,
