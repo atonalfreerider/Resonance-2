@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 import urllib.error
-from story import validate_cues, settle_transitions, seconds_at
+from story import validate_cues, settle_transitions, seconds_at, load_context
 
 class StoryChecks(unittest.TestCase):
     def setUp(self):
@@ -25,6 +25,13 @@ class StoryChecks(unittest.TestCase):
         data={'Tempos':[dict(Beat=0,Seconds=0,Microseconds=500000),dict(Beat=0,Seconds=0,Microseconds=1000000),dict(Beat=4,Seconds=4,Microseconds=250000)]}
         self.assertEqual(seconds_at(data,2),2)
         self.assertEqual(seconds_at(data,8),5)
+    def test_history_requires_known_sources(self):
+        with tempfile.TemporaryDirectory() as folder:
+            p=Path(folder)/'story.context.json'
+            p.write_text(json.dumps(dict(version=1,sources=[],facts=[dict(text='A historical assertion',sourceIds=['missing'])])))
+            with self.assertRaises(ValueError):load_context(folder)
+        with self.assertRaises(ValueError):validate_cues([dict(self.cue,sourceIds=['invented'])],30,['vocals'],['verified'])
+        validate_cues([dict(self.cue,sourceIds=['verified'])],30,['vocals'],['verified'])
     def test_request_keeps_key_out_of_payload_and_preserves_story_on_failure(self):
         from story import generate
         with tempfile.TemporaryDirectory() as folder:

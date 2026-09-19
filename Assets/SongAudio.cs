@@ -160,6 +160,6 @@ public sealed class SongAudio : MonoBehaviour
         ExplorerInputFocus.ClaimUI();field.Focus();
 #endif
     }
-    void Update(){if(status!=null)status.text=Status;if(main.Synth!=null){Source.volume=main.Synth.Volume*(GetComponent<StemPlayback>()?.MasterGain??1);Source.pitch=1;main.Synth.GetComponent<AudioSource>().mute=Ready&&midi.IsPlaying;}}
+    void Update(){if(status!=null)status.text=Status;if(main.Synth!=null){Source.volume=main.Synth.Volume*(GetComponent<StemPlayback>()?.MasterGain??1)*(GetComponent<SongNarration>()?.MusicGain??1);Source.pitch=1;main.Synth.GetComponent<AudioSource>().mute=Ready&&midi.IsPlaying;}}
     void OnDestroy(){generation++;if(Source!=null&&Source.clip!=null)Destroy(Source.clip);}
 }

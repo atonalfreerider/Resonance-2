@@ -62,6 +62,7 @@ def prepare_stems(bundle, notify=lambda x:None):
     folder=bundle/'stems';folder.mkdir(exist_ok=True);log=bundle.parent/'stems.log'
     notify('Separating vocals, bass, drums and accompaniment locally with Demucs')
     run([MODEL_PYTHON,ROOT/'Tools/SongLibrary/separate.py','--audio',bundle/'recording.wav','--output',folder],log)
+    for warning in read_json(folder/'separation.json',{}).get('qualityWarnings',[]):notify(warning)
     if read_json(bundle/'song.json',{}).get('StemTracks'):
         notify('Using the existing reviewed MIDI for stem notes; no neural retranscription')
         return compile_stems(bundle,notify)

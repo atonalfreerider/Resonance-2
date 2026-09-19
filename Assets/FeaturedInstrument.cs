@@ -17,6 +17,7 @@ public sealed class FeaturedInstrument : MonoBehaviour
     sealed class Sample { public int From,To;public float Progress,Stamp,Impact; }
     sealed class VoiceTrail { public PreparedPatternSong.MelodyStrand Data;public LineRenderer Line;public Transform Head;public readonly List<Sample> Samples=new(); }
     public int VoiceCount=>voices.Count;
+    public void GetFocusPoints(List<Vector3> points){points.Clear();foreach(var v in voices)if(v.Head!=null&&v.Head.gameObject.activeSelf){points.Add(v.Head.position);if(points.Count==2)break;}}
     public int VisibleHeads=>voices.Count(v=>v.Head.gameObject.activeSelf);
     public int Track {get;private set;}=-1;
     public int Channel {get;private set;}=-1;

@@ -163,3 +163,45 @@ Song media and all generated scores/analysis belong in local `PreparedSongs/` an
 ignored by Git. Keep only the synthetic `Examples/SongBundle/format-guide.json` as
 a format specimen, alongside the analysis code and tests. Removing files from Git
 tracking does not erase older commits or local media.
+
+## Feeling-led stories, voice and guide arrows
+
+Optional `story.context.json` supplies an `interpretiveLens`, verified `sources`
+(id/title/HTTPS URL), and `facts` with supporting `sourceIds`. History stays sourced;
+metaphors are presented as listening interpretations. An optional `scenePlan`
+fixes timing and choreography while the model writes the captions. Allow about
+0.4 seconds per spoken word, plus pauses. Review before rendering speech.
+
+Generate a cached AI voice track after approving the story:
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/library.py narrate PreparedSongs/<song> --key-file C:/private/openai-key.txt
+```
+
+The workshop also offers **Generate AI narration** using the same private key-file
+configuration. Only narration text is sent to the speech API. Default voice is
+`onyx` using `gpt-4o-mini-tts`, directed as a deep masculine baritone; no artist impersonation. Prepared WAV and MP3 files
+contain narration and timed silence, without the song mixed in. `narration.json`
+binds the WAV to the story and recording hashes. Long speech is gently fitted
+without pitch changes; excessively long captions are rejected for editing.
+
+In Unity, reload the story and enable **Director mode → AI voice narration**.
+The voice follows the recording DSP clock through playback, seeks and pauses.
+Music dips during speech and returns between passages. Playback needs no API key
+or network. The UI explicitly identifies the voice as AI-generated.
+
+Optional cue fields `annotationTarget` (`none`, `melody`, `drums`, `patterns`) and
+`annotationLabel` draw curved arrows to the featured visual. Two vocal strands
+receive separate pointers. Labels stay at a fixed upper-left reading anchor; only the pointer tips follow moving notes. Arrows hide during coil transitions and can be disabled
+with **Story guide arrows**. No visual-tree changes occur inside paint callbacks.
+
+## Recovering a missed bass stem
+
+If separation leaves bass in accompaniment, review the bass MIDI assignment first,
+then run `library.py repair-bass PreparedSongs/<song>`. This extracts recorded
+energy around the reviewed bass notes and their harmonics, subtracting the same
+signal from accompaniment to preserve the combined mix. It does not synthesize
+bass or rewrite MIDI. Shared harmonics can retain instrumental bleed. Backups and
+hashes are retained under ignored local data; a repeated identical repair is a
+no-op. Rebuilding separation requires reviewing/reapplying the repair. New stem
+jobs warn when bass energy is unusually low compared with low-register audio.

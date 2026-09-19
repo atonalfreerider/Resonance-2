@@ -122,6 +122,11 @@ class Handler(BaseHTTPRequestHandler):
                 from pipeline import export
                 p=bundle_path(body['id'])
                 return self.respond(dict(job=enqueue(lambda notify:export(p,ROOT/'Builds/SongBundles'/(p.name+'.zip')))))
+            if path=='/api/narrate':
+                from narration import generate
+                p=bundle_path(body['id']);key_file=getattr(self.server,'story_key_file',None)
+                if not key_file:raise ValueError('Configure the local story key file to enable narration')
+                return self.respond(dict(job=enqueue(lambda notify:generate(p,key_file,notify=notify))))
             if path=='/api/story':
                 from story import generate
                 p=bundle_path(body['id']);key_file=getattr(self.server,'story_key_file',None)

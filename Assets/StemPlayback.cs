@@ -89,6 +89,7 @@ public sealed class StemPlayback : MonoBehaviour
     void Update()
     {
         float step=Time.unscaledDeltaTime/.025f,volume=GetComponent<Main>().Synth?.Volume??0;
+        volume*=GetComponent<SongNarration>()?.MusicGain??1;
         MasterGain=Mathf.MoveTowards(MasterGain,SelectedId==""?1:0,step);
         recording.Source.volume=MasterGain*volume;
         foreach(var entry in cache){entry.Value.Gain=Mathf.MoveTowards(entry.Value.Gain,entry.Key==SelectedId?1:0,step);entry.Value.Source.volume=entry.Value.Gain*volume;}

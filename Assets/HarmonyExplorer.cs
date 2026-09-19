@@ -66,7 +66,7 @@ public class HarmonyExplorer : MonoBehaviour
         var highlight=new Foldout{text="White melody highlight (visual only)",value=false};solo.Add(highlight);highlight.Add(GetComponent<FeaturedInstrument>().BuildUI());
         orrery=new PatternWheelDeck(main,midi);structure.Add(orrery);orrery.AttachOverlay(root);
         gameObject.AddComponent<VisualizationViews>().Bind(root,controls,orrery);
-        gameObject.AddComponent<SongDirector>().Bind(root,controls,structure);
+        gameObject.AddComponent<SongDirector>().Bind(root,controls,structure,orrery);
         panel=advanced;
         Section(panel,"TONAL CONTEXT");
         keyChoice=Choice(panel,"Key / tonic",Enumerable.Range(0,12).Select(i=>HarmonyModel.Name(i)).ToList(),main.currentKey,i=> { midi?.Pause(); main.KeySource="Manual"; main.ChangeKey(i); });

@@ -17,6 +17,8 @@ public class MidiPlayer : MonoBehaviour
     public int TrackCount { get; private set; }
     public bool IsPlaying { get; private set; }
     public bool IsAudible=>IsPlaying&&AudioSettings.dspTime>=originDsp;
+    public double ClockPosition=>originPosition;
+    public double ClockDspStart=>originDsp;
     bool primeVisuals;
     public double ScoreDuration { get; private set; }
     public SongAudio Recording => GetComponent<SongAudio>();
@@ -133,6 +135,7 @@ public class MidiPlayer : MonoBehaviour
         double scorePosition=recorded?Recording.Alignment.ToMidi(originPosition):originPosition;
         if(recorded){Recording.Source.Stop();Recording.Source.timeSamples=Math.Clamp((int)(originPosition*Recording.Source.clip.frequency),0,Recording.Source.clip.samples-1);Recording.Source.pitch=playbackSpeed;if(IsPlaying)Recording.Source.PlayScheduled(originDsp);}
         GetComponent<StemPlayback>()?.Schedule(originPosition,originDsp,playbackSpeed,IsPlaying&&recorded);
+        GetComponent<SongNarration>()?.Schedule(originPosition,originDsp,playbackSpeed,IsPlaying&&recorded);
         while (visualIndex<frames.Count && frames[visualIndex].Time<=scorePosition) visualIndex++;
         audioIndex=visualIndex;
         memoryPosition=scorePosition; memoryIndex=visualIndex;
@@ -149,9 +152,10 @@ public class MidiPlayer : MonoBehaviour
     }
     public void Pause()
     {
+        GetComponent<SongNarration>()?.Stop();
         double position=Position;sampledFrame=-1; IsPlaying=false; originPosition=position; Recording?.Source.Pause();GetComponent<StemPlayback>()?.Pause(); main.Silence();
     }
-    public void Stop() { sampledFrame=-1; Recording?.Source.Stop();GetComponent<StemPlayback>()?.Stop(); IsPlaying=false; originPosition=0; visualIndex=audioIndex=0; GetComponent<FeaturedInstrument>()?.ResetPosition();if (main!=null) main.Silence(); }
+    public void Stop() { GetComponent<SongNarration>()?.Stop();sampledFrame=-1; Recording?.Source.Stop();GetComponent<StemPlayback>()?.Stop(); IsPlaying=false; originPosition=0; visualIndex=audioIndex=0; GetComponent<FeaturedInstrument>()?.ResetPosition();if (main!=null) main.Silence(); }
     public void Seek(double seconds)
     {
         if (!Loaded || main.Synth==null) return;

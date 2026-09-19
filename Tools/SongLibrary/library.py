@@ -11,6 +11,8 @@ def main():
     p=sub.add_parser('ingest');p.add_argument('audio');p.add_argument('--midi');p.add_argument('--title');p.add_argument('--offline',action='store_true');p.add_argument('--neural',action='store_true');p.add_argument('--meter',type=int,choices=[3,4],default=4)
     p=sub.add_parser('index');p.add_argument('directories',nargs='+')
     p=sub.add_parser('stems');p.add_argument('bundle')
+    p=sub.add_parser('repair-bass');p.add_argument('bundle')
+    p=sub.add_parser('narrate');p.add_argument('bundle');p.add_argument('--key-file',required=True);p.add_argument('--voice',default='onyx')
     p=sub.add_parser('story');p.add_argument('bundle');p.add_argument('--key-file',required=True);p.add_argument('--model',default='gpt-4.1')
     p=sub.add_parser('search');p.add_argument('title');p.add_argument('--online',action='store_true')
     p=sub.add_parser('export');p.add_argument('bundle');p.add_argument('zip')
@@ -21,6 +23,12 @@ def main():
     if a.command=='ingest':
         from pipeline import ingest
         result=ingest(a.audio,a.midi,a.title,not a.offline,a.neural,a.meter,lambda s:print(s,flush=True))
+    elif a.command=='repair-bass':
+        from repair_bass import repair
+        result=repair(a.bundle)
+    elif a.command=='narrate':
+        from narration import generate
+        result=generate(a.bundle,a.key_file,a.voice)
     elif a.command=='story':
         from story import generate
         result=generate(a.bundle,a.key_file,a.model)

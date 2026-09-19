@@ -9,7 +9,7 @@ using UnityEngine.UIElements;
 [DefaultExecutionOrder(80)]
 public sealed class SongDirector : MonoBehaviour
 {
-    [Serializable] public sealed class Cue { public double start,end;public string text,view,stem;public bool uncoil; }
+    [Serializable] public sealed class Cue { public double start,end;public string text,view,stem,annotationTarget,annotationLabel;public bool uncoil; }
     [Serializable] public sealed class Story {
         public int version;public string title,midiSha256,audioSha256,patternsSha256,model;public double duration;public Cue[] cues;
     }
@@ -20,9 +20,11 @@ public sealed class SongDirector : MonoBehaviour
     public bool Directing {get;private set;}
     public int CueIndex=>current;
     public bool Available=>story!=null;
+    public int Revision {get;private set;}
+    public Cue CurrentCue=>Directing&&story!=null&&current>=0&&current<story.cues.Length?story.cues[current]:null;
     public string Caption=>caption?.text??"";
     public string Status=>status?.text??"";
-    public void Bind(VisualElement root,VisualElement panel,VisualElement page)
+    public void Bind(VisualElement root,VisualElement panel,VisualElement page,PatternWheelDeck wheels)
     {
         midi=GetComponent<MidiPlayer>();audio=GetComponent<SongAudio>();stems=GetComponent<StemPlayback>();
         views=GetComponent<VisualizationViews>();main=GetComponent<Main>();controls=panel;
@@ -31,6 +33,8 @@ public sealed class SongDirector : MonoBehaviour
         toggle.RegisterValueChangedCallback(e=>SetDirecting(e.newValue));box.Add(toggle);
         status=new Label("Load a song with a prepared story.");status.style.whiteSpace=WhiteSpace.Normal;box.Add(status);
         box.Add(new Button(Reload){text="Reload prepared story",name="reload-song-story"});
+        gameObject.AddComponent<SongNarration>().Bind(box);
+        gameObject.AddComponent<StoryAnnotations>().Bind(root,panel,wheels,box);
         footer=new VisualElement{name="song-story-footer",pickingMode=PickingMode.Ignore};root.Add(footer);
         caption=new Label{name="song-story-caption",pickingMode=PickingMode.Ignore,enableRichText=false};footer.Add(caption);
         footer.style.display=DisplayStyle.None;toggle.SetEnabled(false);
@@ -70,7 +74,7 @@ public sealed class SongDirector : MonoBehaviour
         if(midi==null)return;
         if(source!=midi.midiPath){
             if(Directing)SetDirecting(false);
-            source=midi.midiPath;story=null;toggle.SetEnabled(false);current=-2;
+            source=midi.midiPath;story=null;Revision++;toggle.SetEnabled(false);current=-2;
             string score=source;
             pending=string.IsNullOrWhiteSpace(score)?null:Task.Run(()=>Read(score));
             status.text="Checking prepared story…";
@@ -78,7 +82,7 @@ public sealed class SongDirector : MonoBehaviour
         if(pending!=null&&pending.IsCompleted){
             if(pending.IsFaulted)status.text="Story unavailable or stale. Regenerate it in Song Prep.";
             else{story=pending.Result;status.text=story==null?"No story yet. Generate one in Song Prep.":"Prepared listening story · "+story.cues.Length+" scenes. Views and audio + visual solos follow the song clock.";}
-            pending=null;
+            pending=null;Revision++;
         }
         toggle.SetEnabled(story!=null&&audio.Ready&&!audio.Busy&&!stems.IsLoading);
         if(!Directing||audio.Busy||stems.IsLoading)return;
