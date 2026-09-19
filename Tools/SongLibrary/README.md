@@ -205,3 +205,32 @@ bass or rewrite MIDI. Shared harmonics can retain instrumental bleed. Backups an
 hashes are retained under ignored local data; a repeated identical repair is a
 no-op. Rebuilding separation requires reviewing/reapplying the repair. New stem
 jobs warn when bass energy is unusually low compared with low-register audio.
+
+## Music-only passages and Cartesia speech
+
+Narration targets two thirds of the recording; the remainder is reserved for
+listening. A cue may set `narrate: false` while retaining its caption, view and
+solo controls. Optional `narrationStart` / `narrationEnd` (recording seconds)
+reserve silence within a cue. All speech must stay inside its cue. The renderer
+measures spoken segment durations and rejects a voice track above the target
+fraction plus 2.5 percentage points; it does not trim words to meet the quota.
+`narration.json` records narratedSeconds, musicOnlySeconds and narrationFraction.
+These count speech passages including natural sentence pauses, not phoneme time.
+
+Cartesia is available as a second offline speech provider:
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/library.py narrate PreparedSongs/<song> --provider cartesia --key-file C:/private/cartesia-key.txt
+```
+
+The default Cartesia voice is Miles, a deep mature British male, using Sonic 3.6.
+The catalogue does not verify a northern English regional accent. Set `--voice`
+to another Cartesia voice ID when desired. Generation is serial to respect lower
+concurrency quotas; cached successful clips are reused after a failed job.
+The API key is only sent to the selected provider's endpoint.
+
+For the workshop, ignored `SongLibraryData/settings.json` accepts
+`narrationProvider: "cartesia"`, `cartesiaKeyFile` (private file path), and optional
+`narrationVoice` (voice ID). The separate storyKeyFile still configures OpenAI
+story writing. Restart an already-running workshop after changing these settings.
+No speech provider or key is needed for Unity playback.

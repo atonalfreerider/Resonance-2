@@ -68,7 +68,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self.authorized():return self.respond({'error':'Invalid session'},403)
             if path=='/api/state':
                 with LOCK:jobs=list(JOBS.values())
-                return self.respond(dict(bundles=bundles(),jobs=jobs,storyEnabled=bool(getattr(self.server,'story_key_file',None))))
+                return self.respond(dict(bundles=bundles(),jobs=jobs,storyEnabled=bool(getattr(self.server,'story_key_file',None)),narrationEnabled=bool(getattr(self.server,'narration_key_file',None))))
             if path=='/api/bundle':
                 p=bundle_path(parse_qs(urlparse(self.path).query)['id'][0]);patterns=read_json(p/'aligned.mid.patterns.json')
                 def seconds(beat):
@@ -124,9 +124,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(dict(job=enqueue(lambda notify:export(p,ROOT/'Builds/SongBundles'/(p.name+'.zip')))))
             if path=='/api/narrate':
                 from narration import generate
-                p=bundle_path(body['id']);key_file=getattr(self.server,'story_key_file',None)
-                if not key_file:raise ValueError('Configure the local story key file to enable narration')
-                return self.respond(dict(job=enqueue(lambda notify:generate(p,key_file,notify=notify))))
+                p=bundle_path(body['id']);key_file=getattr(self.server,'narration_key_file',None)
+                if not key_file:raise ValueError('Configure the local key file for the selected narration provider')
+                return self.respond(dict(job=enqueue(lambda notify:generate(p,key_file,voice=self.server.narration_voice,provider=self.server.narration_provider,notify=notify))))
             if path=='/api/story':
                 from story import generate
                 p=bundle_path(body['id']);key_file=getattr(self.server,'story_key_file',None)
@@ -152,6 +152,10 @@ def serve(port=8765,browser=True,story_key_file=None):
                 if b'Song workshop' in response.read(65536):webbrowser.open(url);return
         raise
     server.story_key_file=story_key_file
+    settings=read_json(DATA/'settings.json',{})
+    server.narration_provider=settings.get('narrationProvider','openai')
+    server.narration_voice=settings.get('narrationVoice')
+    server.narration_key_file=settings.get('cartesiaKeyFile') if server.narration_provider=='cartesia' else story_key_file
     url=f'http://127.0.0.1:{server.server_port}'
     print('Song manager: '+url,flush=True)
     if browser:webbrowser.open(url)

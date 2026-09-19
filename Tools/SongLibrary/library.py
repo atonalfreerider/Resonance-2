@@ -12,7 +12,7 @@ def main():
     p=sub.add_parser('index');p.add_argument('directories',nargs='+')
     p=sub.add_parser('stems');p.add_argument('bundle')
     p=sub.add_parser('repair-bass');p.add_argument('bundle')
-    p=sub.add_parser('narrate');p.add_argument('bundle');p.add_argument('--key-file',required=True);p.add_argument('--voice',default='onyx')
+    p=sub.add_parser('narrate');p.add_argument('bundle');p.add_argument('--key-file',required=True);p.add_argument('--voice');p.add_argument('--provider',choices=['openai','cartesia'],default='openai')
     p=sub.add_parser('story');p.add_argument('bundle');p.add_argument('--key-file',required=True);p.add_argument('--model',default='gpt-4.1')
     p=sub.add_parser('search');p.add_argument('title');p.add_argument('--online',action='store_true')
     p=sub.add_parser('export');p.add_argument('bundle');p.add_argument('zip')
@@ -28,7 +28,7 @@ def main():
         result=repair(a.bundle)
     elif a.command=='narrate':
         from narration import generate
-        result=generate(a.bundle,a.key_file,a.voice)
+        result=generate(a.bundle,a.key_file,a.voice,provider=a.provider)
     elif a.command=='story':
         from story import generate
         result=generate(a.bundle,a.key_file,a.model)

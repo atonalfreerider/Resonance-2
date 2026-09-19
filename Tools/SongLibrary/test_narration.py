@@ -1,8 +1,14 @@
 import unittest,tempfile
 import numpy as np
-from narration import fit_clip
+from narration import fit_clip,speech_window
 from story import validate_cues
 class NarrationChecks(unittest.TestCase):
+ def test_listening_scenes_and_explicit_windows(self):
+  cue=dict(start=10,end=20)
+  self.assertIsNone(speech_window(dict(cue,narrate=False)))
+  self.assertEqual(speech_window(dict(cue,narrationStart=13,narrationEnd=18)),(13,18))
+  for values in [dict(narrationStart=9),dict(narrationEnd=21),dict(narrationStart=float('nan')),dict(narrationEnd=10.1)]:
+   with self.assertRaises(ValueError):speech_window(dict(cue,**values))
  def test_fit_preserves_pitch_and_bounds(self):
   rate=24000;x=.2*np.sin(2*np.pi*440*np.arange(rate*2)/rate)
   with tempfile.TemporaryDirectory() as d:y,ratio=fit_clip(x,rate,1.7,d)

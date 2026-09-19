@@ -97,6 +97,7 @@ def validate_cues(cues, duration, stems, source_ids=()):
         if not isinstance(cue['text'], str) or not 1 <= len(cue['text']) <= 450:
             raise ValueError('Invalid story caption')
         refs=cue.get('sourceIds',[])
+        if not isinstance(cue.get('narrate',True),bool):raise ValueError('Invalid narration flag')
         if cue.get('annotationTarget','none') not in ('none','melody','drums','patterns') or not isinstance(cue.get('annotationLabel',''),str) or len(cue.get('annotationLabel',''))>70:
             raise ValueError('Invalid story annotation')
         if not isinstance(refs,list) or any(s not in source_ids for s in refs):
@@ -134,7 +135,7 @@ def generate(bundle, key_file, model='gpt-4.1'):
                       view={'type':'string','enum':list(VIEWS)}, uncoil={'type':'boolean'},
                       stem={'type':'string','enum':['']+[s['id'] for s in manifest.get('stems', [])]},
                       sourceIds={'type':'array','items':{'type':'string'}},
-                      annotationTarget={'type':'string','enum':['none','melody','drums','patterns']},annotationLabel={'type':'string'})
+                      annotationTarget={'type':'string','enum':['none','melody','drums','patterns']},annotationLabel={'type':'string'},narrate={'type':'boolean'})
     schema = dict(type='object', properties={'cues':dict(type='array', items=dict(type='object', properties=properties,
                   required=list(properties), additionalProperties=False))}, required=['cues'], additionalProperties=False)
     if plan:
@@ -155,7 +156,9 @@ def generate(bundle, key_file, model='gpt-4.1'):
         'Return timed cues, '
         'chronological and nonoverlapping, seconds from the start of the recording. Honor the supplied exact section boundaries. Cover the whole song with '
         'roughly 12–20 cues, no more than two short sentences/280 characters each. Use supplied evidence only. '
-        'Captions will be spoken: allow at least 0.4 seconds per word and leave breathing space. '
+        'Aim for two thirds narration and one third uninterrupted music. Allow at least 0.45 seconds per spoken word. '
+        'Reserve whole listening scenes with narrate=false, especially after explaining an audible detail; keep captions brief there. '
+        'Do not fill every scene with speech. Protect instrumental entrances and give harmonies time to be heard. '
         'Use occasional annotationTarget melody, drums or patterns to point at the featured visual, with a short annotationLabel; otherwise none and an empty label. '
         'No lyric quotations. No biographical claims outside the sourced context. Treat section labels as a listening map. '
         'onsetCount is a count of occurrences, NEVER an interval size. '
@@ -203,11 +206,13 @@ def generate(bundle, key_file, model='gpt-4.1'):
         generated=[dict(start=c['start'],end=c['end'],view=c['view'],uncoil=c['uncoil'],stem=c['stem'],text=caption['text'],sourceIds=caption['sourceIds']) for c,caption in zip(plan,captions)]
         for cue,scene in zip(generated,plan):
             cue.update(annotationTarget=scene.get('annotationTarget','none'),annotationLabel=scene.get('annotationLabel',''))
+            for key in ('narrate','narrationStart','narrationEnd'):
+                if key in scene:cue[key]=scene[key]
     else:generated=parsed['cues']
     cues = settle_transitions(validate_cues(generated, manifest['audioDuration'], [s['id'] for s in manifest.get('stems',[])], [s['id'] for s in context.get('sources',[])]))
     story = dict(version=1, title=summary['title'], midiSha256=manifest['midiSha256'], audioSha256=manifest['audioSha256'],
                  patternsSha256=sha(bundle/'aligned.mid.patterns.json'), duration=manifest['audioDuration'],
-                 model=result.get('model',model), narrativeStyle='feeling-led / sourced context',
+                 model=result.get('model',model), narrativeStyle='feeling-led / sourced context',narrationTargetFraction=2/3,
                  contextSha256=sha(bundle/'story.context.json') if (bundle/'story.context.json').exists() else None,
                  sources=context.get('sources',[]), cues=cues)
     atomic_json(bundle/'story.json', story)

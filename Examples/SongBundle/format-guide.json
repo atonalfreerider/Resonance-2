@@ -72,7 +72,9 @@
         "text": "Follow this opening pattern as it repeats.",
         "view": "Overview",
         "uncoil": false,
-        "stem": ""
+        "stem": "",
+        "narrationStart": 2,
+        "narrationEnd": 12
       },
       {
         "start": 16,
@@ -82,9 +84,11 @@
         "uncoil": true,
         "stem": "",
         "annotationTarget": "melody",
-        "annotationLabel": "Two paths"
+        "annotationLabel": "Two paths",
+        "narrate": false
       }
-    ]
+    ],
+    "narrationTargetFraction": 0.6666666666666666
   },
   "narration.json": {
     "version": 1,
@@ -102,7 +106,7 @@
     "segments": [
       {
         "cue": 0,
-        "start": 0.18,
+        "start": 2.18,
         "end": 4.2,
         "tempoRatio": 1
       }
