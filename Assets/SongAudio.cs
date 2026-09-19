@@ -111,7 +111,8 @@ public sealed class SongAudio : MonoBehaviour
             Status=$"Prepared song · {manifest.featureResolutionMs:0} ms fingerprint grid\n{manifest.status}\nRecording is the sole audio source; no runtime timing warp.";
         }
         catch(Exception e){Status="Song loaded; section map: "+e.Message;}
-        GetComponent<StemPlayback>().Configure(manifest.stems,Path.GetDirectoryName(Path.GetFullPath(score)));
+        yield return GetComponent<StemPlayback>().Preload(manifest.stems,Path.GetDirectoryName(Path.GetFullPath(score)));
+        if(version!=generation)yield break;
         Busy=false;midi.Seek(0);
         audioField?.SetValueWithoutNotify(AudioPath);midiField?.SetValueWithoutNotify(score);
         PlayerPrefs.SetString("Resonance.LastAudio",AudioPath);PlayerPrefs.SetString("Resonance.LastMidi",score);PlayerPrefs.Save();
@@ -159,6 +160,6 @@ public sealed class SongAudio : MonoBehaviour
         ExplorerInputFocus.ClaimUI();field.Focus();
 #endif
     }
-    void Update(){if(status!=null)status.text=Status;if(main.Synth!=null){Source.volume=main.Synth.Volume;Source.pitch=1;main.Synth.GetComponent<AudioSource>().mute=Ready&&midi.IsPlaying;}}
+    void Update(){if(status!=null)status.text=Status;if(main.Synth!=null){Source.volume=main.Synth.Volume*(GetComponent<StemPlayback>()?.MasterGain??1);Source.pitch=1;main.Synth.GetComponent<AudioSource>().mute=Ready&&midi.IsPlaying;}}
     void OnDestroy(){generation++;if(Source!=null&&Source.clip!=null)Destroy(Source.clip);}
 }

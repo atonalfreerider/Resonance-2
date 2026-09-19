@@ -6,5 +6,21 @@
   "SectionSource": "Estimated pop form from repeated harmonic passages; labels and boundaries editable offline",
   "TrackAliases": {
     "Lead Organ": "Lead Vocals"
+  },
+  "StemTracks": {
+    "vocals": [
+      3
+    ],
+    "bass": [
+      8
+    ],
+    "drums": [
+      2
+    ],
+    "other": [
+      5,
+      6,
+      7
+    ]
   }
 }

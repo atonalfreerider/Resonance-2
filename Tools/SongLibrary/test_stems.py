@@ -3,9 +3,20 @@ import unittest
 from pathlib import Path
 import mido
 import pretty_midi
-from stems import map_to_master,filter_score
+from stems import map_to_master,filter_score,copy_master_stem
 
 class StemTests(unittest.TestCase):
+    def test_existing_score_keeps_polyphony_and_exact_ticks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);score=mido.MidiFile(ticks_per_beat=480)
+            score.tracks.append(mido.MidiTrack([mido.MetaMessage('set_tempo',tempo=600000)]))
+            score.tracks.append(mido.MidiTrack([mido.Message('note_on',note=64,velocity=91,time=123),mido.Message('note_on',note=71,velocity=82,time=0),mido.Message('note_off',note=64,time=341),mido.Message('note_off',note=71,time=0)]))
+            score.save(root/'master.mid');before=(root/'master.mid').read_bytes()
+            copy_master_stem(root/'master.mid',root/'vocals.mid',{'vocals':[1]},'vocals')
+            actual=mido.MidiFile(root/'vocals.mid')
+            self.assertEqual([m.dict() for m in actual.tracks[1]],[m.dict() for m in mido.MidiFile(root/'master.mid').tracks[1]])
+            self.assertEqual((root/'master.mid').read_bytes(),before)
+
     def test_master_meter_and_tempo_keep_physical_note_times(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);master=mido.MidiFile(ticks_per_beat=480)

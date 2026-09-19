@@ -7,5 +7,21 @@
   "TrackAliases": {
     "Lead Organ": "Lead Vocals"
   },
+  "StemTracks": {
+    "vocals": [
+      3
+    ],
+    "bass": [
+      8
+    ],
+    "drums": [
+      2
+    ],
+    "other": [
+      5,
+      6,
+      7
+    ]
+  },
   "LeadVocalTrack": -1
 }

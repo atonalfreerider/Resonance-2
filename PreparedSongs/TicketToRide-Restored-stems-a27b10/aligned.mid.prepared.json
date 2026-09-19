@@ -18,13 +18,13 @@
       "audioPath": "stems/vocals.wav",
       "audioSha256": "968ba23a5927262152d6f9423ad7c0ec23d7b0046b04a5954b6749a37c6662fa",
       "midiPath": "stems/vocals.mid",
-      "midiSha256": "7af6dceb0732ce414ad1a49890e39af734cd05980be3d4ff9e08e76e8cfde522",
+      "midiSha256": "a37975c55d9d3253cd041bc443111acf11734431643d7c11b7ff234d3a2be9cb",
       "patternsPath": "stems/vocals.mid.patterns.json",
-      "patternsSha256": "947a422ac77054516c24e2691064d7826f10aaf6fcb6952e6870033a468af5b4",
+      "patternsSha256": "6534a3b6fbd1b3b1b158dbe515f80f37a1a961a5f15ebe808ef2c44d5fc1ba2d",
       "samples": 8385536,
       "sampleRate": 44100,
-      "notes": 345,
-      "method": "local-demucs-yourmt3"
+      "notes": 515,
+      "method": "existing-reviewed-midi"
     },
     {
       "id": "bass",
@@ -32,13 +32,13 @@
       "audioPath": "stems/bass.wav",
       "audioSha256": "b27a3e5d80a0dc6b5ee7de95c6baa794e477c3a627b63a6b21282a0f7e086c4f",
       "midiPath": "stems/bass.mid",
-      "midiSha256": "45c41c6bfdebc3441a9606b5e2fe7a2f7e03c2fe90d33b01f7005a7bf3e3e4c4",
+      "midiSha256": "fac21515d2fed32ded4765a6c066304005779dad5214e7f5a81473365645182b",
       "patternsPath": "stems/bass.mid.patterns.json",
-      "patternsSha256": "38e1523689d5441c83d86476ae6d36bd198e6b1fd6b3e69f7279eb0cf272db73",
+      "patternsSha256": "ee29e54cd1c0707f69553ffda88c51ed7671eec7081e426bcef9785461b86b8d",
       "samples": 8385536,
       "sampleRate": 44100,
-      "notes": 578,
-      "method": "local-demucs-yourmt3"
+      "notes": 305,
+      "method": "existing-reviewed-midi"
     },
     {
       "id": "drums",
@@ -46,13 +46,13 @@
       "audioPath": "stems/drums.wav",
       "audioSha256": "f5c770b7c3577f5768060b2822477c210f298f570feaa90ccc791203126ac671",
       "midiPath": "stems/drums.mid",
-      "midiSha256": "f322434996a63b5db66cec11b50569d123d69fa70f55c02b8c335b1af515b5dc",
+      "midiSha256": "4100e4eb7f041a595e21ddca2205306b5cee7e7aa2a5831a7f6cb1b3a2c6cd43",
       "patternsPath": "stems/drums.mid.patterns.json",
-      "patternsSha256": "40136ea6a3c8125bc28d3c4e15c382dbefdbe4de9179cb9b10a24f4ba5409859",
+      "patternsSha256": "0a5d034e06640f38c7c29477a48ea406b8f6c572cc697138558af07061181c8a",
       "samples": 8385536,
       "sampleRate": 44100,
-      "notes": 2012,
-      "method": "local-demucs-yourmt3"
+      "notes": 1569,
+      "method": "existing-reviewed-midi"
     },
     {
       "id": "other",
@@ -60,13 +60,13 @@
       "audioPath": "stems/other.wav",
       "audioSha256": "ebed871f524fc028392ce40b08f53c0e624143064556eaaa38489164f1eae56e",
       "midiPath": "stems/other.mid",
-      "midiSha256": "c2920bccc1163cc8699da4c18c4ffa6c6df366fdfaef865c0ca3029552828654",
+      "midiSha256": "92d4a267a163645c3e9150117c9db283afb4010cbc2f777ea54694c08af4b219",
       "patternsPath": "stems/other.mid.patterns.json",
-      "patternsSha256": "f902476e85c274db8f5b5d12d56d24983db7d410bd5cef7fd62026a29b3bffc8",
+      "patternsSha256": "002cf12957973f73ffbb67518bb9eb9692e52357c41d19e97a568ac47c6f0f12",
       "samples": 8385536,
       "sampleRate": 44100,
-      "notes": 3159,
-      "method": "local-demucs-yourmt3"
+      "notes": 2375,
+      "method": "existing-reviewed-midi"
     },
     {
       "id": "other-high",
@@ -74,13 +74,13 @@
       "audioPath": "stems/other-high.wav",
       "audioSha256": "6f1225fa478fc5be95a0a74c2db253d9d955808f8887ac49f1b41f642e9238e1",
       "midiPath": "stems/other-high.mid",
-      "midiSha256": "8dd85047a1cfa23160b1dc237564713282b473cb87873cbe9b968fda03ff9bae",
+      "midiSha256": "2248e4c6322d26aa4d2227d1dca702352b2c1ce4a21c4aed32050a09c5f056a6",
       "patternsPath": "stems/other-high.mid.patterns.json",
-      "patternsSha256": "62e9e1bb07612fe5deded2de385f68f395f94b48e5dafbfc9537e66385d966b7",
+      "patternsSha256": "6f03dfc34e5cf7fa86d331c8e5067b5551aac4c47286f02ca73cfbe5536e1bd8",
       "samples": 8385536,
       "sampleRate": 44100,
-      "notes": 1732,
-      "method": "derived-register-view"
+      "notes": 954,
+      "method": "existing-reviewed-midi"
     },
     {
       "id": "other-low",
@@ -88,13 +88,13 @@
       "audioPath": "stems/other-low.wav",
       "audioSha256": "07bb0df6ca0a492985ff7da027bba6d86cde20c2a23f585a77225e2afcf097c1",
       "midiPath": "stems/other-low.mid",
-      "midiSha256": "a1c0179f1a14a683215d998407822d76fb7731c67bcba18a58c5d16524591f99",
+      "midiSha256": "46102819facd22569ea9eef6af767a88d4bb28d8f942a260cc742f0914182fc0",
       "patternsPath": "stems/other-low.mid.patterns.json",
-      "patternsSha256": "54b8c52af8fb6923b295980d0392ef52d2bd213f6d71430435f9766b49e8eef4",
+      "patternsSha256": "2fbdb957189c184e8056f4157a6488976a2ab4683e0458fcce8dabfcd1417988",
       "samples": 8385536,
       "sampleRate": 44100,
-      "notes": 1427,
-      "method": "derived-register-view"
+      "notes": 1421,
+      "method": "existing-reviewed-midi"
     },
     {
       "id": "instruments",
@@ -102,13 +102,13 @@
       "audioPath": "stems/instruments.wav",
       "audioSha256": "12c4f396deae47fc26cbab58da9842b57cbdcf721151a7820085f198316f9d32",
       "midiPath": "stems/instruments.mid",
-      "midiSha256": "6ea904f2897a9ab7898f1d679ce115f3f654898542317589524083721a5c4398",
+      "midiSha256": "331df3e1e8bb78ff41d41645eb3cba40698262d91a67f6c6d5ed7377137f6998",
       "patternsPath": "stems/instruments.mid.patterns.json",
-      "patternsSha256": "5b8edd0d66032503573170297f52cc701c3688da49c51b1c38de3accb40d88a8",
+      "patternsSha256": "8604f3e36638f4a1f23d7be750ec9a8bdfc2c669a00d6e6cc04856167ce81f24",
       "samples": 8385536,
       "sampleRate": 44100,
-      "notes": 5749,
-      "method": "local-demucs-yourmt3"
+      "notes": 4249,
+      "method": "existing-reviewed-midi"
     }
   ]
 }

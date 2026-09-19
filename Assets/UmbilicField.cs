@@ -118,6 +118,7 @@ public class UmbilicField : MonoBehaviour
     void LateUpdate()
     {
         if(main==null)return;
+        if(main.UncoilActive){rendererComponent.enabled=false;return;}
         UpdateGeometry();UpdateCoverage();rendererComponent.enabled=main.ShowSurfaces;
         HarmonicSpectrum.Accumulate(main.ActiveNotes,target,main.ShowHarmonics);
         if(integratedFrame!=Time.frameCount)Integrate(main.ActiveNotes,Time.unscaledDeltaTime);

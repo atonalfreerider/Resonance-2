@@ -18,70 +18,80 @@ public sealed class StemPlayback : MonoBehaviour
     public bool IsLoading {get;private set;}
     public string SelectedId {get;private set;}="";
     public string Status {get;private set;}="No separated stems in this bundle.";
-    AudioClip masterClip,soloClip;string directory;int generation;
+    sealed class CachedStem { public AudioSource Source;public PreparedPatternSong Score;public float Gain; }
+    readonly System.Collections.Generic.Dictionary<string,CachedStem> cache=new();
+    public bool ReadyToSolo=>!IsLoading&&Stems.Length>0&&cache.Count==Stems.Length;
+    public float MasterGain {get;private set;}=1;
+    public AudioSource AudibleSource=>cache.TryGetValue(SelectedId,out var value)?value.Source:recording.Source;
+    public int CachedCount=>cache.Count;
+    string directory;int generation;
     MidiPlayer midi;SongAudio recording;DropdownField selector;Label label;
     void Awake(){midi=GetComponent<MidiPlayer>();recording=GetComponent<SongAudio>();}
-    public void Configure(Stem[] stems,string folder)
+    public IEnumerator Preload(Stem[] stems,string folder)
     {
-        Stems=stems??Array.Empty<Stem>();directory=folder;masterClip=recording.Source.clip;SelectedId="";
-        Status=Stems.Length>0?"Full mix · chord colors follow the complete song.":"No stems yet · use Add stems in Song Workshop.";
-        RefreshUI();
+        Stems=stems??Array.Empty<Stem>();directory=folder;SelectedId="";MasterGain=1;IsLoading=true;int version=++generation;
+        foreach(var stem in Stems){
+            Status="Preparing instant solo: "+stem.name+"…";RefreshUI();
+            var task=Task.Run(()=>{
+                string audio=Verified(stem.audioPath,stem.audioSha256);Verified(stem.midiPath,stem.midiSha256);
+                string analysis=File.ReadAllText(Verified(stem.patternsPath,stem.patternsSha256));
+                using var reader=new NAudio.Wave.AudioFileReader(audio);
+                int channels=reader.WaveFormat.Channels,rate=reader.WaveFormat.SampleRate;
+                var pcm=new float[(int)(reader.Length/sizeof(float))];int offset=0,read;
+                while(offset<pcm.Length&&(read=reader.Read(pcm,offset,pcm.Length-offset))>0)offset+=read;
+                if(offset!=pcm.Length)throw new InvalidDataException("Incomplete stem decode.");
+                return (pcm,channels,rate,analysis);
+            });
+            while(!task.IsCompleted){if(version!=generation)yield break;yield return null;}
+            if(version!=generation)yield break;
+            string error=task.IsFaulted?task.Exception.GetBaseException().Message:null;
+            if(error==null)try{
+                var result=task.Result;var master=recording.Source.clip;
+                if(result.rate!=master.frequency||result.pcm.Length/result.channels!=master.samples)throw new InvalidDataException("Stem sample clock differs from recording.");
+                var data=JsonUtility.FromJson<PreparedPatternSong>(result.analysis);
+                if(data.Version!=1||data.MidiSha256!=stem.midiSha256||data.Frames==null||data.Form==null)throw new InvalidDataException("Invalid stem analysis.");
+                var clip=AudioClip.Create(stem.name,master.samples,result.channels,result.rate,false);clip.SetData(result.pcm,0);
+                var go=new GameObject("Preloaded stem · "+stem.name);go.transform.SetParent(transform,false);
+                var source=go.AddComponent<AudioSource>();source.clip=clip;source.playOnAwake=false;source.spatialBlend=0;source.priority=0;source.volume=0;
+                cache.Add(stem.id,new CachedStem{Source=source,Score=data});midi.WarmVisualPrepared(data);
+            }catch(Exception e){error=e.Message;}
+            if(error!=null){Status="Stem preparation failed: "+error;IsLoading=false;RefreshUI();yield break;}
+            yield return null;
+        }
+        IsLoading=false;Status=Stems.Length>0?"Ready · instant audio + visual solo. Full-song chord colors stay visible.":"No stems yet · use Add stems in Song Workshop.";RefreshUI();
     }
     public void Clear()
     {
-        generation++;IsLoading=false;
-        if(recording!=null&&recording.Source!=null&&masterClip!=null)recording.Source.clip=masterClip;
-        if(soloClip!=null)Destroy(soloClip);soloClip=null;masterClip=null;Stems=Array.Empty<Stem>();SelectedId="";
-        RefreshUI();
+        generation++;IsLoading=false;foreach(var item in cache.Values){if(item.Source!=null){item.Source.Stop();Destroy(item.Source.clip);Destroy(item.Source.gameObject);}}
+        cache.Clear();Stems=Array.Empty<Stem>();SelectedId="";MasterGain=1;Status="Load a prepared song with stems.";RefreshUI();
     }
     static string Hash(string path){using var h=System.Security.Cryptography.SHA256.Create();using var s=File.OpenRead(path);return BitConverter.ToString(h.ComputeHash(s)).Replace("-","").ToLowerInvariant();}
     string Verified(string path,string hash)
     {
         string full=Path.GetFullPath(Path.Combine(directory,path));
-        if(!full.StartsWith(Path.GetFullPath(directory)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)||Hash(full)!=hash)
-            throw new InvalidDataException("Stem file is missing, outside its bundle, or changed. Rebuild the stem bundle.");
+        if(!full.StartsWith(Path.GetFullPath(directory)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)||Hash(full)!=hash)throw new InvalidDataException("Stem file is missing, outside its bundle, or changed.");
         return full;
     }
     public void Select(string id)
     {
-        if(IsLoading||!recording.Ready||recording.Busy)return;
-        if(id!=""&&!Stems.Any(s=>s.id==id))return;
-        StartCoroutine(Load(id));
+        if(!ReadyToSolo||recording.Busy||id==SelectedId)return;
+        if(id!=""&&!cache.ContainsKey(id))return;
+        SelectedId=id;midi.SetVisualPrepared(id==""?null:cache[id].Score);
+        Status=id==""?"Full mix · original recording and MIDI":"Solo: "+Stems.First(s=>s.id==id).name+" · full-song chord colors";
+        RefreshUI();
     }
-    IEnumerator Load(string id)
+    public void Schedule(double position,double dspTime,float speed,bool playing)
     {
-        bool resume=midi.IsPlaying;double position=midi.Position;midi.Pause();IsLoading=true;int version=++generation;
-        PreparedPatternSong data=null;AudioClip clip=masterClip;string error=null;
-        if(id!=""){
-            var stem=Stems.First(s=>s.id==id);Status="Loading "+stem.name+"…";
-            var task=Task.Run(()=>{
-                string audio=Verified(stem.audioPath,stem.audioSha256);Verified(stem.midiPath,stem.midiSha256);
-                string analysis=File.ReadAllText(Verified(stem.patternsPath,stem.patternsSha256));
-                using var reader=new NAudio.Wave.AudioFileReader(audio);
-                var buffer=new float[16384];var pcm=new System.Collections.Generic.List<float>();int read;
-                while((read=reader.Read(buffer,0,buffer.Length))>0)for(int i=0;i<read;i++)pcm.Add(buffer[i]);
-                return (pcm:pcm.ToArray(),channels:reader.WaveFormat.Channels,rate:reader.WaveFormat.SampleRate,analysis);
-            });
-            while(!task.IsCompleted){if(version!=generation)yield break;yield return null;}
-            if(version!=generation)yield break;
-            if(task.IsFaulted)error=task.Exception.GetBaseException().Message;
-            else try{
-                var result=task.Result;
-                if(result.rate!=masterClip.frequency||result.pcm.Length/result.channels!=masterClip.samples)
-                    throw new InvalidDataException("Stem and recording sample clocks differ.");
-                data=JsonUtility.FromJson<PreparedPatternSong>(result.analysis);
-                if(data.Version!=1||data.MidiSha256!=stem.midiSha256||data.Frames==null||data.Form==null)
-                    throw new InvalidDataException("Invalid stem analysis.");
-                clip=AudioClip.Create(stem.name,masterClip.samples,result.channels,result.rate,false);clip.SetData(result.pcm,0);
-            }catch(Exception e){error=e.Message;}
-        }
-        if(error==null){
-            recording.Source.Stop();recording.Source.clip=clip;
-            if(soloClip!=null)Destroy(soloClip);soloClip=id==""?null:clip;
-            SelectedId=id;midi.SetVisualPrepared(data);
-            Status=id==""?"Full mix · original recording":"Solo: "+Stems.First(s=>s.id==id).name+" · full-song chord colors";
-        }else Status="Stem load failed: "+error;
-        IsLoading=false;midi.Seek(position);if(resume)midi.Play();RefreshUI();
+        foreach(var item in cache.Values){var source=item.Source;source.Stop();source.timeSamples=Math.Clamp((int)(position*source.clip.frequency),0,source.clip.samples-1);source.pitch=speed;if(playing)source.PlayScheduled(dspTime);}
+    }
+    public void Pause(){foreach(var item in cache.Values)item.Source.Pause();}
+    public void Stop(){foreach(var item in cache.Values)item.Source.Stop();}
+    void Update()
+    {
+        float step=Time.unscaledDeltaTime/.025f,volume=GetComponent<Main>().Synth?.Volume??0;
+        MasterGain=Mathf.MoveTowards(MasterGain,SelectedId==""?1:0,step);
+        recording.Source.volume=MasterGain*volume;
+        foreach(var entry in cache){entry.Value.Gain=Mathf.MoveTowards(entry.Value.Gain,entry.Key==SelectedId?1:0,step);entry.Value.Source.volume=entry.Value.Gain*volume;}
     }
     public VisualElement BuildUI()
     {
@@ -92,9 +102,9 @@ public sealed class StemPlayback : MonoBehaviour
         selector.RegisterValueChangedCallback(_=>{int index=selector.index;if(index>=0)Select(index==0?"":Stems[index-1].id);});box.Add(selector);
         label=new Label();label.style.whiteSpace=WhiteSpace.Normal;box.Add(label);
         var restore=new Button(()=>Select("")){text="Restore full mix",name="restore-full-mix"};box.Add(restore);
-        box.schedule.Execute(()=>{selector.SetEnabled(!IsLoading&&Stems.Length>0);restore.SetEnabled(!IsLoading&&SelectedId!="");label.text=Status;}).Every(100);
+        box.schedule.Execute(()=>{selector.SetEnabled(ReadyToSolo);restore.SetEnabled(!IsLoading&&SelectedId!="");label.text=Status;}).Every(100);
         RefreshUI();return box;
     }
     void RefreshUI(){if(selector==null)return;selector.choices=new[]{"Full mix"}.Concat(Stems.Select(s=>s.name)).ToList();selector.SetValueWithoutNotify(selector.choices[Math.Max(0,Array.FindIndex(Stems,s=>s.id==SelectedId)+1)]);}
-    void OnDestroy(){if(soloClip!=null)Destroy(soloClip);if(masterClip!=null)Destroy(masterClip);generation++;}
+    void OnDestroy(){Clear();}
 }

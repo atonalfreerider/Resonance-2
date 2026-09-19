@@ -10,9 +10,10 @@
     "samples": 8385536,
     "device": "cuda",
     "registerCrossoverHz": 261.625565,
-    "registerMethod": "Complementary zero-phase lowpass / residual on accompaniment; not instrument classification"
+    "registerMethod": "Complementary zero-phase lowpass / residual on accompaniment; not instrument classification",
+    "visualSource": "existing-reviewed-midi"
   },
   "warnings": [
-    "Stem notes are local neural estimates; register views use a C4 crossover."
+    "Audio separation is estimated; solo note data comes from the unchanged reviewed MIDI. Register views use a C4 crossover."
   ]
 }

@@ -1,0 +1,21 @@
+
+$ dotnet run --project C:\Users\johnb\Desktop\Resonance-2\Tools\PatternPrep\PatternPrep.csproj -- C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\vocals.mid
+C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\vocals.mid.patterns.json: 515 notes, 21 rhythm templates / 117 stored slots, 12 sections; lossless reconstruction verified
+
+$ dotnet run --project C:\Users\johnb\Desktop\Resonance-2\Tools\PatternPrep\PatternPrep.csproj -- C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\bass.mid
+C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\bass.mid.patterns.json: 305 notes, 11 rhythm templates / 30 stored slots, 12 sections; lossless reconstruction verified
+
+$ dotnet run --project C:\Users\johnb\Desktop\Resonance-2\Tools\PatternPrep\PatternPrep.csproj -- C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\drums.mid
+C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\drums.mid.patterns.json: 1569 notes, 15 rhythm templates / 243 stored slots, 12 sections; lossless reconstruction verified
+
+$ dotnet run --project C:\Users\johnb\Desktop\Resonance-2\Tools\PatternPrep\PatternPrep.csproj -- C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\other.mid
+C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\other.mid.patterns.json: 2375 notes, 37 rhythm templates / 470 stored slots, 12 sections; lossless reconstruction verified
+
+$ dotnet run --project C:\Users\johnb\Desktop\Resonance-2\Tools\PatternPrep\PatternPrep.csproj -- C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\other-high.mid
+C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\other-high.mid.patterns.json: 954 notes, 26 rhythm templates / 199 stored slots, 12 sections; lossless reconstruction verified
+
+$ dotnet run --project C:\Users\johnb\Desktop\Resonance-2\Tools\PatternPrep\PatternPrep.csproj -- C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\other-low.mid
+C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\other-low.mid.patterns.json: 1421 notes, 36 rhythm templates / 335 stored slots, 12 sections; lossless reconstruction verified
+
+$ dotnet run --project C:\Users\johnb\Desktop\Resonance-2\Tools\PatternPrep\PatternPrep.csproj -- C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\instruments.mid
+C:\Users\johnb\Desktop\Resonance-2\PreparedSongs\TicketToRide-Restored-stems-a27b10\stems\instruments.mid.patterns.json: 4249 notes, 63 rhythm templates / 743 stored slots, 12 sections; lossless reconstruction verified

@@ -12,7 +12,7 @@ public sealed class FeaturedInstrument : MonoBehaviour
     readonly HashSet<int> pitches=new();
     readonly List<VoiceTrail> voices=new();
     readonly Dictionary<(int,int),Vector3[]> routes=new();
-    float routeRotation=float.NaN,routeTwist;Matrix4x4 routeTransform;
+    float routeRotation=float.NaN,routeTwist,routeUncoil;Matrix4x4 routeTransform;
     Material material,headMaterial;double lastPosition=-1;int frameIndex;
     sealed class Sample { public int From,To;public float Progress,Stamp,Impact; }
     sealed class VoiceTrail { public PreparedPatternSong.MelodyStrand Data;public LineRenderer Line;public Transform Head;public readonly List<Sample> Samples=new(); }
@@ -115,7 +115,7 @@ public sealed class FeaturedInstrument : MonoBehaviour
     void LateUpdate()
     {
         if(midi==null||source==null)return;
-        if(routeRotation!=main.VisualRotation||routeTwist!=main.VisualTwist||routeTransform!=transform.localToWorldMatrix){routes.Clear();routeRotation=main.VisualRotation;routeTwist=main.VisualTwist;routeTransform=transform.localToWorldMatrix;}
+        if(routeRotation!=main.VisualRotation||routeTwist!=main.VisualTwist||routeUncoil!=main.UncoilAmount||routeTransform!=transform.localToWorldMatrix){routes.Clear();routeRotation=main.VisualRotation;routeTwist=main.VisualTwist;routeUncoil=main.UncoilAmount;routeTransform=transform.localToWorldMatrix;}
         double now=midi.VisualScorePosition;
         bool accepted=(midi.TrackFilter<0||midi.TrackFilter==Track)&&(midi.ChannelFilter==0||midi.ChannelFilter==Channel);
         TrailLength=0;

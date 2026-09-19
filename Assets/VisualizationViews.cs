@@ -12,6 +12,7 @@ public sealed class VisualizationViews : MonoBehaviour
     public float DrumOpacity {get;private set;}=1;
     VisualElement root,panel,overlay,toolbar;Button tuck;
     DropdownField viewChoice;
+    Toggle uncoil;
     readonly Dictionary<Renderer,float> appliedOpacity=new();
     MaterialPropertyBlock block;
     readonly List<Renderer> renderers=new();
@@ -33,6 +34,9 @@ public sealed class VisualizationViews : MonoBehaviour
         viewChoice.style.width=168;viewChoice.style.minHeight=32;viewChoice.style.height=32;viewChoice.style.marginLeft=8;viewChoice.style.marginTop=3;viewChoice.style.marginBottom=3;
         var input=viewChoice.Q(className:"unity-base-field__input");if(input!=null){input.style.backgroundColor=Color.clear;input.style.borderTopWidth=input.style.borderBottomWidth=input.style.borderLeftWidth=input.style.borderRightWidth=0;input.style.color=new Color(.9f,.95f,1);}
         viewChoice.RegisterValueChangedCallback(_=>SetView((View)viewChoice.index));toolbar.Add(viewChoice);
+        uncoil=new Toggle("Uncoil"){name="uncoil-torus",tooltip="Open the torus into concentric octave arcs"};
+        uncoil.style.marginLeft=12;uncoil.style.marginRight=12;uncoil.style.color=new Color(.9f,.95f,1);
+        uncoil.RegisterValueChangedCallback(e=>GetComponent<Main>().SetUncoiled(e.newValue));toolbar.Add(uncoil);
         tuck=new Button(()=>SetPanelHidden(!PanelHidden)){text="‹",name="tuck-side-menu",tooltip="Tuck away side menu"};root.Add(tuck);
         tuck.style.position=Position.Absolute;tuck.style.width=25;tuck.style.height=64;tuck.style.fontSize=27;
         tuck.style.marginLeft=tuck.style.marginRight=tuck.style.marginTop=tuck.style.marginBottom=0;
@@ -45,11 +49,14 @@ public sealed class VisualizationViews : MonoBehaviour
         SetView(View.Overview);
     }
     public void SetPanelHidden(bool hidden){PanelHidden=hidden;tuck.text=hidden?"›":"‹";tuck.tooltip=hidden?"Show side menu":"Tuck away side menu";if(hidden)ExplorerInputFocus.ClaimViewport();}
+    public void ReframeTorus(){if(Current==View.Torus){cameraMoving=true;if(orbit!=null)orbit.enabled=false;}}
     public void SetView(View view)
     {
         if(camera==null)return;
         if(Current==View.Overview&&view!=View.Overview){overviewPosition=camera.transform.position;overviewRotation=camera.transform.rotation;overviewAngles=orbit!=null?orbit.OrbitState:Vector3.zero;}
         if(Current!=view){cameraMoving=true;if(view==View.Overview){orbit?.OverviewFraming();orbit?.RestoreOrbit(overviewAngles);}}
+        if(view!=View.Torus&&GetComponent<Main>().Uncoiled){GetComponent<Main>().SetUncoiled(false);uncoil?.SetValueWithoutNotify(false);}
+        if(uncoil!=null)uncoil.style.display=view==View.Torus?DisplayStyle.Flex:DisplayStyle.None;
         Current=view;if(orbit!=null)orbit.enabled=(view==View.Overview||view==View.Torus)&&!cameraMoving;
         viewChoice?.SetValueWithoutNotify(viewChoice.choices[(int)view]);
         ExplorerInputFocus.ClaimViewport();
@@ -57,6 +64,7 @@ public sealed class VisualizationViews : MonoBehaviour
     void LateUpdate()
     {
         if(root==null||camera==null)return;
+        uncoil?.SetValueWithoutNotify(GetComponent<Main>().Uncoiled);
         float blend=Main.ReducedMotion?1:1-Mathf.Exp(-Time.unscaledDeltaTime*8);
         panelOpen=Mathf.Lerp(panelOpen,PanelHidden?0:1,blend);
         float width=root.resolvedStyle.width,height=root.resolvedStyle.height;
@@ -77,10 +85,10 @@ public sealed class VisualizationViews : MonoBehaviour
         overlay.style.top=52;overlay.style.opacity=timelineOpacity;
         overlay.style.visibility=timelineOpacity<.005f?Visibility.Hidden:Visibility.Visible;
         TorusOpacity=Mathf.Lerp(TorusOpacity,Current==View.Overview||Current==View.Torus?1:0,blend);
-        DrumOpacity=Mathf.Lerp(DrumOpacity,Current==View.Overview||Current==View.Drums?1:0,blend);
+        DrumOpacity=Mathf.Lerp(DrumOpacity,Current==View.Overview||Current==View.Drums||(Current==View.Torus&&GetComponent<Main>().UncoilActive)?1:0,blend);
         if(Current==View.Drums||Current==View.Timeline||cameraMoving){
             Vector3 position=overviewPosition;Quaternion rotation=overviewRotation;
-            if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);}
+            if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);if(GetComponent<Main>().Uncoiled){position=target-transform.forward*(6f/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(transform.forward,transform.up);}}
             if(Current==View.Drums){Vector3 target=drums?.WheelTransform!=null?drums.WheelTransform.position:transform.position+Vector3.down*2.8f;position=target+Vector3.up*(3.6f/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);}
             if(Current==View.Timeline){position=overviewPosition+Vector3.right*5;rotation=overviewRotation;}
             camera.transform.position=Vector3.Lerp(camera.transform.position,position,blend);camera.transform.rotation=Quaternion.Slerp(camera.transform.rotation,rotation,blend);

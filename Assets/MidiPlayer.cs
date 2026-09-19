@@ -48,7 +48,8 @@ public class MidiPlayer : MonoBehaviour
         public bool Minor;
         public PreparedPatternSong.Voice[] Attacks;
     }
-    readonly List<Frame> frames = new();
+    List<Frame> frames = new();
+    readonly Dictionary<PreparedPatternSong,(List<Frame> frames,MidiCycleAnalysis cycles,SongFormAnalysis form)> visualCache=new();
     Main main;
     double originPosition, originDsp;
     int visualIndex, audioIndex;
@@ -59,7 +60,7 @@ public class MidiPlayer : MonoBehaviour
     public bool Load(string path)
     {
         path=path.Trim().Trim('"');
-        Stop(); Recording?.Unload(); frames.Clear(); Prepared=null; ScoreDuration = 0; Cycles=null; SongForm=null; SectionBoundaries=""; main.ClearVisualMemory();
+        Stop(); Recording?.Unload(); visualCache.Clear();frames=new(); Prepared=null; ScoreDuration = 0; Cycles=null; SongForm=null; SectionBoundaries=""; main.ClearVisualMemory();
         try
         {
             string analysisPath=path.Trim().Trim('"')+".patterns.json";
@@ -73,6 +74,7 @@ public class MidiPlayer : MonoBehaviour
             Prepared=HarmonicPrepared=prepared;Cycles=HarmonicCycles=MidiCycleAnalysis.Restore(prepared);SongForm=HarmonicForm=prepared.RestoreForm();TrackCount=prepared.TrackCount;
             ScoreDuration=prepared.Duration;
             BuildFrames();
+            visualCache[prepared]=(frames,Cycles,SongForm);
             midiPath=path; originPosition=0;
             fallbackKey=main.currentKey; fallbackMinor=main.MinorMode;
             Status=$"{System.IO.Path.GetFileName(path)} · {TrackCount} tracks";
@@ -82,7 +84,7 @@ public class MidiPlayer : MonoBehaviour
     }
     void BuildFrames()
     {
-        frames.Clear();
+        frames=new();
         bool Accept(PreparedPatternSong.Voice v)=>v.Channel!=10&&(TrackFilter<0||v.Track==TrackFilter)&&(ChannelFilter==0||v.Channel==ChannelFilter)&&v.Pitch>=21&&v.Pitch<117;
         foreach(var frame in Prepared.Frames)
             frames.Add(new Frame{Time=frame.Time,Key=frame.Key<0?(int?)null:frame.Key,Minor=frame.Minor,Attacks=frame.Attacks.Where(Accept).ToArray(),
@@ -92,8 +94,18 @@ public class MidiPlayer : MonoBehaviour
     public void SetVisualPrepared(PreparedPatternSong stem)
     {
         Prepared=stem??HarmonicPrepared;TrackFilter=-1;ChannelFilter=0;
-        Cycles=MidiCycleAnalysis.Restore(Prepared);SongForm=Prepared.RestoreForm();TrackCount=Prepared.TrackCount;
-        GetComponent<FeaturedInstrument>()?.ResetPosition();main.ClearVisualMemory();BuildFrames();
+        WarmVisualPrepared(Prepared);var cached=visualCache[Prepared];frames=cached.frames;Cycles=cached.cycles;SongForm=cached.form;TrackCount=Prepared.TrackCount;
+        GetComponent<FeaturedInstrument>()?.ResetPosition();main.SetNotes(new(),false);main.ClearVisualMemory();
+        double now=ScorePosition;int lo=0,hi=frames.Count;
+        while(lo<hi){int mid=(lo+hi)/2;if(frames[mid].Time<=now)lo=mid+1;else hi=mid;}
+        visualIndex=audioIndex=memoryIndex=lo;memoryPosition=now;primeVisuals=false;sampledFrame=-1;
+        if(IsAudible&&lo>0)main.SetNotes(frames[lo-1].Notes,false);
+    }
+    public void WarmVisualPrepared(PreparedPatternSong score)
+    {
+        if(visualCache.ContainsKey(score))return;
+        var saved=Prepared;var savedFrames=frames;Prepared=score;BuildFrames();
+        visualCache[score]=(frames,MidiCycleAnalysis.Restore(score),score.RestoreForm());Prepared=saved;frames=savedFrames;
     }
     public void ApplyFilters(){if(Prepared==null)return;double position=Position;BuildFrames();Seek(position);}
     public void RebuildSongForm(int bars,string boundaries)
@@ -120,6 +132,7 @@ public class MidiPlayer : MonoBehaviour
         bool recorded=Recording!=null && Recording.Ready;
         double scorePosition=recorded?Recording.Alignment.ToMidi(originPosition):originPosition;
         if(recorded){Recording.Source.Stop();Recording.Source.timeSamples=Math.Clamp((int)(originPosition*Recording.Source.clip.frequency),0,Recording.Source.clip.samples-1);Recording.Source.pitch=playbackSpeed;if(IsPlaying)Recording.Source.PlayScheduled(originDsp);}
+        GetComponent<StemPlayback>()?.Schedule(originPosition,originDsp,playbackSpeed,IsPlaying&&recorded);
         while (visualIndex<frames.Count && frames[visualIndex].Time<=scorePosition) visualIndex++;
         audioIndex=visualIndex;
         memoryPosition=scorePosition; memoryIndex=visualIndex;
@@ -136,9 +149,9 @@ public class MidiPlayer : MonoBehaviour
     }
     public void Pause()
     {
-        double position=Position;sampledFrame=-1; IsPlaying=false; originPosition=position; Recording?.Source.Pause(); main.Silence();
+        double position=Position;sampledFrame=-1; IsPlaying=false; originPosition=position; Recording?.Source.Pause();GetComponent<StemPlayback>()?.Pause(); main.Silence();
     }
-    public void Stop() { sampledFrame=-1; Recording?.Source.Stop(); IsPlaying=false; originPosition=0; visualIndex=audioIndex=0; GetComponent<FeaturedInstrument>()?.ResetPosition();if (main!=null) main.Silence(); }
+    public void Stop() { sampledFrame=-1; Recording?.Source.Stop();GetComponent<StemPlayback>()?.Stop(); IsPlaying=false; originPosition=0; visualIndex=audioIndex=0; GetComponent<FeaturedInstrument>()?.ResetPosition();if (main!=null) main.Silence(); }
     public void Seek(double seconds)
     {
         if (!Loaded || main.Synth==null) return;

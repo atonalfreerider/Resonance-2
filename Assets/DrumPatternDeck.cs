@@ -70,7 +70,12 @@ public sealed class DrumPatternDeck : MonoBehaviour
         for(int i=0;i<view.Counts.Count;i++){view.Counts[i].gameObject.SetActive(i<bar.Numerator);if(i<bar.Numerator)view.Counts[i].transform.localPosition=At(1.24f,i/(double)bar.Numerator,.025f);}
     }
     void Update(){
-        if(deck==null)return;if(midi==null)midi=GetComponent<MidiPlayer>();
+        if(deck==null)return;
+        float unfold=main!=null?main.UncoilAmount:0;
+        deck.localPosition=Vector3.Lerp(new Vector3(0,-2.8f,0),new Vector3(0,0,.08f),unfold);
+        deck.localRotation=Quaternion.Slerp(Quaternion.identity,Quaternion.Euler(-90,0,0),unfold);
+        deck.localScale=Vector3.one*Mathf.Lerp(1.25f,.43f,unfold);
+        if(midi==null)midi=GetComponent<MidiPlayer>();
         if(midi==null||midi.Cycles==null||midi.Prepared==null){deck.gameObject.SetActive(false);source=null;return;}
         if(source!=midi.Prepared)Load();bool ready=source?.DrumBars?.Length>0&&hits.Length>0;deck.gameObject.SetActive(ready);if(!ready)return;
         double beat=midi.Cycles.BeatAt(midi.ScorePosition),now=midi.ScorePosition;

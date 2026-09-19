@@ -78,6 +78,7 @@ public sealed class ChordAurora : MonoBehaviour
     void LateUpdate()
     {
         if(main==null||region==null||volumes[0]==null)return;
+        if(main.UncoilActive){foreach(var v in volumes){v.Energy=0;v.Renderer.enabled=false;}return;}
         if(midi==null)midi=GetComponent<MidiPlayer>();if(recording==null)recording=GetComponent<SongAudio>();
         if(rotation!=main.VisualRotation||twist!=main.VisualTwist){rotation=main.VisualRotation;twist=main.VisualTwist;foreach(var mesh in bakedMeshes.Values)Destroy(mesh);bakedMeshes.Clear();foreach(var v in volumes)if(v.Root>=0)Map(v);}
         int count=0,strongest=-1;float strongestEnergy=0;
@@ -103,7 +104,7 @@ public sealed class ChordAurora : MonoBehaviour
         wind=Vector3.ClampMagnitude(wind,1.3f);Crosswind=wind.magnitude;Shock=Mathf.Clamp01(shock);
         float loudness=main.Synth!=null?Mathf.Clamp01(main.Synth.Volume/.6f):1;
         bool score=midi!=null&&midi.isActiveAndEnabled&&midi.Loaded&&!(main.NotesUseSynth&&main.ActiveNotes.Count>0);
-        if(score&&recording!=null&&recording.Ready){loudness=0;if(recording.Source.isPlaying){recording.Source.GetOutputData(samples,0);foreach(float s in samples)loudness+=s*s;loudness=Mathf.Clamp01(Mathf.Sqrt(loudness/samples.Length)*7);}}
+        if(score&&recording!=null&&recording.Ready){loudness=0;var audible=GetComponent<StemPlayback>()?.AudibleSource??recording.Source;if(audible.isPlaying){audible.GetOutputData(samples,0);foreach(float s in samples)loudness+=s*s;loudness=Mathf.Clamp01(Mathf.Sqrt(loudness/samples.Length)*7);}}
         if(score&&!midi.IsPlaying)total=0;
         float target=count>0?Mathf.Clamp01(total*(solo>=0?1:.65f))*loudness:0;
         float frequency=Mathf.Lerp(3.8f,7f,Mathf.Clamp01(register/Mathf.Max(total,.001f)/80));

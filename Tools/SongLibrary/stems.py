@@ -62,6 +62,9 @@ def prepare_stems(bundle, notify=lambda x:None):
     folder=bundle/'stems';folder.mkdir(exist_ok=True);log=bundle.parent/'stems.log'
     notify('Separating vocals, bass, drums and accompaniment locally with Demucs')
     run([MODEL_PYTHON,ROOT/'Tools/SongLibrary/separate.py','--audio',bundle/'recording.wav','--output',folder],log)
+    if read_json(bundle/'song.json',{}).get('StemTracks'):
+        notify('Using the existing reviewed MIDI for stem notes; no neural retranscription')
+        return compile_stems(bundle,notify)
     jobs=[dict(audio=str((folder/(name+'.wav')).resolve()),output=str((folder/(name+'-raw.mid')).resolve()))
           for name in ('vocals','bass','drums','other')]
     request=bundle.parent/'stem-transcription-jobs.json';atomic_json(request,jobs)
@@ -75,15 +78,17 @@ def compile_stems(bundle,notify=lambda x:None):
     import soundfile as sf
     bundle=Path(bundle);master=read_json(bundle/'aligned.mid.patterns.json')
     folder=bundle/'stems';log=bundle.parent/'stems.log'
-    for name in ('vocals','bass','drums','other'):
-        filter_score(folder/(name+'-raw.mid'),folder/(name+'-notes.mid'),name)
-    for name in ('other-high','other-low'):
-        filter_score(folder/'other-notes.mid',folder/(name+'-notes.mid'),name)
-    instruments=pretty_midi.PrettyMIDI()
-    for name in ('bass','drums','other'):
-        instruments.instruments.extend(pretty_midi.PrettyMIDI(str(folder/(name+'-notes.mid'))).instruments)
-    instruments.write(str(folder/'instruments-notes.mid'))
     settings=read_json(bundle/'song.json',{})
+    mapping=settings.get('StemTracks')
+    if not mapping:
+        for name in ('vocals','bass','drums','other'):
+            filter_score(folder/(name+'-raw.mid'),folder/(name+'-notes.mid'),name)
+        for name in ('other-high','other-low'):
+            filter_score(folder/'other-notes.mid',folder/(name+'-notes.mid'),name)
+        instruments=pretty_midi.PrettyMIDI()
+        for name in ('bass','drums','other'):
+            instruments.instruments.extend(pretty_midi.PrettyMIDI(str(folder/(name+'-notes.mid'))).instruments)
+        instruments.write(str(folder/'instruments-notes.mid'))
     settings.update(Key=master['Key'],Minor=master['Minor'],KeySource=master['KeySource'],LeadVocalTrack=-1,
         SectionBoundaries='\n'.join(f"{s['FirstBar']+1} {s['Name']}" for s in master['Sections']))
     atomic_json(folder/'song.json',settings)
@@ -91,7 +96,9 @@ def compile_stems(bundle,notify=lambda x:None):
     for name,label in NAMES.items():
         notify('Compiling isolated pattern wheels: '+label)
         score=folder/(name+'.mid')
-        map_to_master(folder/(name+'-notes.mid'),score,bundle/'aligned.mid')
+        if mapping:
+            copy_master_stem(bundle/'aligned.mid',score,mapping,name)
+        else:map_to_master(folder/(name+'-notes.mid'),score,bundle/'aligned.mid')
         compile_patterns(score,log)
         path=Path(str(score)+'.patterns.json');patterns=read_json(path)
         # Preserve the exact full-song harmony and extent, including silence in a stem.
@@ -108,11 +115,30 @@ def compile_stems(bundle,notify=lambda x:None):
             audioSha256=sha(audio),midiPath=str(score.relative_to(bundle)).replace('\\','/'),midiSha256=sha(score),
             patternsPath=str(path.relative_to(bundle)).replace('\\','/'),patternsSha256=sha(path),
             samples=info.frames,sampleRate=info.samplerate,notes=len(patterns['Notes']),
-            method='derived-register-view' if name.startswith('other-') else 'local-demucs-yourmt3'))
+            method='existing-reviewed-midi' if mapping else 'derived-register-view' if name.startswith('other-') else 'local-demucs-yourmt3'))
     manifest=read_json(bundle/'aligned.mid.prepared.json');manifest['stems']=entries
     atomic_json(bundle/'aligned.mid.prepared.json',manifest)
     validate_bundle(bundle)
     return entries
+
+def copy_master_stem(source,destination,mapping,name):
+    """Filter existing MIDI events while preserving track IDs and absolute tick times."""
+    import mido
+    source=mido.MidiFile(source);out=mido.MidiFile(type=source.type,ticks_per_beat=source.ticks_per_beat)
+    tracks=mapping.get('other' if name.startswith('other-') else name,[])
+    if name=='instruments':tracks=sum((mapping.get(k,[]) for k in ('bass','drums','other')),[])
+    for index,track in enumerate(source.tracks):
+        dest=mido.MidiTrack();pending=0
+        for msg in track:
+            pending+=msg.time
+            if msg.type in ('note_on','note_off','polytouch'):
+                if index not in tracks:continue
+                if name=='other-high' and msg.note<60:continue
+                if name=='other-low' and msg.note>=60:continue
+            dest.append(msg.copy(time=pending));pending=0
+        if pending:dest.append(mido.MetaMessage('end_of_track',time=pending))
+        out.tracks.append(dest)
+    out.save(destination)
 
 def enrich(directory, notify=lambda x:None):
     directory=Path(directory).resolve();validate_bundle(directory)
@@ -120,7 +146,8 @@ def enrich(directory, notify=lambda x:None):
     shutil.copytree(directory,work)
     entries=prepare_stems(work,notify)
     provenance=read_json(work/'library.json',{});provenance['stems']=read_json(work/'stems/separation.json')
-    provenance.setdefault('warnings',[]).append('Separated stems and per-stem neural notes are estimates. Register views use a C4 crossover.')
+    reviewed=bool(read_json(work/'song.json',{}).get('StemTracks'))
+    provenance.setdefault('warnings',[]).append('Audio separation is estimated; solo notes preserve the reviewed MIDI. Register views use a C4 crossover.' if reviewed else 'Separated stems and per-stem neural notes are estimates. Register views use a C4 crossover.')
     atomic_json(work/'library.json',provenance)
     destination=directory.with_name(directory.name+'-stems-'+work.parent.name[:6])
     shutil.move(str(work),str(destination))
