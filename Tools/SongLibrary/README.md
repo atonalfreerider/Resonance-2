@@ -16,12 +16,13 @@ This opens the loopback-only manager at http://127.0.0.1:8765. Upload an MP3/WAV
 4. A matching MIDI uses SongPrep's existing offline pitch/onset fingerprint alignment. Weak windows remain visible in `analysis.json` and `report.html`; ambiguous matches are not certified perfect.
 5. If no candidate passes, YourMT3 transcribes the complete recording locally into instrument and drum tracks. The verified checkpoint is cached on this machine. Neural timing is preserved; an audio-estimated beat grid supplies musical bars without a second DTW warp.
 6. PatternPrep generates section families, chord progressions, per-channel rhythm templates with pitch/timing/velocity variants, bar-sized drum families, and continuous harmonic region phases. Similar neural rhythms tolerate up to a quarter beat of jitter when choosing a template, while residuals reconstruct **every original note exactly**. This is lossless pattern representation, not a claim that every noisy transcription compresses well.
-7. Validate MIDI/audio hashes, reconstructed notes, and section-region coverage, then publish the completed bundle atomically. Failed work remains in `SongLibraryData/jobs`; Unity never sees half-prepared analysis.
-8. Review key, mode, lead vocal and section starts in the manager. Save creates a separate compiled revision. Export creates a ZIP under `Builds/SongBundles` with relative portable paths.
+7. Demucs 4.0.1 (`htdemucs`) separates vocals, bass, drums and accompaniment. YourMT3 transcribes each isolated stem in one local model session. The exact master tempo/meter map supplies ticks without warping note timestamps. High/low accompaniment views split at C4 (261.63 Hz) using complementary zero-phase filtering; these are register views, not inferred instruments. All-instruments combines bass, drums and accompaniment.
+8. Validate MIDI/audio hashes, reconstructed notes, and section-region coverage, then publish the completed bundle atomically. Failed work remains in `SongLibraryData/jobs`; Unity never sees half-prepared analysis.
+9. Review key, mode, lead vocal and section starts in the manager. Save creates a separate compiled revision. Export creates a ZIP under `Builds/SongBundles` with relative portable paths.
 
 ## Playback and review
 
-Completed imports live in `PreparedSongs/Library`. Restart Unity playback to refresh its prepared-song choices, select the new bundle, and load it. All expensive processing happens ahead of playback. Unity plays `recording.wav`, not synthesized MIDI.
+Completed imports live in `PreparedSongs/Library`. Restart Unity playback to refresh its prepared-song choices, select the new bundle, and load it. All expensive processing happens ahead of playback. Unity plays `recording.wav`, not synthesized MIDI. **Listen / visualize** selects a solo stem and its prepared pattern data. Full mix restores the original recording and score. Solo changes pause briefly for local loading, preserve the playhead, and resume if playing; stems use the same sample rate and exact sample count. The authoritative full-song key, chord progression and region shading remain in force, including while a stem is silent.
 
 Automatic section boundaries are initially eight-bar candidates, with repeated-family and chord-cycle analysis. They do **not** reliably identify semantic verse/chorus/bridge roles. Review the recording and enter one section start per line:
 
@@ -40,12 +41,15 @@ Key uses the application's A-based pitch classes: A=0, B=2, C=3, D=5, E=7, F=8, 
 
 To use an export with the portable Windows player, extract it **beside Resonance.exe**, so its `PreparedSongs/<song>/` folder joins the player's existing library. Keep the WAV, MIDI, patterns, and manifest together.
 
+Use **Add / rebuild stems** beside an existing song in Song Workshop to create a separate stem-enabled revision. New imports include stems automatically. The original bundle stays playable if separation or transcription fails.
+
 ## CLI examples
 
 ```powershell
 ./Tools/SongLibrary/song-library.ps1 ingest 'D:/Music/song.mp3' --title 'Artist - Song'
 ./Tools/SongLibrary/song-library.ps1 ingest 'D:/Music/song.mp3' --midi 'D:/Scores/song.mid'
 ./Tools/SongLibrary/song-library.ps1 ingest 'D:/Music/song.mp3' --neural --offline --meter 3
+./Tools/SongLibrary/song-library.ps1 stems 'PreparedSongs/TicketToRide-Restored'
 ./Tools/SongLibrary/song-library.ps1 index 'D:/My MIDI Collection'
 ./Tools/SongLibrary/song-library.ps1 search 'Ticket to Ride'
 ./Tools/SongLibrary/song-library.ps1 review 'PreparedSongs/Library/my-song' 'review-settings.json'
@@ -75,6 +79,8 @@ Setup uses two isolated environments; inference dependencies do not replace the 
 | `aligned.mid` | Timed score; pitches are not silently transposed |
 | `aligned.mid.patterns.json` | Unity's precomputed visualization contract |
 | `aligned.mid.prepared.json` | Relative paths, hashes, audio duration |
+| `stems/*.wav`, `stems/*.mid`, `stems/*.patterns.json` | Sample-aligned solo audio and offline isolated scores / wheels |
+| `stems/separation.json` | Separator model, weight hashes, clock and register-filter provenance |
 | `song.json` | Editable key, vocal and form settings |
 | `library.json` | Method, model hash, lookup scores, provenance, review status |
 | `analysis.json`, `report.html` | Quality evidence and review notes |
@@ -86,7 +92,7 @@ CSV is useful for alignment inspection, but JSON is the authoritative analysis f
 ## Verification
 
 ```powershell
-Tools/SongPrep/.venv/Scripts/python.exe -m unittest discover -s Tools/SongLibrary -p test_pipeline.py -v
+Tools/SongPrep/.venv/Scripts/python.exe -m unittest discover -s Tools/SongLibrary -p 'test_*.py' -v
 ```
 
 Tests cover timing/payload preservation, drums, meter, bundle hashes and continuous regions, catalog identity, provider link mapping, wrong-harmony rejection, and path containment. PatternPrep independently verifies lossless reconstruction on every build.
@@ -95,6 +101,7 @@ The full Ticket to Ride recording was tested through local inference: 3,430 dete
 
 ## Model and provider provenance
 
+- [Demucs](https://github.com/facebookresearch/demucs): MIT-licensed separation implementation, pinned `demucs==4.0.1`; official `htdemucs` weights cached locally (~80 MB). Four instrument stems are estimates and can have leakage. The six-stem model was not chosen because its piano separation is documented as experimental.
 - [MT3-Infer](https://github.com/openmirlab/mt3-infer), pinned commit `3675ad860ea7c0adcaec8498b798ff605d0a0f42`; upstream inference software is alpha.
 - [YourMT3 checkpoint/source](https://huggingface.co/spaces/mimbres/YourMT3), YPTF MoE multi-instrument no-pitch-shift checkpoint, SHA-256 `ae38e415c79efd5592dcb9b658cdb99ddb11d4c4e1eaa364cab04a052473fc25`.
 - [BitMidi API implementation](https://github.com/feross/bitmidi.com): published search and download fields; no page scraping or invented download links. Availability was intermittent during setup.
@@ -105,3 +112,5 @@ Model, wrapper, MIDI arrangements, and recordings have separate upstream license
 Repeated section sequences are grouped offline into composite orrery carriers, including verse/chorus and longer repeating forms. The active child remains featured at full size while companion wheels stay dimmed nearby.
 
 Prepared pattern bundles include `MelodyStrands`: independent, pitch-ordered voice histories per track/channel, with exact score-second onsets and ends. Simultaneous notes are assigned from low to high; missing voices retain nearest-register continuity. This assumes non-crossing harmony parts, not semantic singer recognition. Runtime only follows these prepared routes. `song.json` accepts `TrackAliases` (original MIDI name to display name); Ticket to Ride maps `Lead Organ` to `Lead Vocals`. Re-run PatternPrep when changing these settings.
+
+Stem validation on Ticket to Ride: 345 vocal notes, 578 bass notes, 2,012 drum hits and 3,159 accompaniment notes. All seven audio views contain exactly 8,385,536 stereo samples at 44.1 kHz. These counts verify successful processing, not musical correctness. High/low audio sums back to accompaniment within floating-point precision. Lookup was tested live against BitMidi on 2026-09-19 and returned two Ticket to Ride arrangements. Public MIDI availability does not imply transcription quality; the existing fingerprint gate still applies.

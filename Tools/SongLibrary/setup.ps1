@@ -16,4 +16,5 @@ $wheelIndex = if ($Cpu) { 'https://download.pytorch.org/whl/cpu' } else { 'https
 & $modelPython -m pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url $wheelIndex; Check-Exit
 & $modelPython -m pip install -r (Join-Path $PSScriptRoot 'requirements.txt'); Check-Exit
 & $prepPython (Join-Path $PSScriptRoot 'transcribe.py') --install; Check-Exit
+& $modelPython (Join-Path $PSScriptRoot 'separate.py') --install; Check-Exit
 & $prepPython (Join-Path $PSScriptRoot 'library.py') doctor; Check-Exit

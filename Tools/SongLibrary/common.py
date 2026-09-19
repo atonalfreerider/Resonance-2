@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / 'SongLibraryData'
 PREP_PYTHON = ROOT / 'Tools/SongPrep/.venv/Scripts/python.exe'
 MODEL_PYTHON = ROOT / 'Tools/SongLibrary/.venv/Scripts/python.exe'
-PIPELINE_VERSION = 1
+PIPELINE_VERSION = 2
 
 
 def sha(path):
@@ -59,6 +59,17 @@ def validate_bundle(directory):
         path = (directory/manifest[key]).resolve()
         if not path.is_relative_to(directory.resolve()) or not path.is_file() or sha(path) != manifest[hash_key]:
             raise ValueError('Bundle file/hash mismatch: ' + key)
+    for stem in manifest.get('stems',[]):
+        for key in ('audio','midi','patterns'):
+            path=(directory/stem[key+'Path']).resolve()
+            if not path.is_relative_to(directory.resolve()) or not path.is_file() or sha(path)!=stem[key+'Sha256']:
+                raise ValueError('Stem file/hash mismatch: '+stem['id']+' / '+key)
+        import soundfile as sf
+        info=sf.info(directory/stem['audioPath']);master_info=sf.info(directory/manifest['audioPath'])
+        if (info.frames,info.samplerate)!=(master_info.frames,master_info.samplerate):
+            raise ValueError('Stem sample clock differs from full recording: '+stem['id'])
+        if read_json(directory/stem['patternsPath'])['MidiSha256']!=stem['midiSha256']:
+            raise ValueError('Stale stem patterns: '+stem['id'])
     patterns = read_json(directory/'aligned.mid.patterns.json')
     if patterns['MidiSha256'] != manifest['midiSha256'] or not patterns['Notes']:
         raise ValueError('Stale or empty pattern analysis')

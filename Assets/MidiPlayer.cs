@@ -24,6 +24,9 @@ public class MidiPlayer : MonoBehaviour
     public double ScorePosition => Recording != null && Recording.Ready ? Recording.Alignment.ToMidi(Position) : Position;
     public double AudioTime(double scoreTime) => Recording != null && Recording.Ready ? Recording.Alignment.ToAudio(scoreTime) : scoreTime;
     public PreparedPatternSong Prepared {get;private set;}
+    public PreparedPatternSong HarmonicPrepared {get;private set;}
+    public SongFormAnalysis HarmonicForm {get;private set;}
+    public MidiCycleAnalysis HarmonicCycles {get;private set;}
     public MidiCycleAnalysis Cycles { get; private set; }
     public SongFormAnalysis SongForm { get; private set; }
     public int SectionBars=8;
@@ -67,7 +70,7 @@ public class MidiPlayer : MonoBehaviour
             using(var stream=System.IO.File.OpenRead(path))
                 if(prepared.Version!=1 || BitConverter.ToString(hash.ComputeHash(stream)).Replace("-","").ToLowerInvariant()!=prepared.MidiSha256)
                     throw new ArgumentException("Pattern analysis is stale. Rebuild it offline for this MIDI.");
-            Prepared=prepared;Cycles=MidiCycleAnalysis.Restore(prepared);SongForm=prepared.RestoreForm();TrackCount=prepared.TrackCount;
+            Prepared=HarmonicPrepared=prepared;Cycles=HarmonicCycles=MidiCycleAnalysis.Restore(prepared);SongForm=HarmonicForm=prepared.RestoreForm();TrackCount=prepared.TrackCount;
             ScoreDuration=prepared.Duration;
             BuildFrames();
             midiPath=path; originPosition=0;
@@ -86,6 +89,12 @@ public class MidiPlayer : MonoBehaviour
                 Notes=frame.Voices.Where(Accept).GroupBy(v=>v.Pitch).Select(g=>Tuple.Create(g.Key-21,g.Max(v=>v.Velocity))).ToList()});
         frames.Add(new Frame{Time=ScoreDuration,Notes=new List<Tuple<int,float>>(),Attacks=Array.Empty<PreparedPatternSong.Voice>()});
     }
+    public void SetVisualPrepared(PreparedPatternSong stem)
+    {
+        Prepared=stem??HarmonicPrepared;TrackFilter=-1;ChannelFilter=0;
+        Cycles=MidiCycleAnalysis.Restore(Prepared);SongForm=Prepared.RestoreForm();TrackCount=Prepared.TrackCount;
+        GetComponent<FeaturedInstrument>()?.ResetPosition();main.ClearVisualMemory();BuildFrames();
+    }
     public void ApplyFilters(){if(Prepared==null)return;double position=Position;BuildFrames();Seek(position);}
     public void RebuildSongForm(int bars,string boundaries)
     {
@@ -97,7 +106,7 @@ public class MidiPlayer : MonoBehaviour
     }
     public void Play()
     {
-        if (!Loaded || (Recording!=null && Recording.Busy)) return;
+        if (!Loaded || (Recording!=null && Recording.Busy) || (GetComponent<StemPlayback>()?.IsLoading??false)) return;
         GetComponent<LiveMidiInput>()?.Disconnect();
         GetComponent<HarmonyExplorer>()?.StopLesson();
         if (Position>=Duration) originPosition=0;

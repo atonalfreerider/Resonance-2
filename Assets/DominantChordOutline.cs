@@ -43,7 +43,7 @@ public sealed class DominantChordOutline : MonoBehaviour
         if(midi==null)midi=GetComponent<MidiPlayer>();
         bool show=dominance.HasChord,minor=dominance.ChordMinor;string quality=dominance.ChordQuality;int nextRoot=dominance.ChordRoot;
         if(midi!=null&&midi.isActiveAndEnabled&&midi.Loaded&&midi.Cycles!=null&&!(main.NotesUseSynth&&main.ActiveNotes.Count>0)){
-            var phase=PhaseAt(midi.Prepared?.RegionPhases,midi.Cycles.BeatAt(midi.ScorePosition));show=phase!=null;
+            var phase=PhaseAt(midi.HarmonicPrepared?.RegionPhases,midi.HarmonicCycles.BeatAt(midi.ScorePosition));show=phase!=null;
             if(show){nextRoot=phase.Root;quality=phase.Quality;minor=quality.StartsWith("m")&&!quality.StartsWith("maj");}
         }
         if(show){root=nextRoot;third=minor||quality=="dim"?3:4;fifth=quality=="dim"?6:7;hue=TonalColorField.Chord(root,main.currentKey,minor);}

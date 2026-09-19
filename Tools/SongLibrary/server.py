@@ -114,6 +114,10 @@ class Handler(BaseHTTPRequestHandler):
                 from pipeline import review
                 p=bundle_path(body['id']);settings=body['settings']
                 return self.respond(dict(job=enqueue(lambda notify:review(p,settings))))
+            if path=='/api/stems':
+                from stems import enrich
+                p=bundle_path(body['id'])
+                return self.respond(dict(job=enqueue(lambda notify:enrich(p,notify))))
             if path=='/api/export':
                 from pipeline import export
                 p=bundle_path(body['id'])

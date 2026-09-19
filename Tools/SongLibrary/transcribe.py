@@ -21,16 +21,19 @@ def install():
     temp.replace(CHECKPOINT)
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--install',action='store_true');p.add_argument('--audio');p.add_argument('--output');p.add_argument('--device',default='auto');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--install',action='store_true');p.add_argument('--audio');p.add_argument('--output');p.add_argument('--batch');p.add_argument('--device',default='auto');a=p.parse_args()
     if a.install: install();print(CHECKPOINT);return
     if not CHECKPOINT.exists() or sha(CHECKPOINT)!=HASH: raise ValueError('Run setup.ps1 to install the verified local model')
     import librosa
     from mt3_infer.adapters.yourmt3 import YourMT3Adapter
     adapter=YourMT3Adapter(model_key='yptf_moe_nops')
     adapter.load_model(checkpoint_path=str(CHECKPOINT),device=a.device)
-    audio,_=librosa.load(a.audio,sr=16000,mono=True)
-    midi=adapter.transcribe(audio,sr=16000)
-    midi.save(a.output)
-    print('Saved local multitrack transcription:',a.output)
+    import json
+    jobs=json.loads(Path(a.batch).read_text(encoding='utf-8')) if a.batch else [dict(audio=a.audio,output=a.output)]
+    for job in jobs:
+        audio,_=librosa.load(job['audio'],sr=16000,mono=True)
+        midi=adapter.transcribe(audio,sr=16000)
+        midi.save(job['output'])
+        print('Saved local multitrack transcription:',job['output'],flush=True)
 
 if __name__=='__main__': main()

@@ -38,8 +38,8 @@ public sealed class FeaturedInstrument : MonoBehaviour
         var box=new VisualElement{name="featured-instrument-controls"};
         box.style.marginTop=8;box.style.marginBottom=12;box.style.paddingLeft=8;box.style.paddingRight=8;box.style.paddingBottom=8;
         box.style.borderLeftWidth=2;box.style.borderLeftColor=new Color(.85f,.91f,1);
-        box.Add(new Label("FEATURED INSTRUMENT · WHITE"));
-        selector=new DropdownField("Instrument / channel",new List<string>{"Load a song"},0){name="featured-instrument"};
+        box.Add(new Label("MELODY HIGHLIGHT · WHITE"));
+        selector=new DropdownField("Highlight instrument / channel",new List<string>{"Load a song"},0){name="featured-instrument"};
         selector.RegisterValueChangedCallback(_=>{if(selector.index>=0&&selector.index<choices.Length)Select(choices[selector.index].track,choices[selector.index].channel);});box.Add(selector);
         var hint=new Label("White notes and comet history on the torus; white notes on every pattern wheel.");hint.style.whiteSpace=WhiteSpace.Normal;box.Add(hint);return box;
     }

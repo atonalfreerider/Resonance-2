@@ -57,7 +57,7 @@ class Catalog:
         with self.connect() as db:
             for root in roots:
                 for path in sorted(set(Path(root).resolve().rglob('*.mid')) | set(Path(root).resolve().rglob('*.midi'))):
-                    if '.staging' in path.parts:
+                    if '.staging' in path.parts or 'stems' in path.parts:
                         continue
                     try:
                         info = midi_info(path)
@@ -80,7 +80,7 @@ class Catalog:
         def rank(path):
             provenance=read_json(path/'library.json',{})
             settings=read_json(path/'song.json',{})
-            return (not provenance.get('reviewed',False),provenance.get('method')=='local-yourmt3',
+            return (not bool(read_json(path/'aligned.mid.prepared.json',{}).get('stems')),not provenance.get('reviewed',False),provenance.get('method')=='local-yourmt3',
                     'reviewed' not in settings.get('KeySource','').lower(),str(path))
         return sorted(paths,key=rank)
 
