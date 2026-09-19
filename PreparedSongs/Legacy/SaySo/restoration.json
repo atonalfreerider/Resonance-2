@@ -1,0 +1,9 @@
+{
+  "source": "C:\\Users\\johnb\\Desktop\\resonance-music\\StreamingAssets\\CSV\\SaySo.csv",
+  "sourceSha256": "6da15ac8f7f4cf6ed9c3fbe0e313cf4414fbc91dca3a0bcd4a78ab29e3ae727d",
+  "format": "authored patterns",
+  "notes": 1159,
+  "warnings": [
+    "Authored CSV has no velocities/programs: velocity 100 and default programs used. - is base pitch; x is rest; explicit pitch is substitution. C0=MIDI0. Empty sequence slots use one DivDownbeat cycle. Section names remain offline estimates."
+  ]
+}

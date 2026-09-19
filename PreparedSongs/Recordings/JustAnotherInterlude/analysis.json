@@ -1,0 +1,166 @@
+{
+  "sourceDuration": 175.47699869791836,
+  "audioDuration": 185.83437641723356,
+  "noteCount": 1328,
+  "featureResolutionMs": 10.0,
+  "tuningCents": 1.0,
+  "suggestedPitchClassShift": 0,
+  "linearPitchSimilarity": 0.39338824889892576,
+  "alignedPitchSimilarity": 0.5790111757156112,
+  "maxMidiExportErrorMs": 0.37618387656834784,
+  "mergedFingerprintKnots": 38,
+  "maxTimingRegularizationSeconds": 3.9694736842107545,
+  "weakWindows": [
+    {
+      "start": 0.0,
+      "end": 5.0,
+      "pitchSimilarity": 0.39886471354727054
+    },
+    {
+      "start": 5.0,
+      "end": 10.0,
+      "pitchSimilarity": 0.43498828676515117
+    },
+    {
+      "start": 10.0,
+      "end": 15.0,
+      "pitchSimilarity": 0.5157781610887903
+    },
+    {
+      "start": 15.0,
+      "end": 20.0,
+      "pitchSimilarity": 0.5150379750339651
+    },
+    {
+      "start": 20.0,
+      "end": 25.0,
+      "pitchSimilarity": 0.42126456347796964
+    },
+    {
+      "start": 25.0,
+      "end": 30.0,
+      "pitchSimilarity": 0.43478430109469746
+    },
+    {
+      "start": 30.0,
+      "end": 35.0,
+      "pitchSimilarity": 0.6777190000153713
+    },
+    {
+      "start": 40.0,
+      "end": 45.0,
+      "pitchSimilarity": 0.6428659020428297
+    },
+    {
+      "start": 50.0,
+      "end": 55.0,
+      "pitchSimilarity": 0.6933208840724762
+    },
+    {
+      "start": 60.0,
+      "end": 65.0,
+      "pitchSimilarity": 0.5043811354070341
+    },
+    {
+      "start": 65.0,
+      "end": 70.0,
+      "pitchSimilarity": 0.45676638968530797
+    },
+    {
+      "start": 70.0,
+      "end": 75.0,
+      "pitchSimilarity": 0.5651245617584494
+    },
+    {
+      "start": 75.0,
+      "end": 80.0,
+      "pitchSimilarity": 0.6902667678526136
+    },
+    {
+      "start": 80.0,
+      "end": 85.0,
+      "pitchSimilarity": 0.620088331265053
+    },
+    {
+      "start": 85.0,
+      "end": 90.0,
+      "pitchSimilarity": 0.6972143676147299
+    },
+    {
+      "start": 90.0,
+      "end": 95.0,
+      "pitchSimilarity": 0.529128357906713
+    },
+    {
+      "start": 95.0,
+      "end": 100.0,
+      "pitchSimilarity": 0.5059226358466917
+    },
+    {
+      "start": 100.0,
+      "end": 105.0,
+      "pitchSimilarity": 0.503941242168909
+    },
+    {
+      "start": 105.0,
+      "end": 110.0,
+      "pitchSimilarity": 0.6661280770499655
+    },
+    {
+      "start": 110.0,
+      "end": 115.0,
+      "pitchSimilarity": 0.6440110622092043
+    },
+    {
+      "start": 115.0,
+      "end": 120.0,
+      "pitchSimilarity": 0.6254188052231292
+    },
+    {
+      "start": 130.0,
+      "end": 135.0,
+      "pitchSimilarity": 0.6490403319908405
+    },
+    {
+      "start": 135.0,
+      "end": 140.0,
+      "pitchSimilarity": 0.3209820482323627
+    },
+    {
+      "start": 140.0,
+      "end": 145.0,
+      "pitchSimilarity": 0.5456544170821215
+    },
+    {
+      "start": 145.0,
+      "end": 150.0,
+      "pitchSimilarity": 0.6232183863890546
+    },
+    {
+      "start": 150.0,
+      "end": 155.0,
+      "pitchSimilarity": 0.4987807463553496
+    },
+    {
+      "start": 155.0,
+      "end": 160.0,
+      "pitchSimilarity": 0.5463798793641916
+    },
+    {
+      "start": 160.0,
+      "end": 165.0,
+      "pitchSimilarity": 0.48765400486604554
+    },
+    {
+      "start": 180.0,
+      "end": 185.0,
+      "pitchSimilarity": 0.09016065790966121
+    },
+    {
+      "start": 185.0,
+      "end": 185.83437641723356,
+      "pitchSimilarity": 0.0
+    }
+  ],
+  "verifiedPerfect": false
+}

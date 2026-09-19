@@ -1,0 +1,12 @@
+{
+  "source": "C:\\Users\\johnb\\Desktop\\resonance-music\\StreamingAssets\\CSV\\Kanye-Heartless.csv",
+  "sourceSha256": "37fd71b572502069a6dfb7fc6bf430445fbe0e0daf8f58d441d8a1793b387ce1",
+  "format": "event export",
+  "notes": 3816,
+  "warnings": [
+    "Not recoverable unambiguously: Midi Port - (now obselete according to the MMA)",
+    "Not recoverable unambiguously: Normal Sysex",
+    "Not recoverable unambiguously: SMTPE offset",
+    "The legacy Bank Select label omits MSB/LSB identity; recovered as controller 0. Unsupported vendor/system metadata is listed above."
+  ]
+}

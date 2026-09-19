@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Assets/PreparedPatternSong.cs" Link="PreparedPatternSong.cs" />
+    <Compile Include="../../Assets/SongAlignment.cs" Link="SongAlignment.cs" />
+    <Compile Include="../../Assets/HarmonyModel.cs" Link="HarmonyModel.cs" />
+    <Compile Include="../../Assets/MidiVoiceState.cs" Link="MidiVoiceState.cs" />
+    <Compile Include="../../Assets/HarmonicSpectrum.cs" Link="HarmonicSpectrum.cs" />
+    <Compile Include="../../Assets/HarmonicMemory.cs" Link="HarmonicMemory.cs" />
+    <Compile Include="../../Assets/VisualRelease.cs" Link="VisualRelease.cs" />
+    <Compile Include="../../Assets/SongFormAnalysis.cs" Link="SongFormAnalysis.cs" />
+    <Compile Include="../../Assets/MidiCycleAnalysis.cs" Link="MidiCycleAnalysis.cs" />
+    <Reference Include="NAudio.Midi"><HintPath>../../Assets/Plugins/NAudio.Midi.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

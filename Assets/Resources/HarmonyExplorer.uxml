@@ -1,0 +1,10 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:Style src="HarmonyExplorer.uss" />
+    <ui:VisualElement class="explorer" picking-mode="Ignore">
+        <ui:ScrollView name="controls" class="controls">
+            <ui:Label text="RESONANCE" class="eyebrow" />
+            <ui:Label text="Harmony explorer" class="title" />
+            <ui:Label text="Select a surface. Hear its objects. Follow the motion." class="muted" />
+        </ui:ScrollView>
+    </ui:VisualElement>
+</ui:UXML>

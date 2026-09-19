@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using NAudio.Midi;
 using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using Util;
 
 /// <summary>
@@ -26,8 +24,8 @@ public class Main : MonoBehaviour
     readonly List<TextBox> noteTextLabels = new();
 
     readonly List<LineRenderer> fifthsLineRenderer = new();
-    readonly List<LineRenderer> boundaryLineRenderers = new();
-    readonly List<MeshFilter> boundaryMeshFilters = new();
+    UmbilicField tonalField;
+
     LineRenderer chromaticLineRenderer;
 
     readonly Dictionary<ulong, Chord> chordLineRenderers = new();
@@ -56,46 +54,43 @@ public class Main : MonoBehaviour
         (1,-2)   // 11: 7 - 8 = -1 = 11
     };
 
-    static Color darkGrey => new(0.2f, 0.2f, 0.2f);
-
-    readonly Color[] descendingFifthColors =
-    {
-        // order from key - 1, descending through fifths
-        // Major
-        Color.red,
-        // Transient
-        Color.yellow,
-        darkGrey,
-        darkGrey,
-        darkGrey,
-        Color.yellow,
-        Color.Lerp(Color.yellow, Color.green, 0.5f),
-        // Minor
-        Color.Lerp(Color.green, Color.blue, 0.5f),
-        Color.Lerp(Color.blue, Color.red, 0.5f),
-        Color.Lerp(Color.red, Color.yellow, 0.5f),
-        // Major
-        Color.green,
-        Color.blue
-    };
-
-    readonly Dictionary<int, int> fifthToColor = new();
     readonly Dictionary<int, int> scaleToFifths = new();
 
     CameraControl cameraControl;
+    public static bool ReducedMotion;
+    public bool MinorMode, UseFlats, ShowSurfaces = true, ShowDiagonals = true, ShowStructure = true, ShowRegisters = true, SoundingOnly, DiatonicStrip;
+    public int SelectedSurface = 3;
+    public bool ShowHarmonics = true, SurfaceGuide;
+    public float FieldDensity = .7f;
+    public float ResonanceHalfLife = 1.8f, ResonanceGain = 1f;
+    public float VisualReleaseSeconds = 2.4f, NoteReleaseSeconds = .7f;
+    public UmbilicField TonalField => tonalField;
+    public float VisualRotation => currentVisualRotation;
+    public float VisualTwist => currentVisualTwist;
+    public Vector3 UmbilicPoint(float t) => UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, Mathf.Repeat(t,1), currentVisualTwist);
+    public MusicSynth Synth { get; private set; }
+    public IReadOnlyList<Tuple<int, float>> ActiveNotes => lastActiveKeys;
+    public event Action StateChanged;
+    readonly Stack<Chord> chordPool = new();
+    readonly List<Vector3> curveBuffer = new(41);
+    public string KeySource = "Manual";
+    public int CollectionRoot => HarmonyModel.Mod(currentKey + (MinorMode ? 3 : 0));
+    public string PitchName(int pc) => HarmonyModel.Name(pc, UseFlats);
+    public Vector3 SurfaceCurve(int a, int b, float u)
+    {
+        float t1=HarmonyModel.Mod(a*5)/(float)Tones+currentVisualRotation;
+        float t2=HarmonyModel.Mod(b*5)/(float)Tones+currentVisualRotation;
+        if(t2-t1>.5f)t1++;else if(t2-t1<-.5f)t2++;
+        return transform.TransformPoint(GetPointAt(Mathf.Lerp(t1,t2,u),1));
+    }
+
+    public void ChordOutlinePath(int a,int b,List<Vector3> result)=>ShortSurfaceRoute(HarmonyModel.Mod(a*5)/(float)Tones+currentVisualRotation,HarmonyModel.Mod(b*5)/(float)Tones+currentVisualRotation,1,1,result);
 
     void Awake()
     {
-        // create map for fifths to color lookup
-        // Maps semitone interval to circle-of-fifths index: I(0)->11(Blue), V(7)->10(Blue/Green), IV(5)->0(Red)
-        for (int i = 0; i < Tones; i++)
-        {
-            int fifthsIndex = (11 - (7 * i) % Tones + Tones) % Tones;
-            fifthToColor.Add(i, fifthsIndex);
-        }
-
+        if(GetComponent<DominantChordOutline>()==null)gameObject.AddComponent<DominantChordOutline>();
         visualKeyForRendering = currentKey;
-        currentVisualTwist = Mathf.PI;
+        currentKey = HarmonyModel.Mod(currentKey); currentVisualRotation = pathMap[currentKey].x / (float)Tones; currentVisualTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
 
         for (int j = 0; j < Octaves; j++)
         {
@@ -106,7 +101,7 @@ public class Main : MonoBehaviour
                 int noteIndex = j * Tones + i;
                 float scaleFactor = Mathf.Lerp(.03f, .005f, (float)noteIndex / (Tones * Octaves));
                 Note newNote = Note.Create($"{noteLabels[i]} {j}", ToHertz(noteIndex), scaleFactor);
-                newNote.transform.SetParent(transform, false);
+                newNote.Index = noteIndex; newNote.transform.SetParent(transform, false);
                 notes.Add(newNote);
                 scaleToFifths.Add(noteIndex, next);
 
@@ -127,25 +122,14 @@ public class Main : MonoBehaviour
 
         for (int i = 0; i < Tones; i++)
         {
-            Material fifthsMat = new(Shader.Find("Particles/Standard Unlit"));
+            Material fifthsMat = new(Resources.Load<Shader>("HarmonicGlow"));
             GameObject fifthsGo = new("fifths");
             fifthsGo.transform.SetParent(transform, false);
             fifthsLineRenderer.Add(NewLineRenderer(fifthsGo, fifthsMat, .01f, false));
 
-            GameObject boundaryGo = new("boundary");
-            boundaryGo.transform.SetParent(transform, false);
-            Material boundaryMat = new(Shader.Find("Unlit/Color")) { color = Color.gray };
-            boundaryLineRenderers.Add(NewLineRenderer(boundaryGo, boundaryMat, .005f, false));
-            boundaryLineRenderers[i].gameObject.SetActive(false);
-
-            GameObject meshGo = new("boundaryVolume");
-            meshGo.transform.SetParent(transform, false);
-            boundaryMeshFilters.Add(meshGo.AddComponent<MeshFilter>());
-            MeshRenderer mr = meshGo.AddComponent<MeshRenderer>();
-            mr.material = new Material(Shader.Find("UI/Default"));
         }
 
-        Material chromaticMat = new(Shader.Find("Unlit/Color"))
+        Material chromaticMat = new(Shader.Find("Universal Render Pipeline/Unlit"))
         {
             color = new Color(0.2f, 0.2f, 0.2f)
         };
@@ -154,15 +138,18 @@ public class Main : MonoBehaviour
         chromaticLineRenderer = NewLineRenderer(chromGo, chromaticMat, .007f, true);
 
         SetUmbilic();
+        var fieldGo = new GameObject("Umbilic tonal field"); fieldGo.transform.SetParent(transform,false);
+        tonalField = fieldGo.AddComponent<UmbilicField>(); tonalField.Initialize(this);
     }
 
     void Start()
     {
         UpdateText();
         UpdateLabelStyles();
-        Camera.main.GetComponent<CameraControl>().MovementUpdater += UpdateText;
+        cameraControl = Camera.main.GetComponent<CameraControl>(); if (cameraControl != null) cameraControl.MovementUpdater += UpdateText;
         Camera.main.transform.LookAt(Vector3.zero);
         
+        Synth = gameObject.AddComponent<MusicSynth>(); gameObject.AddComponent<HarmonyExplorer>(); gameObject.AddComponent<SurfaceOverlay>();
         // Initialize note colors with empty input to set default colors
         PlayKeys(new List<Tuple<int, float>>());
     }
@@ -193,40 +180,14 @@ public class Main : MonoBehaviour
             List<Vector3> subSection = new();
             for (float t = (float)i / Tones; t < (float)(i + 1) / Tones; t += resolution)
             {
-                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, currentVisualTwist));
+                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t+currentVisualRotation, currentVisualTwist));
             }
 
             fifthsSegment.positionCount = subSection.Count;
             fifthsSegment.SetPositions(subSection.ToArray());
 
-            float lerp = .2f;
-            if (i is 7 or 8 or 11)
-            {
-                lerp = .3f;
-            }
-
-            Color color = Color.Lerp(Color.black, descendingFifthColors[i], lerp);
-
-            Color endColor = color;
-            if (i == 1)
-            {
-                endColor = darkGrey;
-            }
-            else if (i == 5)
-            {
-                color = darkGrey;
-                endColor = Color.Lerp(Color.black, Color.yellow, lerp);
-            }
-
-            // Note: Color logic preserved above for animations, but rendering as grey
-            const float alpha = 1.0f;
-            Color renderColor = new(0.35f, 0.35f, 0.35f);
-            Gradient gradient = new();
-            gradient.SetKeys(
-                new[] { new GradientColorKey(renderColor, 0.0f), new GradientColorKey(renderColor, 1.0f) },
-                new[] { new GradientAlphaKey(alpha, 0.0f), new GradientAlphaKey(alpha, 1.0f) }
-            );
-            fifthsSegment.colorGradient = gradient;
+            fifthsSegment.startColor=TonalColorField.Pitch(HarmonyModel.Mod(i*5),currentKey)*.45f;
+            fifthsSegment.endColor=TonalColorField.Pitch(HarmonyModel.Mod((i+1)*5),currentKey)*.45f;
         }
 
         chromaticLineRenderer.positionCount = chromaticList.Count;
@@ -239,8 +200,7 @@ public class Main : MonoBehaviour
 
     void UpdateTorusPoints(float phaseShift, int visualKey)
     {
-        int[] slotToNote = new int[Tones];
-        for (int k = 0; k < Tones; k++) slotToNote[scaleToFifths[k] % Tones] = k;
+
 
         for (int j = 0; j < Octaves; j++)
         {
@@ -266,79 +226,6 @@ public class Main : MonoBehaviour
             }
         }
 
-        for (int slotIdx = 0; slotIdx < Tones; slotIdx++)
-        {
-            int i = slotToNote[slotIdx];
-            int rel = (i - visualKey + Tones) % Tones;
-
-            bool isMajor = rel is 0 or 5 or 7 or 1;
-            bool isMinor = rel is 2 or 4 or 9;
-            bool isNeapolitan = rel == 1;
-
-            if (!isMajor && !isMinor)
-            {
-                boundaryMeshFilters[slotIdx].gameObject.SetActive(false);
-                continue;
-            }
-
-            boundaryMeshFilters[slotIdx].gameObject.SetActive(true);
-
-            int thirdInt = isMajor ? 4 : 3;
-            int oppInt = isMajor ? 11 : -4;
-
-            float tRoot = ((float)slotIdx / Tones + phaseShift) % 1.0f;
-            float t3rd = ((float)(scaleToFifths[(i + thirdInt) % Tones] % Tones) / Tones + phaseShift) % 1.0f;
-            float t5th = ((float)(scaleToFifths[(i + 7) % Tones] % Tones) / Tones + phaseShift) % 1.0f;
-            float tOpp = ((float)(scaleToFifths[(i + oppInt + Tones) % Tones] % Tones) / Tones + phaseShift) % 1.0f;
-
-            float p1Start = isMajor ? tRoot : t5th;
-            float p1End = isMajor ? t5th : tRoot;
-
-            if (p1End - p1Start > 0.5f) p1Start += 1.0f; else if (p1End - p1Start < -0.5f) p1End += 1.0f;
-            if (tOpp - t3rd > 0.5f) t3rd += 1.0f; else if (tOpp - t3rd < -0.5f) tOpp += 1.0f;
-
-            const int uSteps = 20;
-            List<Vector3> verts = new();
-            List<int> tris = new();
-
-            for (int u = 0; u <= uSteps; u++)
-            {
-                float U = (float)u / uSteps;
-                float p1T = Mathf.Lerp(p1Start, p1End, U);
-                float p2T = Mathf.Lerp(t3rd, tOpp, U);
-                
-                Vector3 p1Top = GetPointAt(p1T, 1f);
-                Vector3 p1Bot = GetPointAt(p1T, 0f);
-                Vector3 p2Top = GetPointAt(p2T, 1f);
-                Vector3 p2Bot = GetPointAt(p2T, 0f);
-
-                Vector3 pbTop = Vector3.Lerp(p2Top, p1Top, U);
-                Vector3 pbBot = Vector3.Lerp(p2Bot, p1Bot, U);
-
-                verts.Add(p1Top); verts.Add(p1Bot);
-                verts.Add(pbTop); verts.Add(pbBot);
-            }
-
-            for (int u = 0; u < uSteps; u++)
-            {
-                int b = u * 4; int n = (u + 1) * 4;
-                AddQuad(tris, b + 0, n + 0, n + 2, b + 2);
-                AddQuad(tris, b + 1, b + 3, n + 3, n + 1);
-                AddQuad(tris, b + 0, b + 1, n + 1, n + 0);
-                AddQuad(tris, b + 2, n + 2, n + 3, b + 3);
-            }
-            AddQuad(tris, 0, 2, 3, 1);
-            AddQuad(tris, uSteps * 4, uSteps * 4 + 1, uSteps * 4 + 3, uSteps * 4 + 2);
-
-            Mesh mesh = new() { vertices = verts.ToArray(), triangles = tris.ToArray() };
-            mesh.RecalculateNormals();
-            boundaryMeshFilters[slotIdx].mesh = mesh;
-            
-            Color refColor = descendingFifthColors[fifthToColor[rel]];
-            refColor.a = isMajor ? 0.1f : 0.01f; 
-            if(isNeapolitan) refColor.a = 0.005f;
-            boundaryMeshFilters[slotIdx].GetComponent<MeshRenderer>().material.color = refColor;
-        }
     }
 
     Vector3 GetPointAt(float t, float factor)
@@ -353,365 +240,166 @@ public class Main : MonoBehaviour
         tris.AddRange(new[] { a, b, c, a, c, d });
     }
 
-    public void ChangeKey(int newKey, float duration = 1.0f)
+    public void ChangeKey(int newKey, float duration = .7f)
     {
         if (keyChangeCoroutine != null) StopCoroutine(keyChangeCoroutine);
-        
-        if (duration <= 0)
-        {
-            int n = (newKey - currentKey + 12) % 12;
-            var move = pathMap[n];
-            currentVisualRotation += (move.x / (float)Tones);
-            currentVisualTwist += (move.y * (2f * Mathf.PI / 3f));
-            currentKey = newKey;
-            visualKeyForRendering = currentKey;
-            SetUmbilic();
-            PlayKeys(lastActiveKeys);
-            return;
-        }
-        keyChangeCoroutine = StartCoroutine(KeyChangeRoutine(newKey, duration));
-    }
-
-    private System.Collections.IEnumerator KeyChangeRoutine(int targetKey, float duration)
-    {
-        int startKey = currentKey;
-        int n = (targetKey - startKey + 12) % 12;
-
-        var move = pathMap[n];
-        float startRotation = currentVisualRotation;
-        // x represents steps in circle of fifths. Flipped sign to correct rotation direction.
-        float targetRotation = startRotation + (move.x / (float)Tones);
-        
-        float startTwist = currentVisualTwist;
-        float targetTwist = startTwist + (move.y * (2f * Mathf.PI / 3f));
-
-        int[] slotToNote = new int[Tones];
-        for (int k = 0; k < Tones; k++) slotToNote[scaleToFifths[k] % Tones] = k;
-
-        int frameCount = 30;
-        float waitTime = duration / frameCount;
-
-        for (int i = 1; i <= frameCount; i++)
-        {
-            float lerp = (float)i / frameCount;
-            currentVisualRotation = Mathf.Lerp(startRotation, targetRotation, lerp);
-            currentVisualTwist = Mathf.Lerp(startTwist, targetTwist, lerp);
-            
-            // Calculate intermediate visual key based on turn/twist progress
-            int curX = Mathf.RoundToInt(lerp * move.x);
-            int curY = Mathf.RoundToInt(lerp * move.y);
-            visualKeyForRendering = (startKey + curX * 7 + curY * 4 + 120) % 12;
-
-            SetUmbilic(); // Updates lines and notes
-            PlayKeys(lastActiveKeys);
-            yield return new UnityEngine.WaitForSeconds(waitTime);
-        }
-
-        currentKey = targetKey;
+        currentKey = HarmonyModel.Mod(newKey);
         visualKeyForRendering = currentKey;
+        if (ReducedMotion || duration <= 0)
+        {
+            currentVisualRotation = pathMap[currentKey].x / (float)Tones;
+            currentVisualTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
+            RefreshView(); keyChangeCoroutine = null;
+        }
+        else keyChangeCoroutine = StartCoroutine(KeyChangeRoutine(duration));
+        StateChanged?.Invoke();
+    }
+    System.Collections.IEnumerator KeyChangeRoutine(float duration)
+    {
+        float rotation = currentVisualRotation, twist = currentVisualTwist;
+        float targetRotation = pathMap[currentKey].x / (float)Tones;
+        float targetTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
+        float elapsed = 0;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.SmoothStep(0, 1, Mathf.Clamp01(elapsed / duration));
+            currentVisualRotation = Mathf.Lerp(rotation, targetRotation, t);
+            currentVisualTwist = Mathf.Lerp(twist, targetTwist, t);
+            RefreshView(); yield return null;
+        }
         keyChangeCoroutine = null;
     }
-
-    Color CalculateNoteColor(int noteIndex, List<Tuple<int, float>> activeNotes)
+    public void RefreshView()
     {
-        int baseNote = noteIndex % Tones;
-        int relativeToKey = (baseNote - visualKeyForRendering + Tones) % Tones;
-        
-        // Base color from position in circle of fifths relative to current key
-        Color baseColor = descendingFifthColors[fifthToColor[relativeToKey]];
-        
-        if (activeNotes.Count <= 1)
-        {
-            // Single note or no harmonies - use base color
-            return baseColor;
-        }
-        
-        // Calculate harmonic relationships with other active notes
-        Color blendedColor = baseColor * 0.5f; // Start with half the base color
-        float totalInfluence = 0.5f;
-        
-        foreach (var (otherNoteIndex, amplitude) in activeNotes)
-        {
-            if (otherNoteIndex == noteIndex) continue;
-            
-            int otherBase = otherNoteIndex % Tones;
-            int interval = (otherBase - baseNote + Tones) % Tones;
-            
-            float influence = 0f;
-            Color harmonicColor = Color.clear;
-            
-            // Determine harmonic relationship and color influence
-            switch (interval)
-            {
-                case 0: // Octave - same color
-                    harmonicColor = baseColor;
-                    influence = amplitude * 0.3f;
-                    break;
-                case 5: // Perfect fourth
-                case 7: // Perfect fifth
-                    int fifthRelativeToKey = (otherBase - visualKeyForRendering + Tones) % Tones;
-                    harmonicColor = descendingFifthColors[fifthToColor[fifthRelativeToKey]];
-                    influence = amplitude * 0.4f;
-                    break;
-                case 3: // Minor third
-                case 4: // Major third
-                case 8: // Minor sixth
-                case 9: // Major sixth
-                    int thirdRelativeToKey = (otherBase - visualKeyForRendering + Tones) % Tones;
-                    harmonicColor = descendingFifthColors[fifthToColor[thirdRelativeToKey]];
-                    influence = amplitude * 0.3f;
-                    break;
-                default:
-                    // Dissonant intervals - less influence
-                    int dissonantRelativeToKey = (otherBase - visualKeyForRendering + Tones) % Tones;
-                    harmonicColor = descendingFifthColors[fifthToColor[dissonantRelativeToKey]];
-                    influence = amplitude * 0.1f;
-                    break;
-            }
-            
-            if (influence > 0)
-            {
-                blendedColor += harmonicColor * influence;
-                totalInfluence += influence;
-            }
-        }
-        
-        // Normalize the color
-        if (totalInfluence > 0)
-        {
-            blendedColor /= totalInfluence;
-        }
-        
-        return blendedColor;
+        SetUmbilic(); UpdateText();
+        foreach (var line in fifthsLineRenderer) line.enabled = ShowStructure;
+        RenderKeys();
     }
-
-    /// <summary>
-    /// Takes input from keyboard or midi file
-    /// </summary>
-    public void PlayKeys(List<Tuple<int, float>> keysAndAmplitudes)
+    public void PlayKeys(List<Tuple<int, float>> values) => SetNotes(values, true);
+    public void SetNotes(List<Tuple<int, float>> values, bool audio)
     {
-        lastActiveKeys = keysAndAmplitudes;
-        float[] votes = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-        
-        // from the input, sort all notes into octaves, fifths, and thirds
-        List<ulong> playingOctaves = new();
-        List<ulong> playingThirds = new();
-        List<ulong> playingFifths = new();
-        foreach ((int key, float amp) in keysAndAmplitudes)
+        lastActiveKeys = values.Where(n => n.Item1 >= 0 && n.Item1 < notes.Count && n.Item2 > 0 && !float.IsNaN(n.Item2))
+            .GroupBy(n => n.Item1).Select(g => Tuple.Create(g.Key, Mathf.Clamp01(g.Max(n => n.Item2)))).ToList();
+        RenderKeys();
+        if (audio && Synth != null) { Synth.ResetVoices(); Synth.Schedule(AudioSettings.dspTime, lastActiveKeys); }
+        StateChanged?.Invoke();
+    }
+    public void StrikeNote(int index,float velocity){if(index>=0&&index<notes.Count){notes[index].Strike(velocity);foreach(var chord in chordLineRenderers.Values)if(!chord.Releasing&&(chord.Note1.Index==index||chord.Note2.Index==index))chord.Strike();}}
+    public void Silence() => PlayKeys(new List<Tuple<int, float>>());
+    void RenderKeys()
+    {
+        foreach (var note in notes) note.CurrentAmp = 0;
+        foreach (var n in lastActiveKeys) notes[n.Item1].CurrentAmp = n.Item2;
+        var wanted = new HashSet<ulong>();
+        for (int a = 0; a < lastActiveKeys.Count; a++) for (int b = a + 1; b < lastActiveKeys.Count; b++)
         {
-            // update the amplitude to the current value in all cases
-            notes[key].CurrentAmp = amp;
-
-            int baseKey = key % Tones;
-            votes[baseKey] += amp;
-            foreach (Tuple<int, float> otherKeyAndAmp in keysAndAmplitudes)
+            int ia = lastActiveKeys[a].Item1, ib = lastActiveKeys[b].Item1;
+            int interval = HarmonyModel.Mod(ib - ia);
+            bool fifth = interval is 5 or 7;
+            bool border = interval is 4 or 8;
+            bool diagonal = interval is 3 or 9 or 1 or 11;
+            if (!(fifth || border || interval==0 || (diagonal && ShowDiagonals))) continue;
+            ulong id = Szudzik.uintSzudzik2tupleCombine((uint)Mathf.Min(ia,ib), (uint)Mathf.Max(ia,ib));
+            wanted.Add(id);
+            if (!chordLineRenderers.TryGetValue(id, out var chord))
             {
-                int otherKey = otherKeyAndAmp.Item1;
-                ulong id = Szudzik.uintSzudzik2tupleCombine((uint)key, (uint)otherKey);
-                int compareKey = otherKey % Tones;
-
-                if (baseKey == compareKey)
+                if (chordPool.Count > 0) { chord = chordPool.Pop(); chord.gameObject.SetActive(true); }
+                else
                 {
-                    // octave
-                    playingOctaves.Add(id);
+                    var go = new GameObject("Sounding interval"); go.transform.SetParent(transform, false);
+                    var lr = NewLineRenderer(go, new Material(Resources.Load<Shader>("HarmonicGlow")), .012f, false);
+                    chord = go.AddComponent<Chord>();
                 }
-                else if ((baseKey < compareKey && compareKey - baseKey == 7) || baseKey - compareKey == 5)
-                {
-                    // fifth
-                    playingFifths.Add(id);
-                }
-                else if ((baseKey < compareKey && compareKey - baseKey == 4) || baseKey - compareKey == 8)
-                {
-                    // third
-                    playingThirds.Add(id);
-                }
+                chord.Init(notes[ia], notes[ib], chord.GetComponent<LineRenderer>());
+                chordLineRenderers.Add(id, chord);
+            }
+            chord.Drive(notes[ia].CurrentAmp,notes[ib].CurrentAmp,TonalColorField.Pitch(ia,currentKey),TonalColorField.Pitch(ib,currentKey),VisualReleaseSeconds);
+        }
+        foreach(var entry in chordLineRenderers)
+        {
+            var chord=entry.Value;
+            if(!wanted.Contains(entry.Key))chord.Release();
+            int ia=chord.Note1.Index,ib=chord.Note2.Index;
+            chord.Recolor(TonalColorField.Pitch(ia,currentKey),TonalColorField.Pitch(ib,currentKey));
+            // Only octave/radial lines and the major-third triangle edges share
+            // a cross-section. Every other interval follows the umbilic curve.
+            if (HarmonyModel.Mod(ib-ia) is not (0 or 4 or 8))
+            {
+                float t1 = scaleToFifths[ia] % Tones / (float)Tones + currentVisualRotation;
+                float t2 = scaleToFifths[ib] % Tones / (float)Tones + currentVisualRotation;
+                curveBuffer.Clear();
+                ShortSurfaceRoute(t1,t2,(ia/12+1)/(float)Octaves,(ib/12+1)/(float)Octaves,curveBuffer);
+                chord.Fifth(curveBuffer);
             }
         }
-
-        // set all other notes to zero amplitude
-        List<int> currentKeys = keysAndAmplitudes.Select(x => x.Item1).ToList();
-        int count = 0;
-        foreach (Note note in notes)
+        for (int i=0;i<notes.Count;i++)
         {
-            if (!currentKeys.Contains(count))
-            {
-                note.CurrentAmp = 0;
-            }
-
-            count++;
-        }
-
-        // determine chords to switch off from last update
-        List<ulong> playing = playingOctaves.Concat(playingThirds).Concat(playingFifths).ToList();
-        List<ulong> offList = chordLineRenderers.Keys.Where(oldKey => !playing.Contains(oldKey)).ToList();
-
-        foreach (ulong toRemove in offList)
-        {
-            Destroy(chordLineRenderers[toRemove].gameObject);
-            chordLineRenderers.Remove(toRemove);
-        }
-
-        // create new chords
-        foreach (ulong playKey in playingThirds)
-        {
-            uint[] pair = Szudzik.uintSzudzik2tupleReverse(playKey);
-            int key = (int)pair[0];
-            int otherKey = (int)pair[1];
-            
-            Note note1 = notes[key];
-            Note note2 = notes[otherKey];
-
-            float combinedAmplitude = note1.CurrentAmp + note2.CurrentAmp;
-            float intensity = combinedAmplitude * 1.5f;
-
-            bool pointingOut = Vector3.Magnitude(notes[key].transform.localPosition) <
-                               Vector3.Magnitude(notes[otherKey].transform.localPosition);
-
-            // sum all fifths below key and below otherKey and retrieve vote
-            int scaleOther = otherKey % Tones;
-            int scaleKey = key % Tones;
-
-            float otherSum = votes[scaleOther];
-            float thisSum = votes[scaleKey];
-
-            Color calcColor = Color.white;
-            if (thisSum == 0 && otherSum == 0)
-            {
-                // default to inner note color
-                calcColor = pointingOut
-                    ? descendingFifthColors[fifthToColor[(scaleKey - visualKeyForRendering + Tones) % Tones]]
-                    : descendingFifthColors[fifthToColor[(scaleOther - visualKeyForRendering + Tones) % Tones]];
-            }
-            else
-            {
-                float colorT = GetRatio(thisSum, otherSum);
-
-                int startIdx = scaleKey;
-                int endIdx = scaleOther;
-
-                calcColor = Color.Lerp(
-                    descendingFifthColors[fifthToColor[(startIdx - visualKeyForRendering + Tones) % Tones]],
-                    descendingFifthColors[fifthToColor[(endIdx - visualKeyForRendering + Tones) % Tones]],
-                    colorT);
-            }
-
-            Color color = Color.Lerp(
-                calcColor,
-                Color.white,
-                .3f) * Mathf.Pow(2, intensity); // whiten and intensify on HDR
-
-            if (chordLineRenderers.TryGetValue(playKey, out Chord lineRenderer))
-            {
-                // update chord color
-                lineRenderer.GetComponent<Renderer>().material.color = color;
-                continue;
-            }
-
-            // draw thirds as simple lines
-            GameObject chordGo = new("chord");
-            LineRenderer chordRend = NewLineRenderer(chordGo, BloomMat, .015f, false);
-            Chord newChord = chordGo.AddComponent<Chord>();
-            newChord.Init(note1, note2, chordRend);
-            chordLineRenderers.Add(playKey, newChord);
-
-            // set chord color
-            chordRend.material.color = color;
-        }
-
-        foreach (ulong playKey in playingFifths)
-        {
-            if (chordLineRenderers.ContainsKey(playKey)) continue;
-            uint[] pair = Szudzik.uintSzudzik2tupleReverse(playKey);
-            int key = (int)pair[0];
-            int otherKey = (int)pair[1];
-
-            // draw fifths along umbilical
-            GameObject chordGo = new("chord");
-            LineRenderer chordRend = NewLineRenderer(chordGo, BloomMat, .02f, false);
-
-            Note note1 = notes[key];
-            Note note2 = notes[otherKey];
-            Chord newChord = chordGo.AddComponent<Chord>();
-            newChord.Init(note1, note2, chordRend);
-            chordLineRenderers.Add(playKey, newChord);
-
-            // Get torus positions (0-11)
-            int torusIdx1 = scaleToFifths[key] % Tones;
-            int torusIdx2 = scaleToFifths[otherKey] % Tones;
-
-            float t1 = (float)torusIdx1 / Tones + currentVisualRotation;
-            float t2 = (float)torusIdx2 / Tones + currentVisualRotation;
-
-            // Handle wrap-around for shortest path
-            float delta = t2 - t1;
-            if (delta > 0.5f) t1 += 1.0f;
-            else if (delta < -0.5f) t2 += 1.0f;
-
-            int startOctave = key / Tones;
-            int endOctave = otherKey / Tones;
-            float startFactor = (float)(startOctave + 1) / Octaves;
-            float endFactor = (float)(endOctave + 1) / Octaves;
-
-            List<Vector3> fifthLine = new();
-            const int steps = 40;
-            for (int i = 0; i <= steps; i++)
-            {
-                float progress = (float)i / steps;
-                float t = Mathf.Lerp(t1, t2, progress);
-                float currentFactor = Mathf.Lerp(startFactor, endFactor, progress);
-                
-                float wrappedT = t % 1.0f;
-                if (wrappedT < 0) wrappedT += 1.0f;
-
-                Vector3 umbilicPos = UmbilicTorus.PointAlongUmbilical(
-                    Sides,
-                    EdgeLength,
-                    Rad,
-                    wrappedT,
-                    currentVisualTwist);
-
-                Vector3 centroid = CentroidAt(wrappedT);
-                fifthLine.Add(Vector3.Lerp(centroid, umbilicPos, currentFactor));
-            }
-
-            float combinedAmplitude = note1.CurrentAmp + note2.CurrentAmp;
-
-            // set color of fifth (it is always the same color, but intensity changes)
-            float intensity = combinedAmplitude * 1.5f;
-            Color color = Color.Lerp(
-                descendingFifthColors[fifthToColor[(key % Tones - visualKeyForRendering + Tones) % Tones]],
-                Color.white,
-                .3f) * Mathf.Pow(2, intensity); // whiten and intensify on HDR
-
-            chordRend.material.color = color;
-
-            newChord.Fifth(fifthLine);
-        }
-        
-        // Color individual notes based on harmonic relationships
-        for (int i = 0; i < notes.Count; i++)
-        {
-            Note note = notes[i];
-            Color noteColor = CalculateNoteColor(i, keysAndAmplitudes);
-            
-            // Apply intensity based on amplitude
-            if (note.CurrentAmp > 0)
-            {
-                // Brighten and intensify active notes
-                float intensity = note.CurrentAmp * 1.5f;
-                noteColor = Color.Lerp(noteColor, Color.white, 0.2f) * Mathf.Pow(2, intensity);
-            }
-            else
-            {
-                // Dim inactive notes
-                noteColor = Color.Lerp(noteColor, Color.black, 0.8f);
-            }
-            
-            // Set the note color
-            note.SetColor(noteColor);
+            var note = notes[i];
+            Color color = TonalColorField.Pitch(i,currentKey);
+            note.Configure(color,(ShowRegisters || i/12==3) && !SoundingOnly,NoteReleaseSeconds);
         }
     }
+    // The umbilic parameter winds THREE times around the hole. Wrapping it at
+    // 0.5 selected long physical arcs. Unwrap the major angle at 1/6 instead,
+    // then travel across the appropriate triangle edge to retain both endpoints.
+    public void ShortSurfaceRoute(float from,float to,float fromRegister,float toRegister,List<Vector3> result)
+    {
+        int bestShift=SurfaceRouteShift(from,to,fromRegister,toRegister);
+        result.Clear();
+        for(int j=0;j<=40;j++)result.Add(transform.TransformPoint(SurfaceRoutePoint(from,to+bestShift/3f,bestShift,fromRegister,toRegister,j/40f)));
+    }
+    int SurfaceRouteShift(float from,float to,float fromRegister,float toRegister)
+    {
+        int bestShift=0;float bestLength=float.PositiveInfinity;
+        for(int shift=-3;shift<=3;shift++)
+        {
+            float end=to+shift/3f;
+            if(Mathf.Abs(end-from)>1f/6f+.00001f)continue;
+            float length=0;Vector3 previous=SurfaceRoutePoint(from,end,shift,fromRegister,toRegister,0);
+            for(int j=1;j<=40;j++){var point=SurfaceRoutePoint(from,end,shift,fromRegister,toRegister,j/40f);length+=Vector3.Distance(previous,point);previous=point;}
+            if(length<bestLength){bestLength=length;bestShift=shift;}
+        }
+        return bestShift;
+    }
+    public Vector2 ChordRegionCoordinate(int root,int pitch)
+    {
+        float from=HarmonyModel.Mod(root*5)/12f+currentVisualRotation,to=HarmonyModel.Mod(pitch*5)/12f+currentVisualRotation;
+        int shift=SurfaceRouteShift(from,to,1,1),corner=(((-shift)%3)+3)%3;if(corner==2)corner=-1;
+        return new Vector2(to+shift/3f,corner);
+    }
+    public Vector3 ChordRegionPoint(Vector2 uv)
+    {
+        int side=Mathf.FloorToInt(uv.y);
+        return transform.TransformPoint(Vector3.Lerp(GetPointAt(uv.x+side/3f,1),GetPointAt(uv.x+(side+1)/3f,1),uv.y-side));
+    }
+    Vector3 SurfaceRoutePoint(float from,float to,int shift,float ra,float rb,float u)
+    {
+        int corner=(((-shift)%3)+3)%3;if(corner==2)corner=-1;
+        float edge=corner*u;int side=Mathf.FloorToInt(edge);float t=Mathf.Lerp(from,to,u),register=Mathf.Lerp(ra,rb,u);
+        return Vector3.Lerp(GetPointAt(t+side/3f,register),GetPointAt(t+(side+1)/3f,register),edge-side);
+    }
+    void Update()
+    {
+        foreach(var id in chordLineRenderers.Keys.Where(id=>chordLineRenderers[id].TailComplete).ToArray())
+        {
+            var chord=chordLineRenderers[id];chord.gameObject.SetActive(false);chordPool.Push(chord);chordLineRenderers.Remove(id);
+        }
+    }
+    public void ClearVisualMemory()
+    {
+        tonalField?.ClearMemory();foreach(var note in notes)note.ClearTail();
+        foreach(var chord in chordLineRenderers.Values)if(chord.Releasing)chord.ClearTail();
+    }
+    void OnApplicationFocus(bool focus) { if (!focus && Synth != null) Silence(); }
+    void OnDestroy()
+    {
+        if (cameraControl != null) cameraControl.MovementUpdater -= UpdateText;
 
+        foreach (var lr in fifthsLineRenderer) if (lr != null) Destroy(lr.sharedMaterial);
+
+        if (chromaticLineRenderer != null) Destroy(chromaticLineRenderer.sharedMaterial);
+    }
     static float GetRatio(float a, float b)
     {
         // Handle special cases
@@ -748,6 +436,7 @@ public class Main : MonoBehaviour
         for (int i = 0; i < noteTextLabels.Count; i++)
         {
             int rel = (i - visualKeyForRendering + Tones) % Tones;
+            noteTextLabels[i].Text = PitchName(i) + (rel == 0 ? "  I" : rel == 5 ? "  IV" : rel == 7 ? "  V" : "");
             const float baseSize = 0.5f;
 
             if (rel == 0) // Key
@@ -776,7 +465,7 @@ public class Main : MonoBehaviour
     static LineRenderer NewLineRenderer(GameObject parent, Material fifthsMat, float LW, bool loop)
     {
         LineRenderer fifthsLineRenderer = parent.AddComponent<LineRenderer>();
-        fifthsLineRenderer.material = fifthsMat;
+        fifthsLineRenderer.sharedMaterial = fifthsMat;
         fifthsLineRenderer.startWidth = LW;
         fifthsLineRenderer.endWidth = LW;
         fifthsLineRenderer.loop = loop;

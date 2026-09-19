@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "audioPath": "recording.wav",
+  "midiPath": "aligned.mid",
+  "reportPath": "report.html",
+  "sourceAudioPath": "C:\\Users\\johnb\\Desktop\\resonance-music\\StreamingAssets\\WAV\\ComeFirst.wav",
+  "sourceAudioSha256": "c9b52bf3270e72bcba957d61b53612fe54bd4d7ceed5cde1a5d64f83340b3d55",
+  "sourceMidiSha256": "8395b7e305c1b6eeae208319a7a07218ecd72528e0dcbc012360b6a1642159dd",
+  "audioSha256": "7eef1fef1ce3299ad8197554e4a224f2bfe0847190323726529630b31f362504",
+  "midiSha256": "4a993226557bdb4f47a261dcc96fe0c7abf201147f978b2e9ee5ced7c74cfb35",
+  "featureResolutionMs": 10.0,
+  "status": "fingerprint-aligned; review weak windows",
+  "audioDuration": 196.10739229024944
+}

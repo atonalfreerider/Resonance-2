@@ -1,0 +1,66 @@
+.explorer { flex-grow: 1; color: rgb(231, 236, 246); font-size: 14px; }
+.controls { width: 320px; max-width: 45%; flex-grow: 1; background-color: rgba(13, 19, 30, 0.96); padding: 18px; border-right-width: 1px; border-right-color: rgb(51, 65, 84); }
+.eyebrow { color: rgb(133, 169, 205); font-size: 11px; letter-spacing: 3px; }
+.title { font-size: 24px; -unity-font-style: bold; margin-bottom: 8px; }
+.section { font-size: 12px; -unity-font-style: bold; color: rgb(154, 181, 212); margin-top: 20px; margin-bottom: 8px; }
+.muted { color: rgb(164, 179, 198); white-space: normal; margin-bottom: 8px; }
+.details { white-space: normal; margin-top: 8px; margin-bottom: 8px; }
+.focus-hint { font-size: 11px; color: rgb(152, 207, 241); padding: 8px; background-color: rgb(27, 43, 60); border-radius: 4px; }
+.orrery { flex-shrink: 0; }
+.orbit-legend { font-size: 10px; color: rgb(194, 169, 118); white-space: normal; }
+.section-chip, .chord-chip { font-size: 11px; padding: 4px 6px; min-height: 25px; }
+.section-card { width: 120px; max-width: 48%; margin-right: 4px; flex-shrink: 0; }
+.pattern-row { white-space: normal; font-size: 11px; -unity-text-align: middle-left; }
+.row { flex-direction: row; flex-wrap: wrap; }
+Button { background-color: rgb(34, 48, 68); border-width: 1px; border-color: rgb(66, 84, 109); border-radius: 5px; color: rgb(239, 244, 255); padding: 7px 9px; margin: 3px 4px 3px 0; }
+Button:hover { background-color: rgb(55, 75, 102); }
+Button:active { background-color: rgb(73, 97, 126); }
+Button:focus { border-color: rgb(149, 195, 255); }
+.legend { padding: 6px; margin-top: 4px; -unity-font-style: bold; }
+.tonic { border-left-width: 5px; border-left-color: blue; }
+.subdominant { border-left-width: 5px; border-left-color: red; }
+.dominant { border-left-width: 5px; border-left-color: lime; }
+TextField, DropdownField, Slider, Toggle { margin-top: 5px; margin-bottom: 5px; }
+.unity-base-field { flex-direction: column; }
+.unity-base-field__label { color: rgb(180, 195, 216); margin-bottom: 4px; }
+.unity-base-field__input { background-color: rgb(25, 36, 53); border-width: 1px; border-color: rgb(69, 89, 118); border-radius: 4px; color: white; min-height: 26px; padding: 5px; }
+.unity-base-popup-field__text { color: white; }
+.unity-base-popup-field__input { flex-direction: row; align-items: center; }
+.unity-base-popup-field__text { flex-grow: 1; }
+.unity-text-field__input { white-space: normal; }
+.unity-toggle { flex-direction: row; }
+.unity-toggle__input { min-width: 18px; min-height: 18px; }
+.unity-toggle__checkmark { width: 12px; height: 12px; background-color: rgb(46, 61, 79); }
+.unity-toggle__input:checked > .unity-toggle__checkmark { background-color: rgb(115, 193, 255); }
+.unity-base-slider__tracker { height: 3px; background-color: rgb(66, 89, 115); }
+.unity-base-slider__dragger { width: 12px; height: 18px; background-color: rgb(145, 204, 255); border-radius: 3px; }
+.unity-scroll-view__content-container { padding-right: 4px; flex-shrink: 0; }
+.unity-scroll-view__content-container > * { flex-shrink: 0; }
+.unity-scroll-view__content-viewport { flex-grow: 1; overflow: hidden; }
+Label { flex-shrink: 0; }
+Button { min-height: 32px; flex-shrink: 0; }
+TextField, DropdownField, Slider { min-height: 54px; flex-shrink: 0; }
+Toggle { min-height: 27px; flex-shrink: 0; }
+.unity-scroll-view { overflow: hidden; }
+.unity-base-popup-field__arrow { width: 10px; height: 10px; margin-left: 4px; background-color: rgb(116, 153, 191); }
+.unity-base-text-field__input { min-height: 25px; }
+.unity-base-field__input { flex-grow: 1; }
+.unity-base-slider__drag-container { min-height: 22px; flex-grow: 1; }
+.unity-scroller { width: 9px; }
+.unity-scroller__low-button, .unity-scroller__high-button { display: none; }
+.unity-base-dropdown__container-outer { background-color: rgb(20, 30, 45); border-width: 1px; border-color: rgb(90, 122, 155); }
+.unity-base-dropdown__item { min-height: 30px; padding: 5px 9px; color: rgb(235, 242, 252); }
+.unity-base-dropdown__label { color: rgb(235, 242, 252); white-space: nowrap; }
+.unity-base-dropdown__item:hover, .unity-base-dropdown__item:checked { background-color: rgb(46, 70, 96); }
+.explorer .unity-button { background-image: none; background-color: rgb(34, 48, 68); border-width: 1px; border-color: rgb(66, 84, 109); border-radius: 5px; color: rgb(239, 244, 255); }
+.explorer .unity-button:hover { background-color: rgb(55, 75, 102); }
+.explorer .unity-button:active { background-color: rgb(73, 97, 126); }
+.explorer .unity-base-slider__dragger { background-image: none; background-color: rgb(145, 204, 255); border-width: 0; border-radius: 3px; }
+.explorer .unity-base-slider__tracker { background-image: none; background-color: rgb(66, 89, 115); border-width: 0; }
+.explorer .unity-scroller__slider .unity-base-slider__dragger { background-image: none; background-color: rgb(75, 106, 134); min-width: 6px; }
+.explorer .unity-foldout__content { margin-left: 0; padding-left: 0; }
+.explorer .unity-foldout__toggle { margin-left: 0; }
+
+.unity-base-dropdown__container-inner { background-image: none; background-color: rgb(20, 30, 45); }
+.explorer .unity-base-popup-field__input { background-image: none; background-color: rgb(25, 36, 53); }
+#rack-play-pause { background-image: none; background-color: rgb(29, 47, 66); color: white; }

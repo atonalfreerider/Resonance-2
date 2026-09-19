@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "audioPath": "recording.wav",
+  "midiPath": "aligned.mid",
+  "reportPath": "report.html",
+  "sourceAudioPath": "C:\\Users\\johnb\\Documents\\MuseScore4\\Scores\\Ticket To Ride (Remastered 2015) pitch-shift.mp3",
+  "sourceAudioSha256": "3cfba5aa32c256a2cf59979242da7e2feda0cf226a2c70bb0239db413dfc8cae",
+  "sourceMidiSha256": "5881d053a45a2640f57fb4dce3542852516ea233cf91daf339814e5f265f4ef5",
+  "audioSha256": "6bb5ea526a9051517e8d71517422c6487d244cf2bd70c5dfb098d2d17ea1973a",
+  "midiSha256": "77c3aa5e11e06e1ed739adbce9ead25ac87537994faf47e7a6f7aa24724a5de8",
+  "featureResolutionMs": 10.0,
+  "status": "fingerprint-aligned; review weak windows",
+  "audioDuration": 190.14820861678004
+}
