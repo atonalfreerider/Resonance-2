@@ -13,7 +13,7 @@ public class UmbilicField : MonoBehaviour
     readonly float[] target=new float[12];
     readonly HarmonicMemory memory=new();
     int integratedFrame=-1;
-    float phase=float.NaN, twist;
+    float phase=float.NaN, twist,unfold=-1;
     int maskKey=-1;
     bool maskMinor;
     readonly Vector2[] tonalCoverage=new Vector2[(Along+1)*(Across+1)];
@@ -45,7 +45,8 @@ public class UmbilicField : MonoBehaviour
     }
     void UpdateGeometry()
     {
-        if(phase==main.VisualRotation && twist==main.VisualTwist)return;
+        if(phase==main.VisualRotation && twist==main.VisualTwist&&unfold==main.UncoilAmount)return;
+        unfold=main.UncoilAmount;
         phase=main.VisualRotation;twist=main.VisualTwist;
         for(int i=0;i<=Along;i++)
         {
@@ -53,7 +54,13 @@ public class UmbilicField : MonoBehaviour
             Vector3 a=main.UmbilicPoint(t),b=main.UmbilicPoint(t+1f/3f);
             for(int j=0;j<=Across;j++)vertices[i*(Across+1)+j]=Vector3.Lerp(a,b,j/(float)Across);
         }
-        mesh.vertices=vertices;mesh.RecalculateBounds();
+        UpdateCoverage();
+        var deformed=new Vector3[vertices.Length];
+        for(int i=0;i<=Along;i++)for(int j=0;j<=Across;j++){
+            float slot=Mathf.Repeat(i/(float)Along-HarmonyModel.Mod(main.currentKey*5)/12f+.5f,1)-.5f;
+            int index=i*(Across+1)+j;deformed[index]=main.MorphUncoil(vertices[index],main.UncoiledPoint(slot,.3f+.7f*j/Across));
+        }
+        mesh.vertices=deformed;mesh.RecalculateBounds();
         for(int pc=0;pc<12;pc++)anchors[pc]=main.UmbilicPoint(HarmonyModel.Mod(pc*5)/12f+phase);
         material.SetVectorArray("_Anchors",anchors);
         maskKey=-1;
@@ -118,8 +125,8 @@ public class UmbilicField : MonoBehaviour
     void LateUpdate()
     {
         if(main==null)return;
-        if(main.UncoilActive){rendererComponent.enabled=false;return;}
-        UpdateGeometry();UpdateCoverage();rendererComponent.enabled=main.ShowSurfaces;
+        
+        UpdateGeometry();UpdateCoverage();rendererComponent.enabled=main.ShowSurfaces&&main.CoiledVisibility>.001f;
         HarmonicSpectrum.Accumulate(main.ActiveNotes,target,main.ShowHarmonics);
         if(integratedFrame!=Time.frameCount)Integrate(main.ActiveNotes,Time.unscaledDeltaTime);
         for(int pc=0;pc<12;pc++)
@@ -132,7 +139,7 @@ public class UmbilicField : MonoBehaviour
         material.SetVectorArray("_Colors",colors);material.SetVectorArray("_Excitation",excitation);
         var dominance=main.GetComponent<TonalDominance>();
         if(dominance!=null){Color c=dominance.Hue;material.SetVector("_Primary",new Vector4(c.r,c.g,c.b,dominance.Energy));material.SetFloat("_Dominance",dominance.Influence);}
-        material.SetFloat("_Opacity",main.FieldDensity);material.SetFloat("_Flow",Main.ReducedMotion?0:1);
+        material.SetFloat("_Opacity",main.FieldDensity*main.CoiledVisibility);material.SetFloat("_Flow",Main.ReducedMotion?0:1);
         material.SetFloat("_Diatonic",main.DiatonicStrip?1:0);material.SetFloat("_SoundingOnly",main.SoundingOnly?1:0);
     }
     void OnDestroy(){if(mesh!=null)Destroy(mesh);if(material!=null)Destroy(material);}

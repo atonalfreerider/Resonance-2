@@ -28,8 +28,29 @@ public class Main : MonoBehaviour
     void EnsureUncoiledAurora(){if(GetComponent<UncoiledAurora>()==null)gameObject.AddComponent<UncoiledAurora>();}
     public bool Uncoiled {get;private set;}
     public float UncoilAmount {get;private set;}
+    float unfoldProgress;
+    public bool UncoilMoving=>Mathf.Abs(unfoldProgress-(Uncoiled?1:0))>.00001f;
+    public float CoiledVisibility=>1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.38f,unfoldProgress));
+    public float OctaveSpread=>Mathf.SmoothStep(0,1,Mathf.InverseLerp(.78f,1,unfoldProgress));
+    public Vector3 MorphUncoil(Vector3 coiled,Vector3 flat)
+    {
+        // The primary umbilical curve winds three times around the major circle.
+        // Collapse register offsets, release those windings, then fan out octaves.
+        float slot=Mathf.Atan2(-flat.x,flat.y)/(320*Mathf.Deg2Rad);
+        float t=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation+slot;
+        float collapse=Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.22f,unfoldProgress));
+        float unwind=Mathf.SmoothStep(0,1,Mathf.InverseLerp(.16f,.78f,unfoldProgress));
+        float angle=Mathf.Lerp(-6*Mathf.PI*t,Mathf.PI*.5f+slot*320*Mathf.Deg2Rad,unwind);
+        float vertex=2*Mathf.PI*t+currentVisualTwist;
+        float tube=EdgeLength/(2*Mathf.Sin(Mathf.PI/3))*(1-unwind);
+        float radius=Mathf.Lerp(Rad,1.55f,unwind)+tube*Mathf.Cos(vertex);
+        Vector3 primary=new Vector3(radius*Mathf.Cos(angle),tube*Mathf.Sin(vertex),radius*Mathf.Sin(angle));
+        primary=Quaternion.AngleAxis(-90*unwind,Vector3.right)*primary;
+        Vector3 start=UmbilicPoint(t);
+        return Vector3.Lerp(primary+(coiled-start)*(1-collapse),flat,OctaveSpread);
+    }
     public bool UncoilActive=>Uncoiled||UncoilAmount>.001f;
-    public void SetUncoiled(bool value){Uncoiled=value;EnsureUncoiledAurora();ClearVisualMemory();GetComponent<FeaturedInstrument>()?.ResetPosition();GetComponent<VisualizationViews>()?.ReframeTorus();}
+    public void SetUncoiled(bool value){Uncoiled=value;EnsureUncoiledAurora();GetComponent<FeaturedInstrument>()?.ResetPosition();GetComponent<VisualizationViews>()?.ReframeTorus();}
     public float UncoiledSlot(int pitch)=>Mathf.Repeat(HarmonyModel.Mod((pitch-currentKey)*5)/12f+.5f,1)-.5f;
     public Vector3 UncoiledPoint(float slot,float register)
     {
@@ -219,10 +240,12 @@ public class Main : MonoBehaviour
         UpdateTorusPoints(currentVisualRotation, visualKeyForRendering);
         foreach(var line in fifthsLineRenderer)line.enabled=ShowStructure&&!UncoilActive;
         for(int octave=0;octave<uncoiledRings.Count;octave++){
-            var line=uncoiledRings[octave];line.enabled=ShowStructure&&UncoilActive;
+            var line=uncoiledRings[octave];line.enabled=ShowStructure&&UncoilActive&&(octave==7||OctaveSpread>.001f);
             if(!line.enabled)continue;
+            line.startColor=line.endColor=Color.Lerp(new Color(.48f,.68f,.9f),new Color(.16f,.25f,.36f),OctaveSpread)*(octave==7?1:OctaveSpread);
+            line.widthMultiplier=Mathf.Lerp(.012f,.004f,OctaveSpread);
             float register=(octave+1)/(float)Octaves,keyT=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation;
-            for(int point=0;point<161;point++){float slot=point/160f-.5f;line.SetPosition(point,Vector3.Lerp(CoiledPointAt(keyT+slot,register),UncoiledPoint(slot,register),UncoilAmount));}
+            for(int point=0;point<161;point++){float slot=point/160f-.5f;line.SetPosition(point,MorphUncoil(CoiledPointAt(keyT+slot,register),UncoiledPoint(slot,register)));}
         }
         UpdateLabelStyles();
     }
@@ -260,7 +283,7 @@ public class Main : MonoBehaviour
     Vector3 GetPointAt(float t, float factor)
     {
         float slot=Mathf.Repeat(t-currentVisualRotation-HarmonyModel.Mod(currentKey*5)/12f+.5f,1)-.5f;
-        return Vector3.Lerp(CoiledPointAt(t,factor),UncoiledPoint(slot,factor),UncoilAmount);
+        return MorphUncoil(CoiledPointAt(t,factor),UncoiledPoint(slot,factor));
     }
     Vector3 CoiledPointAt(float t,float factor)
     {
@@ -389,7 +412,7 @@ public class Main : MonoBehaviour
         float keyT=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation;
         float sa=Mathf.Repeat(from-keyT+.5f,1)-.5f,sb=Mathf.Repeat(to-keyT+.5f,1)-.5f;
         for(int j=0;j<=40;j++){float u=j/40f;var coiled=SurfaceRoutePoint(from,to+bestShift/3f,bestShift,fromRegister,toRegister,u);
-            result.Add(transform.TransformPoint(Vector3.Lerp(coiled,UncoiledPoint(Mathf.Lerp(sa,sb,u),Mathf.Lerp(fromRegister,toRegister,u)),UncoilAmount)));}
+            result.Add(transform.TransformPoint(MorphUncoil(coiled,UncoiledPoint(Mathf.Lerp(sa,sb,u),Mathf.Lerp(fromRegister,toRegister,u)))));}
     }
     int SurfaceRouteShift(float from,float to,float fromRegister,float toRegister)
     {
@@ -437,7 +460,7 @@ public class Main : MonoBehaviour
     void Update()
     {
         float target=Uncoiled?1:0;
-        if(UncoilAmount!=target){UncoilAmount=Mathf.MoveTowards(UncoilAmount,target,ReducedMotion?1:Time.unscaledDeltaTime/1.95f);RefreshView();}
+        if(unfoldProgress!=target){unfoldProgress=Mathf.MoveTowards(unfoldProgress,target,ReducedMotion?1:Time.unscaledDeltaTime/5.85f);UncoilAmount=unfoldProgress*unfoldProgress*unfoldProgress*(unfoldProgress*(unfoldProgress*6-15)+10);RefreshView();}
         foreach(var id in chordLineRenderers.Keys.Where(id=>chordLineRenderers[id].TailComplete).ToArray())
         {
             var chord=chordLineRenderers[id];chord.gameObject.SetActive(false);chordPool.Push(chord);chordLineRenderers.Remove(id);

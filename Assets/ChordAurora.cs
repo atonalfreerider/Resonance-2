@@ -78,7 +78,7 @@ public sealed class ChordAurora : MonoBehaviour
     void LateUpdate()
     {
         if(main==null||region==null||volumes[0]==null)return;
-        if(main.UncoilActive){foreach(var v in volumes){v.Energy=0;v.Renderer.enabled=false;}return;}
+        if(main.CoiledVisibility<.001f){foreach(var v in volumes){v.Energy=0;v.Renderer.enabled=false;}return;}
         if(midi==null)midi=GetComponent<MidiPlayer>();if(recording==null)recording=GetComponent<SongAudio>();
         if(rotation!=main.VisualRotation||twist!=main.VisualTwist){rotation=main.VisualRotation;twist=main.VisualTwist;foreach(var mesh in bakedMeshes.Values)Destroy(mesh);bakedMeshes.Clear();foreach(var v in volumes)if(v.Root>=0)Map(v);}
         int count=0,strongest=-1;float strongestEnergy=0;
@@ -119,7 +119,7 @@ public sealed class ChordAurora : MonoBehaviour
             v.Material.SetColor("_Hue",hue);
             if(layer==current&&drive>.003f){if(Shock>v.LastShock+.025f)v.PulseAge=0;v.LastShock=Shock;v.Material.SetVector("_Drive",new Vector4(levels.x,levels.y,levels.z,Shock*loudness));v.Material.SetVector("_Wind",new Vector4(wind.x,wind.y,wind.z,solo>=0?1:0));}
             v.PulseAge+=Time.unscaledDeltaTime;v.Material.SetFloat("_Pulse",v.PulseAge);
-            v.Material.SetVector("_Wave",new Vector4(phase,v.Energy,v.Age,v.Dying?1:0));
+            v.Material.SetVector("_Wave",new Vector4(phase,v.Energy*main.CoiledVisibility,v.Age,v.Dying?1:0));
 
         }
     }

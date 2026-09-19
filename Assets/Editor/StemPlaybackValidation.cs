@@ -49,7 +49,7 @@ public static class StemPlaybackValidation
                 Check(midi.IsPlaying&&stems.SelectedId=="vocals","Tab switching preserves audio / visual solo: "+tab);
             }
             tabs.Select("solo");
-            var views=main.GetComponent<VisualizationViews>();views.SetView(VisualizationViews.View.Torus);main.SetUncoiled(true);await Task.Delay(2600);
+            var views=main.GetComponent<VisualizationViews>();views.SetView(VisualizationViews.View.Torus);main.SetUncoiled(true);await Task.Delay(6800);
             Check(main.UncoilAmount>.999f,"Uncoil animation completes");
             Check(main.GetComponentsInChildren<MeshRenderer>().Where(r=>r.name.StartsWith("Aurora volume")).All(r=>!r.enabled),"All aurora volumes hidden while uncoiled");
             Check(main.GetComponentsInChildren<Chord>().Where(c=>!c.Releasing).All(c=>main.UncoiledChordAllowed(c.Note1.Index,c.Note2.Index)),"Uncoiled active chords connect only octaves and adjacent fifths");
@@ -57,7 +57,7 @@ public static class StemPlaybackValidation
             Check(main.UncoiledPoint(-.5f,1).y<0&&main.UncoiledPoint(.5f,1).y<0,"Open arc gap is opposite tonic at bottom");
             Check(Camera.main.GetComponent<CameraControl>().enabled,"Camera controls available in uncoiled torus view");
             Directory.CreateDirectory("Temp/ResonanceChecks");ScreenCapture.CaptureScreenshot("Temp/ResonanceChecks/uncoiled.png");await Task.Delay(200);
-            main.SetUncoiled(false);await Task.Delay(2600);Check(main.UncoilAmount<.001f,"Recoil animation completes");
+            main.SetUncoiled(false);await Task.Delay(6800);Check(main.UncoilAmount<.001f,"Recoil animation completes");
             midi.Pause();Directory.CreateDirectory("Temp/ResonanceChecks");ScreenCapture.CaptureScreenshot("Temp/ResonanceChecks/stem-solo.png");
             checks.Add("ALL STEM PLAYBACK CHECKS PASSED");
         }catch(Exception error){checks.Add("FAIL: "+error);Debug.LogException(error);}

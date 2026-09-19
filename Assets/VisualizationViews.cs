@@ -88,12 +88,12 @@ public sealed class VisualizationViews : MonoBehaviour
         DrumOpacity=Mathf.Lerp(DrumOpacity,Current==View.Overview||Current==View.Drums||(Current==View.Torus&&GetComponent<Main>().UncoilActive)?1:0,blend);
         if(Current==View.Drums||Current==View.Timeline||cameraMoving){
             Vector3 position=overviewPosition;Quaternion rotation=overviewRotation;
-            if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);if(GetComponent<Main>().Uncoiled){position=target-transform.forward*(6f/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(transform.forward,transform.up);}}
+            if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);float unfold=GetComponent<Main>().UncoilAmount;position=Vector3.Slerp(position-target,-transform.forward*(6f/Mathf.Min(1,camera.aspect)),unfold)+target;rotation=Quaternion.LookRotation(target-position,transform.up);}
             if(Current==View.Drums){Vector3 target=drums?.WheelTransform!=null?drums.WheelTransform.position:transform.position+Vector3.down*2.8f;position=target+Vector3.up*(3.6f/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);}
             if(Current==View.Timeline){position=overviewPosition+Vector3.right*5;rotation=overviewRotation;}
             camera.transform.position=Vector3.Lerp(camera.transform.position,position,blend);camera.transform.rotation=Quaternion.Slerp(camera.transform.rotation,rotation,blend);
             orbit?.MovementUpdater?.Invoke();
-            if((Current==View.Overview||Current==View.Torus)&&Vector3.Distance(camera.transform.position,position)<.005f&&Quaternion.Angle(camera.transform.rotation,rotation)<.1f){cameraMoving=false;if(orbit!=null){if(Current==View.Torus)orbit.AdoptView(transform.position,true);orbit.enabled=true;}}
+            if((Current==View.Overview||Current==View.Torus)&&Vector3.Distance(camera.transform.position,position)<.005f&&Quaternion.Angle(camera.transform.rotation,rotation)<.1f){cameraMoving=GetComponent<Main>().UncoilMoving;if(orbit!=null&&!cameraMoving){if(Current==View.Torus)orbit.AdoptView(transform.position,true);orbit.enabled=true;}}
         }
         renderers.Clear();GetComponentsInChildren(true,renderers);
         TorusOpacity=Snap(TorusOpacity);DrumOpacity=Snap(DrumOpacity);
