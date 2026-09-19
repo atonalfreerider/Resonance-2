@@ -1,6 +1,6 @@
 Shader "Resonance/ChordAurora"
 {
-    Properties { _ViewOpacity ("View opacity",Float)=1 _Hue ("Wave color",Color)=(0,0.4,1,1) _Wave ("Phase energy release dying",Vector)=(0,0,0,0) }
+    Properties { _ViewOpacity ("View opacity",Float)=1 _ShapeOpacity("Shape opacity",Float)=1 _Hue ("Wave color",Color)=(0,0.4,1,1) _Wave ("Phase energy release dying",Vector)=(0,0,0,0) }
     SubShader
     {
         Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent+11" "RenderType"="Transparent" }
@@ -13,7 +13,7 @@ Shader "Resonance/ChordAurora"
             #pragma vertex Vert
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            float _ViewOpacity;float4 _Hue,_Wave,_Drive,_Wind;float _Pulse;
+            float _ViewOpacity,_ShapeOpacity;float4 _Hue,_Wave,_Drive,_Wind;float _Pulse;
             struct A { float4 positionOS:POSITION;float3 normalOS:NORMAL;float2 uv:TEXCOORD0;float4 mode:TEXCOORD1;float4 field:TEXCOORD2; };
             struct V { float4 positionCS:SV_POSITION;float4 color:COLOR;float2 uv:TEXCOORD0; };
             V Vert(A i)
@@ -57,7 +57,7 @@ Shader "Resonance/ChordAurora"
                 // the baked lateral boundary mask from the original distribution.
                 float baseEnvelope=pow(1-i.mode.x,1.5)*smoothstep(0,.09,i.mode.x+.025);
                 float edge=i.field.w/max(.000001,baseEnvelope);
-                o.color=float4(_Hue.rgb,edge*localEnergy*envelope*death*density*3.8*_ViewOpacity);
+                o.color=float4(_Hue.rgb,edge*localEnergy*envelope*death*density*3.8*_ViewOpacity*_ShapeOpacity);
                 o.positionCS=TransformWorldToHClip(p);o.uv=i.uv;return o;
             }
             half4 Frag(V i):SV_Target {float2 p=i.uv*2-1;float r=dot(p,p);float density=(exp(-r*5)+.18*exp(-r*1.5))*saturate(1-r);return half4(i.color.rgb*5,i.color.a*density);}

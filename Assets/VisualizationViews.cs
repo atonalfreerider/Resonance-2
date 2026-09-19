@@ -85,10 +85,12 @@ public sealed class VisualizationViews : MonoBehaviour
         overlay.style.top=52;overlay.style.opacity=timelineOpacity;
         overlay.style.visibility=timelineOpacity<.005f?Visibility.Hidden:Visibility.Visible;
         TorusOpacity=Mathf.Lerp(TorusOpacity,Current==View.Overview||Current==View.Torus?1:0,blend);
-        DrumOpacity=Mathf.Lerp(DrumOpacity,Current==View.Overview||Current==View.Drums||(Current==View.Torus&&GetComponent<Main>().UncoilActive)?1:0,blend);
+        var shape=GetComponent<Main>();
+        bool showDrums=Current==View.Drums||(Current==View.Torus&&shape.Uncoiled&&!shape.UncoilMoving&&shape.UncoilAmount>.9999f);
+        DrumOpacity=showDrums?Mathf.Lerp(DrumOpacity,1,blend):0;
         if(Current==View.Drums||Current==View.Timeline||cameraMoving){
             Vector3 position=overviewPosition;Quaternion rotation=overviewRotation;
-            if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);float unfold=GetComponent<Main>().UncoilAmount;position=Vector3.Slerp(position-target,-transform.forward*(6f/Mathf.Min(1,camera.aspect)),unfold)+target;rotation=Quaternion.LookRotation(target-position,transform.up);}
+            if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);float unfold=GetComponent<Main>().UncoilAmount;position=Vector3.Slerp(position-target,-transform.forward*(6f/Mathf.Min(1,camera.aspect)),unfold)+target;position=target+(position-target)*(1+.55f*GetComponent<Main>().TransitionWiden);rotation=Quaternion.LookRotation(target-position,transform.up);}
             if(Current==View.Drums){Vector3 target=drums?.WheelTransform!=null?drums.WheelTransform.position:transform.position+Vector3.down*2.8f;position=target+Vector3.up*(3.6f/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);}
             if(Current==View.Timeline){position=overviewPosition+Vector3.right*5;rotation=overviewRotation;}
             camera.transform.position=Vector3.Lerp(camera.transform.position,position,blend);camera.transform.rotation=Quaternion.Slerp(camera.transform.rotation,rotation,blend);
@@ -102,6 +104,8 @@ public sealed class VisualizationViews : MonoBehaviour
         foreach(var renderer in renderers){
             if(renderer==null)continue;
             float opacity=drumRoot!=null&&renderer.transform.IsChildOf(drumRoot)?DrumOpacity:TorusOpacity;
+            bool hideLabel=GetComponent<Main>().UncoilMoving&&renderer.GetComponent<TMPro.TMP_Text>()!=null;
+            if(hideLabel){renderer.forceRenderingOff=true;appliedOpacity.Remove(renderer);continue;}
             if(appliedOpacity.TryGetValue(renderer,out var previous)&&previous==opacity)continue;
             appliedOpacity[renderer]=opacity;
             renderer.forceRenderingOff=opacity<.005f;

@@ -2,6 +2,7 @@ using NAudio.Midi;
 using System.Security.Cryptography;
 using System.Text.Json;
 
+if(args.Length==1&&args[0]=="--test-harmony"){KeyContext.SelfTest();return;}
 if(args.Length==0)throw new ArgumentException("PatternPrep score.mid [legacy-authored.json]");
 var path=Path.GetFullPath(args[0]);
 var jsonOptions=new JsonSerializerOptions{IncludeFields=true,WriteIndented=false};
@@ -50,7 +51,7 @@ foreach(var group in events.OrderBy(e=>e.e.AbsoluteTime).ThenBy(e=>e.order).Grou
         frames.Add(new(){Time=cycles.SecondsAt(group.Key/(double)midi.DeltaTicksPerQuarterNote),Key=key,Minor=minor,Attacks=attacks.ToArray(),Voices=voices.Select(p=>new PreparedPatternSong.Voice{Track=p.Key.Item1,Channel=p.Key.Item2,Pitch=p.Key.Item3,Velocity=p.Value*Gain(p.Key.Item2)}).ToArray()});}
 }
 data.Duration=cycles.SecondsAt(cycles.EndBeat)+.08;data.Frames=frames.ToArray();
-if(settings.Key>=0)foreach(var frame in data.Frames){frame.Key=settings.Key;frame.Minor=settings.Minor;}
+KeyContext.Apply(data,settings,cycles);
 foreach(var hit in data.Notes.Concat(data.Disks.SelectMany(d=>d.Hits.Concat(d.Visits.SelectMany(v=>v.Hits)))))
 {
     if(hit.Channel!=10)continue;

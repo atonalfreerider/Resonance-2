@@ -4,6 +4,7 @@ public sealed class SongSettings
 {
     public int Key=-1,LeadVocalTrack=-1;
     public bool Minor;
+    public bool InferKeyChanges=true;
     public double PatternTimingToleranceBeats=0;
     public string KeySource="",SectionBoundaries="",SectionSource="";
     public string[] SectionParents=Array.Empty<string>();

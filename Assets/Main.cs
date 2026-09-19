@@ -29,8 +29,11 @@ public class Main : MonoBehaviour
     public bool Uncoiled {get;private set;}
     public float UncoilAmount {get;private set;}
     float unfoldProgress;
+    int uncoilKeyFrom;float keyBlend=1;
+    public bool KeyChanging=>keyBlend<1;
     public bool UncoilMoving=>Mathf.Abs(unfoldProgress-(Uncoiled?1:0))>.00001f;
     public float CoiledVisibility=>1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.38f,unfoldProgress));
+    public float TransitionWiden=>Mathf.Sin(Mathf.PI*unfoldProgress);
     public float OctaveSpread=>Mathf.SmoothStep(0,1,Mathf.InverseLerp(.78f,1,unfoldProgress));
     public Vector3 MorphUncoil(Vector3 coiled,Vector3 flat)
     {
@@ -40,18 +43,24 @@ public class Main : MonoBehaviour
         float t=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation+slot;
         float collapse=Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.22f,unfoldProgress));
         float unwind=Mathf.SmoothStep(0,1,Mathf.InverseLerp(.16f,.78f,unfoldProgress));
-        float angle=Mathf.Lerp(-6*Mathf.PI*t,Mathf.PI*.5f+slot*320*Mathf.Deg2Rad,unwind);
+        // Keep signed winding negative throughout; rotate the plane instead of reversing the arc.
+        float angle=Mathf.Lerp(-6*Mathf.PI*t,-Mathf.PI*.5f-slot*320*Mathf.Deg2Rad,unwind);
         float vertex=2*Mathf.PI*t+currentVisualTwist;
         float tube=EdgeLength/(2*Mathf.Sin(Mathf.PI/3))*(1-unwind);
         float radius=Mathf.Lerp(Rad,1.55f,unwind)+tube*Mathf.Cos(vertex);
         Vector3 primary=new Vector3(radius*Mathf.Cos(angle),tube*Mathf.Sin(vertex),radius*Mathf.Sin(angle));
-        primary=Quaternion.AngleAxis(-90*unwind,Vector3.right)*primary;
+        primary=Quaternion.AngleAxis(90*unwind,Vector3.right)*primary;
         Vector3 start=UmbilicPoint(t);
         return Vector3.Lerp(primary+(coiled-start)*(1-collapse),flat,OctaveSpread);
     }
     public bool UncoilActive=>Uncoiled||UncoilAmount>.001f;
     public void SetUncoiled(bool value){Uncoiled=value;EnsureUncoiledAurora();GetComponent<FeaturedInstrument>()?.ResetPosition();GetComponent<VisualizationViews>()?.ReframeTorus();}
-    public float UncoiledSlot(int pitch)=>Mathf.Repeat(HarmonyModel.Mod((pitch-currentKey)*5)/12f+.5f,1)-.5f;
+    public float UncoiledSlot(int pitch)=>AnimatedUncoilSlot(HarmonyModel.Mod(pitch*5)/12f);
+    float AnimatedUncoilSlot(float fifth){
+        float to=Mathf.Repeat(fifth-HarmonyModel.Mod(currentKey*5)/12f+.5f,1)-.5f;
+        float from=Mathf.Repeat(fifth-HarmonyModel.Mod(uncoilKeyFrom*5)/12f+.5f,1)-.5f;
+        return keyBlend>=1?to:-Mathf.LerpAngle(-from*320,-to*320,keyBlend)/320;
+    }
     public Vector3 UncoiledPoint(float slot,float register)
     {
         float angle=-slot*Mathf.Deg2Rad*320,radius=.45f+1.8f*register;
@@ -176,7 +185,7 @@ public class Main : MonoBehaviour
         chromaticLineRenderer = NewLineRenderer(chromGo, chromaticMat, .007f, true);
         for(int octave=0;octave<Octaves;octave++){
             var go=new GameObject("Uncoiled octave "+octave);go.transform.SetParent(transform,false);
-            var mat=new Material(Resources.Load<Shader>("HarmonicGlow"));mat.SetColor("_BaseColor",new Color(.16f,.25f,.36f));
+            var mat=new Material(Resources.Load<Shader>("HarmonicGlow"));mat.SetColor("_BaseColor",Color.white);
             var ring=NewLineRenderer(go,mat,.004f,false);ring.positionCount=161;ring.enabled=false;uncoiledRings.Add(ring);
         }
 
@@ -242,8 +251,12 @@ public class Main : MonoBehaviour
         for(int octave=0;octave<uncoiledRings.Count;octave++){
             var line=uncoiledRings[octave];line.enabled=ShowStructure&&UncoilActive&&(octave==7||OctaveSpread>.001f);
             if(!line.enabled)continue;
-            line.startColor=line.endColor=Color.Lerp(new Color(.48f,.68f,.9f),new Color(.16f,.25f,.36f),OctaveSpread)*(octave==7?1:OctaveSpread);
-            line.widthMultiplier=Mathf.Lerp(.012f,.004f,OctaveSpread);
+            line.startColor=line.endColor=Color.Lerp(new Color(.48f,.68f,.9f),new Color(.32f,.43f,.56f),OctaveSpread)*(octave==7?1:OctaveSpread);
+            line.widthMultiplier=1;line.startWidth=line.endWidth=Mathf.Lerp(.025f,.008f,OctaveSpread);
+            if(octave==7){
+                var keys=new GradientColorKey[8];for(int k=0;k<8;k++){float u=k/7f;int pitch=currentKey+Mathf.RoundToInt((u-.5f)*12)*7;keys[k]=new GradientColorKey(TonalColorField.Pitch(pitch,currentKey)*Mathf.Lerp(3f,1.1f,OctaveSpread),u);}
+                var gradient=new Gradient();gradient.SetKeys(keys,new[]{new GradientAlphaKey(1,0),new GradientAlphaKey(1,1)});line.colorGradient=gradient;
+            }
             float register=(octave+1)/(float)Octaves,keyT=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation;
             for(int point=0;point<161;point++){float slot=point/160f-.5f;line.SetPosition(point,MorphUncoil(CoiledPointAt(keyT+slot,register),UncoiledPoint(slot,register)));}
         }
@@ -282,7 +295,7 @@ public class Main : MonoBehaviour
 
     Vector3 GetPointAt(float t, float factor)
     {
-        float slot=Mathf.Repeat(t-currentVisualRotation-HarmonyModel.Mod(currentKey*5)/12f+.5f,1)-.5f;
+        float slot=AnimatedUncoilSlot(Mathf.Repeat(t-currentVisualRotation,1));
         return MorphUncoil(CoiledPointAt(t,factor),UncoiledPoint(slot,factor));
     }
     Vector3 CoiledPointAt(float t,float factor)
@@ -300,10 +313,12 @@ public class Main : MonoBehaviour
     public void ChangeKey(int newKey, float duration = .7f)
     {
         if (keyChangeCoroutine != null) StopCoroutine(keyChangeCoroutine);
+        uncoilKeyFrom=currentKey;keyBlend=0;
         currentKey = HarmonyModel.Mod(newKey);
         visualKeyForRendering = currentKey;
         if (ReducedMotion || duration <= 0)
         {
+            keyBlend=1;
             currentVisualRotation = pathMap[currentKey].x / (float)Tones;
             currentVisualTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
             RefreshView(); keyChangeCoroutine = null;
@@ -319,13 +334,14 @@ public class Main : MonoBehaviour
         float elapsed = 0;
         while (elapsed < duration)
         {
-            elapsed += Time.unscaledDeltaTime;
             float t = Mathf.SmoothStep(0, 1, Mathf.Clamp01(elapsed / duration));
+            keyBlend=t;
             currentVisualRotation = Mathf.Lerp(rotation, targetRotation, t);
             currentVisualTwist = Mathf.Lerp(twist, targetTwist, t);
-            RefreshView(); yield return null;
+            RefreshView(); yield return null;elapsed += Time.unscaledDeltaTime;
         }
-        keyChangeCoroutine = null;
+        currentVisualRotation=targetRotation;currentVisualTwist=targetTwist;
+        keyBlend=1;RefreshView();keyChangeCoroutine = null;
     }
     public void RefreshView()
     {
@@ -433,20 +449,21 @@ public class Main : MonoBehaviour
         int shift=SurfaceRouteShift(from,to,1,1),corner=(((-shift)%3)+3)%3;if(corner==2)corner=-1;
         return new Vector2(to+shift/3f,corner);
     }
+    public Vector3 CoiledNoteEmissionPoint(int index)=>transform.TransformPoint(CoiledPointAt(HarmonyModel.Mod(index*5)/12f+currentVisualRotation,(index/12+1)/(float)Octaves));
     public Vector3 NoteEmissionPoint(int index)=>transform.TransformPoint(GetPointAt(HarmonyModel.Mod(index*5)/12f+currentVisualRotation,(index/12+1)/(float)Octaves));
     public Vector3 NoteEmissionNormal(int index)=>ChordRegionNormal(ChordRegionCoordinate(HarmonyModel.Mod(index),HarmonyModel.Mod(index)));
-    public Vector3 ChordRegionPoint(Vector2 uv)
+    public Vector3 ChordRegionPoint(Vector2 uv,bool coiled=false)
     {
         int side=Mathf.FloorToInt(uv.y);
-        return transform.TransformPoint(Vector3.Lerp(GetPointAt(uv.x+side/3f,1),GetPointAt(uv.x+(side+1)/3f,1),uv.y-side));
+        return transform.TransformPoint(Vector3.Lerp(coiled?CoiledPointAt(uv.x+side/3f,1):GetPointAt(uv.x+side/3f,1),coiled?CoiledPointAt(uv.x+(side+1)/3f,1):GetPointAt(uv.x+(side+1)/3f,1),uv.y-side));
     }
-    public Vector3 ChordRegionNormal(Vector2 uv)
+    public Vector3 ChordRegionNormal(Vector2 uv,bool coiled=false)
     {
         const float e=.0001f;
-        var du=ChordRegionPoint(uv+Vector2.right*e)-ChordRegionPoint(uv-Vector2.right*e);
-        var dv=ChordRegionPoint(uv+Vector2.up*e)-ChordRegionPoint(uv-Vector2.up*e);
+        var du=ChordRegionPoint(uv+Vector2.right*e,coiled)-ChordRegionPoint(uv-Vector2.right*e,coiled);
+        var dv=ChordRegionPoint(uv+Vector2.up*e,coiled)-ChordRegionPoint(uv-Vector2.up*e,coiled);
         var normal=Vector3.Cross(du.normalized,dv.normalized).normalized;
-        var local=transform.InverseTransformPoint(ChordRegionPoint(uv));
+        var local=transform.InverseTransformPoint(ChordRegionPoint(uv,coiled));
         var center=new Vector3(local.x,0,local.z).normalized*Rad;
         if(Vector3.Dot(normal,transform.TransformVector(local-center))<0)normal=-normal;
         return normal;

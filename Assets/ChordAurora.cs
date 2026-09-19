@@ -54,14 +54,14 @@ public sealed class ChordAurora : MonoBehaviour
         var vertices=new Vector3[particles*4];var normals=new Vector3[particles*4];var uv0=new Vector2[particles*4];
         var modes=new System.Collections.Generic.List<Vector4>(particles*4);var field=new System.Collections.Generic.List<Vector4>(particles*4);
         var triangles=new int[particles*6];
-        Vector3 soloPoint=v.Note>=0?transform.InverseTransformPoint(main.NoteEmissionPoint(v.Note)):Vector3.zero;
-        Vector3 soloNormal=v.Note>=0?transform.InverseTransformDirection(main.NoteEmissionNormal(v.Note)):Vector3.up;
+        Vector3 soloPoint=v.Note>=0?transform.InverseTransformPoint(main.CoiledNoteEmissionPoint(v.Note)):Vector3.zero;
+        Vector3 soloNormal=v.Note>=0?transform.InverseTransformDirection(main.ChordRegionNormal(main.ChordRegionCoordinate(HarmonyModel.Mod(v.Note),HarmonyModel.Mod(v.Note)),true)):Vector3.up;
         Vector3 side=Vector3.Cross(soloNormal,Mathf.Abs(soloNormal.y)<.9f?Vector3.up:Vector3.right).normalized;
         Vector3 across=Vector3.Cross(soloNormal,side);
         for(int i=0;i<particles;i++){
             float x=Mathf.Sqrt(Seed(i,.754877666f)),u=Seed(i,.569840296f),h=Seed(i,.438579f);
             var uv=a*(1-x)+b*x*(1-u)+c*x*u;
-            var anchor=transform.InverseTransformPoint(main.ChordRegionPoint(uv));var normal=transform.InverseTransformVector(main.ChordRegionNormal(uv));
+            var anchor=transform.InverseTransformPoint(main.ChordRegionPoint(uv,true));var normal=transform.InverseTransformVector(main.ChordRegionNormal(uv,true));
             if(v.Note>=0){float angle=u*Mathf.PI*2;anchor=soloPoint+(side*Mathf.Cos(angle)+across*Mathf.Sin(angle))*(x*.07f);normal=soloNormal;}
             float mode=v.Third==3?2:1;
             float edge=Mathf.SmoothStep(0,1,Mathf.Clamp01(Mathf.Min(1-x,Mathf.Min(x*u,x*(1-u)))*12));
@@ -78,13 +78,13 @@ public sealed class ChordAurora : MonoBehaviour
     void LateUpdate()
     {
         if(main==null||region==null||volumes[0]==null)return;
-        if(main.CoiledVisibility<.001f){foreach(var v in volumes){v.Energy=0;v.Renderer.enabled=false;}return;}
+
         if(midi==null)midi=GetComponent<MidiPlayer>();if(recording==null)recording=GetComponent<SongAudio>();
         if(rotation!=main.VisualRotation||twist!=main.VisualTwist){rotation=main.VisualRotation;twist=main.VisualTwist;foreach(var mesh in bakedMeshes.Values)Destroy(mesh);bakedMeshes.Clear();foreach(var v in volumes)if(v.Root>=0)Map(v);}
         int count=0,strongest=-1;float strongestEnergy=0;
         var levels=new Vector3();float total=0,register=0,shock=0;Vector3 wind=Vector3.zero;
         foreach(var note in main.ActiveNotes)if(note.Item2>.001f){count++;if(note.Item2>strongestEnergy){strongestEnergy=note.Item2;strongest=note.Item1;}}
-        int solo=count==1||!region.RegionVisible?strongest:-1;
+        int solo=count==1||!region.HasRegion?strongest:-1;
         int root=solo>=0?HarmonyModel.Mod(solo):region.RegionRoot,third=solo>=0?0:region.RegionThird,fifth=solo>=0?0:region.RegionFifth;
         Color color=solo>=0?TonalColorField.Chord(root,main.currentKey,false):region.RegionColor;
         if(count>0&&(current<0||volumes[current].Root!=root||volumes[current].Third!=third||volumes[current].Fifth!=fifth||volumes[current].Note!=solo)){
@@ -114,12 +114,12 @@ public sealed class ChordAurora : MonoBehaviour
             float drive=layer==current?target:0;
             if(drive>.003f){v.Hue=color;v.Dying=false;v.Age=0;v.Energy=Release(v.Energy,drive,Time.unscaledDeltaTime);v.Height=1;}
             else {v.Die();v.Age+=Time.unscaledDeltaTime;v.Energy=Release(v.Energy,0,Time.unscaledDeltaTime);}
-            v.Renderer.enabled=v.Energy>.0005f;if(!v.Renderer.enabled)continue;
+            v.Renderer.enabled=v.Energy>.0005f&&main.CoiledVisibility>.001f;if(!v.Renderer.enabled)continue;
             Color hue=v.Dying?Chord.ReleaseHue(v.Hue,v.Age):v.Hue;
             v.Material.SetColor("_Hue",hue);
             if(layer==current&&drive>.003f){if(Shock>v.LastShock+.025f)v.PulseAge=0;v.LastShock=Shock;v.Material.SetVector("_Drive",new Vector4(levels.x,levels.y,levels.z,Shock*loudness));v.Material.SetVector("_Wind",new Vector4(wind.x,wind.y,wind.z,solo>=0?1:0));}
             v.PulseAge+=Time.unscaledDeltaTime;v.Material.SetFloat("_Pulse",v.PulseAge);
-            v.Material.SetVector("_Wave",new Vector4(phase,v.Energy*main.CoiledVisibility,v.Age,v.Dying?1:0));
+            v.Material.SetFloat("_ShapeOpacity",main.CoiledVisibility);v.Material.SetVector("_Wave",new Vector4(phase,v.Energy,v.Age,v.Dying?1:0));
 
         }
     }

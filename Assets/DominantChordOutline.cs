@@ -10,6 +10,7 @@ public sealed class DominantChordOutline : MonoBehaviour
     readonly LineRenderer[] edges=new LineRenderer[3];readonly List<Vector3> path=new(41);
     float visibility;int root,third=4,fifth=7;Color hue;
     public bool RegionVisible=>visibility>0;
+    public bool HasRegion {get;private set;}
     public int RegionRoot=>root;
     public int RegionThird=>third;
     public int RegionFifth=>fifth;
@@ -47,7 +48,7 @@ public sealed class DominantChordOutline : MonoBehaviour
             if(show){nextRoot=phase.Root;quality=phase.Quality;minor=quality.StartsWith("m")&&!quality.StartsWith("maj");}
         }
         if(show){root=nextRoot;third=minor||quality=="dim"?3:4;fifth=quality=="dim"?6:7;hue=TonalColorField.Chord(root,main.currentKey,minor);}
-        visibility=show?main.CoiledVisibility:0;
+        HasRegion=show;visibility=show?main.CoiledVisibility:0;
         var vertices=new[]{root,root+third,root+fifth};
         for(int i=0;i<3;i++){var line=edges[i];if(line==null)continue;line.enabled=visibility>.001f;if(!line.enabled)continue;main.ChordOutlinePath(vertices[i],vertices[(i+1)%3],path);for(int j=0;j<path.Count;j++)line.SetPosition(j,path[j]+(camera.transform.position-path[j]).normalized*.012f);line.startColor=line.endColor=hue*visibility;}
         fillObject.SetActive(visibility>.001f);
