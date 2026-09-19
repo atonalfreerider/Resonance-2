@@ -7,13 +7,16 @@ using NAudio.Midi;
 // Exact 1/24-quarter quantization; timing/duration matches can optionally include pitch.
 public sealed class MidiCycleAnalysis
 {
-    public sealed class Hit
+    [Serializable] public sealed class Hit
     {
         public double Beat, Length;
         public int Pitch, Track, Channel;
         public float Velocity;
+        public int RippleFrequency;
+        public float LowHz,HighHz,DecaySeconds;
+        public float RippleRadius,RippleWidth,StrikeRadius;
     }
-    public sealed class Bar { public double Start, End; public int Numerator, Denominator; }
+    [Serializable] public sealed class Bar { public double Start, End; public int Numerator, Denominator; }
     public sealed class Occurrence { public int Bar; public double Beat, Seconds; public List<Hit> Hits; }
     public sealed class Pattern
     {
@@ -30,6 +33,15 @@ public sealed class MidiCycleAnalysis
     readonly List<(double beat,double seconds,double tempo)> tempos=new();
     public int NoteCount;
     public double EndBeat;
+    public PreparedPatternSong.Tempo[] ExportTempos()=>tempos.Select(t=>new PreparedPatternSong.Tempo{Beat=t.beat,Seconds=t.seconds,Microseconds=t.tempo}).ToArray();
+    public static MidiCycleAnalysis Restore(PreparedPatternSong data)
+    {
+        var r=new MidiCycleAnalysis{EndBeat=data.EndBeat,NoteCount=data.Notes.Length};
+        r.tempos.AddRange(data.Tempos.Select(t=>(t.Beat,t.Seconds,t.Microseconds)));r.Measures.AddRange(data.Measures);r.Notes.AddRange(data.Notes);
+        foreach(var d in data.Disks){var p=new Pattern{Id=d.Id,Track=d.Track,Channel=d.Channel,Bars=d.Bars,Name=d.Name,Beats=d.Beats,Hits=d.Hits.ToList()};
+            p.Occurrences.AddRange(d.Visits.Select(v=>new Occurrence{Bar=v.Bar,Beat=v.Beat,Seconds=v.Seconds,Hits=v.Hits.ToList()}));r.Patterns.Add(p);}
+        return r;
+    }
     public double BeatAt(double seconds)
     {
         int lo=0,hi=tempos.Count-1;

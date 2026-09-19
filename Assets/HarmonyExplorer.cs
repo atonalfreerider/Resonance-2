@@ -14,7 +14,7 @@ public class HarmonyExplorer : MonoBehaviour
     int sequenceStart;
     Label details, trace, sounding, midiStatus, clock, analysis, historyLabel;
     Label focusHint;
-    CyclicOrrery orrery;
+    PatternWheelDeck orrery;
     TextField grammar, path;
     DropdownField keyChoice, surfaceChoice, modeChoice;
     Slider seek;
@@ -46,8 +46,8 @@ public class HarmonyExplorer : MonoBehaviour
         var dominance=GetComponent<TonalDominance>()??gameObject.AddComponent<TonalDominance>();
         var recording=GetComponent<SongAudio>()??gameObject.AddComponent<SongAudio>();
         panel.Add(recording.BuildUI());
-        Section(panel,"TRACK ORRERY");
-        orrery=new CyclicOrrery(main,midi);panel.Add(orrery);orrery.AttachOverlay(root);
+        Section(panel,"PATTERN CD CHANGER");
+        orrery=new PatternWheelDeck(main,midi);panel.Add(orrery);orrery.AttachOverlay(root);
         Section(panel,"TONAL CONTEXT");
         keyChoice=Choice(panel,"Key / tonic",Enumerable.Range(0,12).Select(i=>HarmonyModel.Name(i)).ToList(),main.currentKey,i=> { midi?.Pause(); main.KeySource="Manual"; main.ChangeKey(i); });
         modeChoice=Choice(panel,"Mode",new List<string>{"Major","Natural minor"},0,i=> { main.MinorMode=i==1; main.KeySource="Manual"; main.RefreshView(); Refresh(); });
@@ -103,7 +103,7 @@ public class HarmonyExplorer : MonoBehaviour
         Slider(panel,"MIDI-only speed (recording = 1×)",.25f,2,1,v=>midi.SetSpeed(v));
         Toggle(panel,"Loop song",false,v=>midi.Loop=v);
         Toggle(panel,"Follow declared key",true,v=>midi.FollowKey=v);
-        Toggle(panel,"Exclude percussion (channel 10)",true,v=>{midi.SkipPercussion=v; ReloadMidi();});
+        Label(panel,"Percussion is displayed only on the world-space drum deck.");
         Choice(panel,"Channel",new[]{"All"}.Concat(Enumerable.Range(1,16).Select(i=>i.ToString())).ToList(),0,i=>{midi.ChannelFilter=i;ReloadMidi();});
         var track=new IntegerField("Track (0 = all)"){value=0}; panel.Add(track); track.RegisterValueChangedCallback(e=>{midi.TrackFilter=e.newValue-1;ReloadMidi();});
         Section(panel,"HARMONIC HISTORY"); historyLabel=Label(panel,"");
@@ -112,7 +112,7 @@ public class HarmonyExplorer : MonoBehaviour
         main.StateChanged+=Refresh;
         LoadLesson(0); Refresh();
     }
-    void ReloadMidi() { if(midi.Recording!=null && midi.Recording.Ready){midi.Recording.Save(false);midi.Recording.LoadPair(midi.Recording.AudioPath,midi.midiPath);return;} if(midi.Loaded) { double pos=midi.Position; bool play=midi.IsPlaying; midi.Load(path.value); midi.Seek(pos); if(play)midi.Play(); } }
+    void ReloadMidi() { midi.ApplyFilters(); }
     void OpenMidi()
     {
 #if UNITY_EDITOR

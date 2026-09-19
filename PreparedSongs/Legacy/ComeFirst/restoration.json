@@ -1,0 +1,9 @@
+{
+  "source": "C:\\Users\\johnb\\Desktop\\resonance-music\\StreamingAssets\\CSV\\ComeFirst.csv",
+  "sourceSha256": "31772882e58c3c1e65f04ac849b02c1041a49512073a06f9547104a6387c2504",
+  "format": "authored patterns",
+  "notes": 2501,
+  "warnings": [
+    "Authored CSV has no velocities/programs: velocity 100 and default programs used. - is base pitch; x is rest; explicit pitch is substitution. C0=MIDI0. Empty sequence slots use one DivDownbeat cycle. Section names remain offline estimates."
+  ]
+}

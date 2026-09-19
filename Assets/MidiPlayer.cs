@@ -21,6 +21,7 @@ public class MidiPlayer : MonoBehaviour
     public double Duration => Recording != null && Recording.Ready ? Recording.Source.clip.length : ScoreDuration;
     public double ScorePosition => Recording != null && Recording.Ready ? Recording.Alignment.ToMidi(Position) : Position;
     public double AudioTime(double scoreTime) => Recording != null && Recording.Ready ? Recording.Alignment.ToAudio(scoreTime) : scoreTime;
+    public PreparedPatternSong Prepared {get;private set;}
     public MidiCycleAnalysis Cycles { get; private set; }
     public SongFormAnalysis SongForm { get; private set; }
     public int SectionBars=8;
@@ -35,6 +36,7 @@ public class MidiPlayer : MonoBehaviour
         public List<Tuple<int,float>> Notes;
         public int? Key;
         public bool Minor;
+        public PreparedPatternSong.Voice[] Attacks;
     }
     readonly List<Frame> frames = new();
     Main main;
@@ -46,64 +48,45 @@ public class MidiPlayer : MonoBehaviour
     void Start() { if (!string.IsNullOrWhiteSpace(midiPath)) Load(midiPath); }
     public bool Load(string path)
     {
-        Stop(); Recording?.Unload(); frames.Clear(); ScoreDuration = 0; Cycles=null; SongForm=null; SectionBoundaries=""; main.ClearVisualMemory();
+        path=path.Trim().Trim('"');
+        Stop(); Recording?.Unload(); frames.Clear(); Prepared=null; ScoreDuration = 0; Cycles=null; SongForm=null; SectionBoundaries=""; main.ClearVisualMemory();
         try
         {
-            var file = new MidiFile(path.Trim().Trim('"'), false);
-            if (file.FileFormat == 2 || file.DeltaTicksPerQuarterNote <= 0) throw new ArgumentException("Use a format 0/1 MIDI with PPQ timing.");
-            Cycles=MidiCycleAnalysis.Analyze(file,MatchPatternPitch);
-            SongForm=SongFormAnalysis.Build(Cycles,SectionBars);
-            TrackCount = file.Tracks;
-            var events = new List<(long tick, int order, int track, MidiEvent evt)>();
-            int order = 0;
-            for (int track=0;track<file.Tracks;track++) foreach (var evt in file.Events[track]) events.Add((evt.AbsoluteTime, order++, track, evt));
-            double time=0, tempo=500000; long tick=0;
-            int? key = null; bool minor = false;
-            var voices = new MidiVoiceState();
-            foreach (var entry in events.OrderBy(e=>e.tick).ThenBy(e=>e.order))
-            {
-                time += (entry.tick-tick)*tempo/(file.DeltaTicksPerQuarterNote*1000000.0); tick=entry.tick;
-                var evt=entry.evt;
-                if (evt is TempoEvent te) { tempo=te.MicrosecondsPerQuarterNote; continue; }
-                bool changed=false;
-                if (evt is KeySignatureEvent ks) { minor=ks.MajorMinor!=0; key=HarmonyModel.Mod((minor?0:3)+7*ks.SharpsFlats); changed=true; }
-                else if ((TrackFilter<0 || entry.track==TrackFilter) && (ChannelFilter==0 || evt.Channel==ChannelFilter) && !(SkipPercussion && evt.Channel==10))
-                {
-                    if (evt is NoteEvent ne && (evt.CommandCode==MidiCommandCode.NoteOn || evt.CommandCode==MidiCommandCode.NoteOff))
-                    {
-                        int note=ne.NoteNumber-21;
-                        if (note>=0 && note<96)
-                        {
-                            if (evt is NoteOnEvent on && on.Velocity>0) voices.NoteOn(evt.Channel,note,on.Velocity/127f);
-                            else voices.NoteOff(evt.Channel,note);
-                            changed=true;
-                        }
-                    }
-                    else if (evt is ControlChangeEvent cc) { voices.Control(evt.Channel,(int)cc.Controller,cc.ControllerValue); changed=true; }
-                }
-                if (changed) frames.Add(new Frame { Time=time, Notes=voices.Snapshot(), Key=key, Minor=minor });
-            }
-            ScoreDuration=time+.08;
-            frames.Add(new Frame {Time=Duration,Notes=new List<Tuple<int,float>>(),Key=key,Minor=minor});
+            string analysisPath=path.Trim().Trim('"')+".patterns.json";
+            if(!System.IO.File.Exists(analysisPath))throw new ArgumentException("Prepare patterns offline with Tools/PatternPrep before loading this MIDI.");
+            var prepared=JsonUtility.FromJson<PreparedPatternSong>(System.IO.File.ReadAllText(analysisPath));
+            if(prepared?.Templates==null||prepared.Form==null)throw new ArgumentException("Regenerate this song with Tools/PatternPrep to prepare section wheels and pitch variations.");
+            using(var hash=System.Security.Cryptography.SHA256.Create())
+            using(var stream=System.IO.File.OpenRead(path))
+                if(prepared.Version!=1 || BitConverter.ToString(hash.ComputeHash(stream)).Replace("-","").ToLowerInvariant()!=prepared.MidiSha256)
+                    throw new ArgumentException("Pattern analysis is stale. Rebuild it offline for this MIDI.");
+            Prepared=prepared;Cycles=MidiCycleAnalysis.Restore(prepared);SongForm=prepared.RestoreForm();TrackCount=prepared.TrackCount;
+            ScoreDuration=prepared.Duration;
+            BuildFrames();
             midiPath=path; originPosition=0;
             fallbackKey=main.currentKey; fallbackMinor=main.MinorMode;
             Status=$"{System.IO.Path.GetFileName(path)} · {TrackCount} tracks";
             return true;
         }
-        catch (Exception e) { frames.Clear(); Cycles=null; SongForm=null; Status="MIDI import: "+e.Message; return false; }
+        catch (Exception e) { frames.Clear();Prepared=null; Cycles=null; SongForm=null; Status="MIDI import: "+e.Message; return false; }
     }
+    void BuildFrames()
+    {
+        frames.Clear();
+        bool Accept(PreparedPatternSong.Voice v)=>v.Channel!=10&&(TrackFilter<0||v.Track==TrackFilter)&&(ChannelFilter==0||v.Channel==ChannelFilter)&&v.Pitch>=21&&v.Pitch<117;
+        foreach(var frame in Prepared.Frames)
+            frames.Add(new Frame{Time=frame.Time,Key=frame.Key<0?(int?)null:frame.Key,Minor=frame.Minor,Attacks=frame.Attacks.Where(Accept).ToArray(),
+                Notes=frame.Voices.Where(Accept).GroupBy(v=>v.Pitch).Select(g=>Tuple.Create(g.Key-21,g.Max(v=>v.Velocity))).ToList()});
+        frames.Add(new Frame{Time=ScoreDuration,Notes=new List<Tuple<int,float>>(),Attacks=Array.Empty<PreparedPatternSong.Voice>()});
+    }
+    public void ApplyFilters(){if(Prepared==null)return;double position=Position;BuildFrames();Seek(position);}
     public void RebuildSongForm(int bars,string boundaries)
     {
-        if(Cycles==null)return;
-        var form=SongFormAnalysis.Build(Cycles,bars,boundaries);
-        SongForm=form;SectionBars=bars;SectionBoundaries=boundaries;
+        Status="Section analysis is prepared offline. Edit the source and regenerate the pattern bundle.";
     }
     public void ReanalyzePatterns(bool matchPitch)
     {
-        MatchPatternPitch=matchPitch;
-        if(!Loaded)return;
-        try{Cycles=MidiCycleAnalysis.Analyze(new MidiFile(midiPath.Trim().Trim('"'),false),matchPitch);}
-        catch(Exception e){Status="Pattern analysis: "+e.Message;}
+        Status="Pattern grouping is prepared offline.";
     }
     public void Play()
     {
@@ -132,7 +115,7 @@ public class MidiPlayer : MonoBehaviour
     {
         if (!FollowKey) return;
         int key=frame?.Key??fallbackKey; bool minor=frame?.Key!=null?frame.Minor:fallbackMinor;
-        main.KeySource=frame?.Key!=null?"MIDI signature":"Manual (no MIDI signature)";
+        main.KeySource=Prepared!=null&&!string.IsNullOrWhiteSpace(Prepared.KeySource)?Prepared.KeySource:frame?.Key!=null?"MIDI signature":"Manual (no MIDI signature)";
         if (main.currentKey!=key || main.MinorMode!=minor) { main.MinorMode=minor; main.ChangeKey(key); }
     }
     public void Pause()
@@ -170,7 +153,7 @@ public class MidiPlayer : MonoBehaviour
             main.Synth.Schedule(originDsp+(frame.Time-originPosition)/playbackSpeed,frame.Notes);
         }
         int previous=visualIndex;
-        while (visualIndex<frames.Count && frames[visualIndex].Time<=position) visualIndex++;
+        while (visualIndex<frames.Count && frames[visualIndex].Time<=position) { foreach(var attack in frames[visualIndex].Attacks) main.StrikeNote(attack.Pitch-21,attack.Velocity);visualIndex++; }
         if (visualIndex!=previous && visualIndex>0) { var frame=frames[visualIndex-1]; main.SetNotes(frame.Notes,false); ApplyKey(frame); }
         if (Position>=Duration-.025 || (Recording!=null && Recording.Ready && AudioSettings.dspTime>originDsp+.1 && !Recording.Source.isPlaying)) { if (Loop) { originPosition=0; Rebase(0); } else Stop(); }
     }

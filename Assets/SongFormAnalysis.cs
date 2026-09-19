@@ -7,7 +7,7 @@ using System.Linq;
 // Section roles are taken from markers/user labels, never guessed from repetition alone.
 public sealed class SongFormAnalysis
 {
-    public sealed class ChordStep
+    [Serializable] public sealed class ChordStep
     {
         public double Start,End;
         public int Root=-1;

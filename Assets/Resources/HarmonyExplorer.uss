@@ -48,3 +48,19 @@ Toggle { min-height: 27px; flex-shrink: 0; }
 .unity-base-slider__drag-container { min-height: 22px; flex-grow: 1; }
 .unity-scroller { width: 9px; }
 .unity-scroller__low-button, .unity-scroller__high-button { display: none; }
+.unity-base-dropdown__container-outer { background-color: rgb(20, 30, 45); border-width: 1px; border-color: rgb(90, 122, 155); }
+.unity-base-dropdown__item { min-height: 30px; padding: 5px 9px; color: rgb(235, 242, 252); }
+.unity-base-dropdown__label { color: rgb(235, 242, 252); white-space: nowrap; }
+.unity-base-dropdown__item:hover, .unity-base-dropdown__item:checked { background-color: rgb(46, 70, 96); }
+.explorer .unity-button { background-image: none; background-color: rgb(34, 48, 68); border-width: 1px; border-color: rgb(66, 84, 109); border-radius: 5px; color: rgb(239, 244, 255); }
+.explorer .unity-button:hover { background-color: rgb(55, 75, 102); }
+.explorer .unity-button:active { background-color: rgb(73, 97, 126); }
+.explorer .unity-base-slider__dragger { background-image: none; background-color: rgb(145, 204, 255); border-width: 0; border-radius: 3px; }
+.explorer .unity-base-slider__tracker { background-image: none; background-color: rgb(66, 89, 115); border-width: 0; }
+.explorer .unity-scroller__slider .unity-base-slider__dragger { background-image: none; background-color: rgb(75, 106, 134); min-width: 6px; }
+.explorer .unity-foldout__content { margin-left: 0; padding-left: 0; }
+.explorer .unity-foldout__toggle { margin-left: 0; }
+
+.unity-base-dropdown__container-inner { background-image: none; background-color: rgb(20, 30, 45); }
+.explorer .unity-base-popup-field__input { background-image: none; background-color: rgb(25, 36, 53); }
+#rack-play-pause { background-image: none; background-color: rgb(29, 47, 66); color: white; }

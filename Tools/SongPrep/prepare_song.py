@@ -231,6 +231,13 @@ def main():
                     sourceAudioPath=str(audio_path), sourceAudioSha256=audio_hash, sourceMidiSha256=midi_hash,
                     audioSha256=digest(recording), midiSha256=digest(aligned), featureResolutionMs=1000/rate,
                     status='fingerprint-aligned; review weak windows', audioDuration=duration)
+    pattern_command = ['dotnet', 'run', '--project', str(Path(__file__).resolve().parents[1]/'PatternPrep/PatternPrep.csproj'), '--', str(aligned)]
+    settings = midi_path.parent/'song.json'
+    if settings.exists() and not (output/'song.json').exists():
+        (output/'song.json').write_bytes(settings.read_bytes())
+    authored = midi_path.parent/'authored-patterns.json'
+    if authored.exists(): pattern_command.append(str(authored))
+    subprocess.run(pattern_command, check=True)
     (output/'aligned.mid.prepared.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
     print(json.dumps(metrics, indent=2), flush=True)
 

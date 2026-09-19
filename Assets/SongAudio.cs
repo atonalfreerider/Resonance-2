@@ -102,7 +102,6 @@ public sealed class SongAudio : MonoBehaviour
         Alignment.method="Timing baked into preprocessed MIDI (identity playback)";
         try
         {
-            if(File.Exists(SectionPath)){var saved=JsonUtility.FromJson<Sections>(File.ReadAllText(SectionPath));midi.RebuildSongForm(saved.bars,saved.boundaries);}
             Status=$"Prepared song · {manifest.featureResolutionMs:0} ms fingerprint grid\n{manifest.status}\nRecording is the sole audio source; no runtime timing warp.";
         }
         catch(Exception e){Status="Song loaded; section map: "+e.Message;}
@@ -119,13 +118,20 @@ public sealed class SongAudio : MonoBehaviour
     public VisualElement BuildUI()
     {
         var box=new Foldout{text="SONG · preprocessed recording + MIDI",value=true};
-        var hint=new Label("Prepare the song outside Unity, then load aligned.mid. Its manifest selects the exact decoded recording.");hint.style.whiteSpace=WhiteSpace.Normal;box.Add(hint);
+        string libraryPath=Path.GetFullPath(Path.Combine(Application.dataPath,"../PreparedSongs"));
+        var songs=Directory.Exists(libraryPath)?new System.Collections.Generic.List<string>(Directory.GetFiles(libraryPath,"*.patterns.json",SearchOption.AllDirectories)):new System.Collections.Generic.List<string>();
+        songs.Sort(StringComparer.OrdinalIgnoreCase);
+        var choices=new System.Collections.Generic.List<string>();foreach(var song in songs){string score=song.Substring(0,song.Length-".patterns.json".Length);choices.Add(Path.GetFileName(Path.GetDirectoryName(score))+(File.Exists(score+".prepared.json")?" · recording":" · restored score"));}
+        if(songs.Count>0){string last=PlayerPrefs.GetString("Resonance.LastMidi").Replace('/',Path.DirectorySeparatorChar)+".patterns.json";int selected=Math.Max(0,songs.FindIndex(s=>string.Equals(s,last,StringComparison.OrdinalIgnoreCase)));var library=new DropdownField("Prepared library",choices,selected);box.Add(library);
+            box.Add(new Button(()=>{string score=songs[library.index];score=score.Substring(0,score.Length-".patterns.json".Length);if(File.Exists(score+".prepared.json"))LoadPair("",score);else {midi.Load(score);midiField.SetValueWithoutNotify(score);Status="Restored score preview. A recording requires offline fingerprint preparation.";}}){text="Load selected pattern bundle"});}
+        var files=new Foldout{text="Load companion files",value=false};box.Add(files);
+        var hint=new Label("Prepare the song outside Unity, then load aligned.mid. Its manifest selects the exact decoded recording.");hint.style.whiteSpace=WhiteSpace.Normal;files.Add(hint);
         audioField=new TextField("Original MP3 / prepared WAV"){value=PlayerPrefs.GetString("Resonance.LastAudio","")};
         midiField=new TextField("Preprocessed MIDI"){value=PlayerPrefs.GetString("Resonance.LastMidi",midi.midiPath)};
-        box.Add(audioField);box.Add(midiField);
-        var row=new VisualElement();row.AddToClassList("row");box.Add(row);
+        files.Add(audioField);files.Add(midiField);
+        var row=new VisualElement();row.AddToClassList("row");files.Add(row);
         row.Add(new Button(()=>Browse(audioField,"mp3,wav")){text="Choose audio…"});row.Add(new Button(()=>Browse(midiField,"mid,midi")){text="Choose MIDI…"});
-        box.Add(new Button(()=>LoadPair(audioField.value,midiField.value)){text="Load preprocessed song"});
+        files.Add(new Button(()=>LoadPair(audioField.value,midiField.value)){text="Load preprocessed song"});
         box.Add(new Button(()=>{if(!string.IsNullOrEmpty(ReportPath)&&File.Exists(ReportPath))Application.OpenURL(new Uri(ReportPath).AbsoluteUri);}){text="Open offline fingerprint report"});
         var transport=new VisualElement();transport.AddToClassList("row");box.Add(transport);
         transport.Add(new Button(()=>{if(midi.IsPlaying)midi.Pause();else midi.Play();}){text="Play / pause"});transport.Add(new Button(midi.Stop){text="Stop"});
@@ -133,7 +139,6 @@ public sealed class SongAudio : MonoBehaviour
         var clock=new Label();box.Add(clock);
         box.schedule.Execute(()=>{position.SetValueWithoutNotify(midi.Duration>0?(float)(midi.Position/midi.Duration):0);clock.text=$"{midi.Position:0.00}s / {midi.Duration:0.00}s";}).Every(100);
         status=new Label(Status);status.style.whiteSpace=WhiteSpace.Normal;box.Add(status);
-        box.Add(new Button(()=>Save(false)){text="Save section names / boundaries"});
         return box;
     }
     static void Browse(TextField field,string extensions)

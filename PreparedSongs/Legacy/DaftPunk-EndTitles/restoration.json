@@ -1,0 +1,9 @@
+{
+  "source": "C:\\Users\\johnb\\Desktop\\resonance-music\\StreamingAssets\\CSV\\DaftPunk-EndTitles.csv",
+  "sourceSha256": "585a2204f0c250e3479b8d33e56efd8a4b1c927afad9969d05ff96e628305bb2",
+  "format": "event export",
+  "notes": 3434,
+  "warnings": [
+    "The legacy Bank Select label omits MSB/LSB identity; recovered as controller 0. Unsupported vendor/system metadata is listed above."
+  ]
+}

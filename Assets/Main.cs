@@ -282,6 +282,7 @@ public class Main : MonoBehaviour
         if (audio && Synth != null) { Synth.ResetVoices(); Synth.Schedule(AudioSettings.dspTime, lastActiveKeys); }
         StateChanged?.Invoke();
     }
+    public void StrikeNote(int index,float velocity){if(index>=0&&index<notes.Count)notes[index].Strike(velocity);}
     public void Silence() => PlayKeys(new List<Tuple<int, float>>());
     void RenderKeys()
     {
@@ -295,7 +296,7 @@ public class Main : MonoBehaviour
             bool fifth = interval is 5 or 7;
             bool border = interval is 4 or 8;
             bool diagonal = interval is 3 or 9 or 1 or 11;
-            if (!(fifth || border || (diagonal && ShowDiagonals))) continue;
+            if (!(fifth || border || interval==0 || (diagonal && ShowDiagonals))) continue;
             ulong id = Szudzik.uintSzudzik2tupleCombine((uint)Mathf.Min(ia,ib), (uint)Mathf.Max(ia,ib));
             wanted.Add(id);
             if (!chordLineRenderers.TryGetValue(id, out var chord))
@@ -318,13 +319,14 @@ public class Main : MonoBehaviour
             if(!wanted.Contains(entry.Key))chord.Release();
             int ia=chord.Note1.Index,ib=chord.Note2.Index;
             chord.Recolor(TonalColorField.Pitch(ia,currentKey),TonalColorField.Pitch(ib,currentKey));
-            if (HarmonyModel.Mod(ib-ia) is 5 or 7)
+            // Only octave/radial lines and the major-third triangle edges share
+            // a cross-section. Every other interval follows the umbilic curve.
+            if (HarmonyModel.Mod(ib-ia) is not (0 or 4 or 8))
             {
                 float t1 = scaleToFifths[ia] % Tones / (float)Tones + currentVisualRotation;
                 float t2 = scaleToFifths[ib] % Tones / (float)Tones + currentVisualRotation;
-                if (t2-t1 > .5f) t1++; else if (t2-t1 < -.5f) t2++;
                 curveBuffer.Clear();
-                for (int j=0;j<=40;j++) curveBuffer.Add(transform.TransformPoint(GetPointAt(Mathf.Lerp(t1,t2,j/40f), Mathf.Lerp((ia/12+1)/(float)Octaves,(ib/12+1)/(float)Octaves,j/40f))));
+                ShortSurfaceRoute(t1,t2,(ia/12+1)/(float)Octaves,(ib/12+1)/(float)Octaves,curveBuffer);
                 chord.Fifth(curveBuffer);
             }
         }
@@ -334,6 +336,29 @@ public class Main : MonoBehaviour
             Color color = TonalColorField.Pitch(i,currentKey);
             note.Configure(color,(ShowRegisters || i/12==3) && !SoundingOnly,NoteReleaseSeconds);
         }
+    }
+    // The umbilic parameter winds THREE times around the hole. Wrapping it at
+    // 0.5 selected long physical arcs. Unwrap the major angle at 1/6 instead,
+    // then travel across the appropriate triangle edge to retain both endpoints.
+    public void ShortSurfaceRoute(float from,float to,float fromRegister,float toRegister,List<Vector3> result)
+    {
+        int bestShift=0;float bestLength=float.PositiveInfinity;
+        for(int shift=-3;shift<=3;shift++)
+        {
+            float end=to+shift/3f;
+            if(Mathf.Abs(end-from)>1f/6f+.00001f)continue;
+            float length=0;Vector3 previous=SurfaceRoutePoint(from,end,shift,fromRegister,toRegister,0);
+            for(int j=1;j<=40;j++){var point=SurfaceRoutePoint(from,end,shift,fromRegister,toRegister,j/40f);length+=Vector3.Distance(previous,point);previous=point;}
+            if(length<bestLength){bestLength=length;bestShift=shift;}
+        }
+        result.Clear();
+        for(int j=0;j<=40;j++)result.Add(transform.TransformPoint(SurfaceRoutePoint(from,to+bestShift/3f,bestShift,fromRegister,toRegister,j/40f)));
+    }
+    Vector3 SurfaceRoutePoint(float from,float to,int shift,float ra,float rb,float u)
+    {
+        int corner=(((-shift)%3)+3)%3;if(corner==2)corner=-1;
+        float edge=corner*u;int side=Mathf.FloorToInt(edge);float t=Mathf.Lerp(from,to,u),register=Mathf.Lerp(ra,rb,u);
+        return Vector3.Lerp(GetPointAt(t+side/3f,register),GetPointAt(t+(side+1)/3f,register),edge-side);
     }
     void Update()
     {

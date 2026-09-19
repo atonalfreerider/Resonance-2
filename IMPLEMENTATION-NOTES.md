@@ -91,3 +91,22 @@ Additional verification: `dotnet run --project Tests/ModelChecks/ModelChecks.csp
 The floating orrery uses a small HDR render pass through the same URP volume settings as the torus. A separate composite converts the black bloom background to transparency. The active section's timeline arc, song/section/progression bodies, and current chord sector brighten with MIDI energy and decay after release. The geometry and labels remain crisp. The transparent overlay ignores pointer picking; the sidebar toggle returns the orrery to its inline position.
 
 Keyboard ownership changes only on an actual UI pointer event or Tab, or when the user clicks the camera viewport. An incidental focus assignment from UI navigation cannot claim ownership. While the viewport owns the keyboard, a non-tab root focus target captures navigation, FocusController.IgnoreEvent prevents focus movement, and raw key events are blocked from UI controls. The regression holds an arrow for twelve consecutive intervals while repeatedly assigning UI targets and injecting navigation; the camera must continue moving in every interval.
+
+## Precomputed CD pattern wheels and restored legacy library
+
+The active UI now uses PatternWheelDeck: a song meta disc with a colored progression on top and child CD stacks for pitched MIDI track/channel lanes. DrumPatternDeck renders percussion only below the torus, with a fixed playhead, rotating dimples, and planar white waves whose density/decay comes from saved General MIDI drum-band classifications. Camera framing includes both levels.
+
+All loaded MIDI now requires a matching .patterns.json prepared by Tools/PatternPrep. The offline bundle contains tempo/measure/section/chord/pattern data plus complete controller-aware transport frames and attack events. Unity reads and filters saved frames; it no longer calls MIDI pattern or song-form analyzers during loading. The fingerprint workflow invokes PatternPrep automatically. CSV restoration recovered all 12 legacy songs; authored patterns preserve substitutions and sequence variations. TicketToRide-Restored combines the MP3 with the restored full 5,279-note score, including 1,569 drum hits. See Tools/PatternPrep/README.md for commands and reconstruction limitations.
+
+Non-cross-section chord intervals now always use sampled umbilic curves. Octaves and major-third triangle edges may remain straight. Note attacks briefly enlarge and whiten, including repeated and sub-frame attacks, before settling to their tonal hue and release envelope. The umbilic mesh remains unchanged.
+
+
+## Section-family rack and shortest chord paths
+
+- Offline `SectionCompression` groups all instrument channels within section visits, reuses transposition/quality variants and verifies lossless note reconstruction. `song.json` supplies reviewed key context and editable section/group paths. All 14 prepared library bundles regenerated.
+- Ticket to Ride retains A major; section-role boundaries are estimates. Runtime consumes saved hierarchy and variants only.
+- The rack sits beside the left controls. Pointer capture supports mouse/touch drag seeking, mouse-wheel seeking and local Play/Pause. Inactive family wheels retain colored notes, outlines and readable labels.
+- Chords use the shortest major-angle arc (at most half a physical orbit) with interpolation over the triangular surface edge. Equal-angle candidates choose the shorter sampled route. The original parameter wound three times around the hole, causing excessive wraps. Octaves and major-third triangle edges retain their direct cross-section paths.
+- Default UI Toolkit layout is imported, with dark popup inner-container styling to prevent overlapping or low-contrast song choices.
+- Drum ripple origins follow the twelve-o'clock instrument-lane collision point. Saved GM classifications control size, frequency and decay; these are not measured audio spectra.
+- Validation: 785 model checks, five Python preparation/restoration/compression tests, per-bundle reconstruction checks, and Unity section/key/popup/drum/rack/route integration checks. See `Temp/ResonanceChecks/section-wheels.txt` for the latest runtime result.

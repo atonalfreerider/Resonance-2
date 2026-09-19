@@ -4,9 +4,9 @@ using UnityEngine.InputSystem;
 public class CameraControl : MonoBehaviour
 {
     public float Speed = 0.3f;          // Speed of movement and rotation
-    public Vector3 center = Vector3.zero; // The point the camera orbits around
-    float rad = 4.3f;            // Frame the whole umbilic surface beside the controls.
-    float alpha = 45f * Mathf.Deg2Rad;      // Polar angle (from Y-axis) - set to 45 degrees
+    public Vector3 center = new Vector3(0,-.4f,0); // Frame the torus and the percussion player below it.
+    float rad = 5.4f;
+    float alpha = 65f * Mathf.Deg2Rad;
     float phi = 45f * Mathf.Deg2Rad;        // Azimuthal angle (around Y-axis) - set to 45 degrees
     
     public delegate void MovementUpdate();
@@ -36,7 +36,7 @@ public class CameraControl : MonoBehaviour
         transform.LookAt(center); // Ensure the camera always looks at the center
     }
 
-    public void ResetView() { rad=4.3f; alpha=45f*Mathf.Deg2Rad; phi=45f*Mathf.Deg2Rad; UpdateCameraPosition(); transform.LookAt(center); MovementUpdater?.Invoke(); }
+    public void ResetView() { center=new Vector3(0,-.4f,0);rad=5.4f; alpha=65f*Mathf.Deg2Rad; phi=45f*Mathf.Deg2Rad; UpdateCameraPosition(); transform.LookAt(center); MovementUpdater?.Invoke(); }
     void MoveCamera()
     {
         bool isMoving = false; // Flag to check if any movement key is pressed
