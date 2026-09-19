@@ -30,7 +30,8 @@ public class HarmonyExplorer : MonoBehaviour
     {
         main=GetComponent<Main>(); midi=GetComponent<MidiPlayer>();
         live=gameObject.AddComponent<LiveMidiInput>();
-        settings=ScriptableObject.CreateInstance<PanelSettings>(); settings.scaleMode=PanelScaleMode.ScaleWithScreenSize;
+        var panelTemplate=Resources.Load<PanelSettings>("HarmonyPanelSettings");
+        settings=panelTemplate!=null?Instantiate(panelTemplate):ScriptableObject.CreateInstance<PanelSettings>(); settings.scaleMode=PanelScaleMode.ScaleWithScreenSize;
         settings.themeStyleSheet=Resources.Load<ThemeStyleSheet>("HarmonyTheme");
         settings.referenceResolution=new Vector2Int(1280,800); settings.match=.5f;
         document=gameObject.AddComponent<UIDocument>(); document.panelSettings=settings;

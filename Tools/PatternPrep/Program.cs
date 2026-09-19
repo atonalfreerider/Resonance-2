@@ -62,5 +62,7 @@ foreach(var hit in data.Notes.Concat(data.Disks.SelectMany(d=>d.Hits.Concat(d.Vi
         4=>(1.7f,.06f,.42f),18=>(.58f,.027f,.66f),48=>(hit.Pitch==46?.23f:.16f,.009f,1.02f),32=>(.43f,.017f,1.02f),_=>(.5f,.025f,.83f)};
 }
 SectionCompression.Build(data,settings);
+DrumCompression.Build(data);
+RegionPhases.Build(data);
 string output=path+".patterns.json",temporary=output+".tmp";File.WriteAllText(temporary,JsonSerializer.Serialize(data,jsonOptions));File.Move(temporary,output,true);
 Console.WriteLine($"{output}: {data.Notes.Length} notes, {data.Templates.Length} rhythm templates / {data.TemplateNoteCount} stored slots, {data.Sections.Length} sections; lossless reconstruction verified");

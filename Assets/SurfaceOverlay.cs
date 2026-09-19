@@ -8,8 +8,9 @@ public class SurfaceOverlay : MonoBehaviour
     readonly TextBox[] labels = new TextBox[4];
     readonly Vector3[] curve = new Vector3[33];
     readonly Vector3[] segment = new Vector3[2];
-    void Start()
+    void OnEnable()
     {
+        if(!Application.isPlaying)return;
         main = GetComponent<Main>();
         for (int i=0;i<4;i++)
         {
@@ -24,9 +25,12 @@ public class SurfaceOverlay : MonoBehaviour
     }
     void LateUpdate()
     {
+        if(main==null)main=GetComponent<Main>();
+        if(main==null)return;
         int root=main.SelectedSurface;
         for(int i=0;i<4;i++)
         {
+            if(lines[i]==null||labels[i]==null)continue;
             bool show=main.SurfaceGuide && (i<2?main.ShowStructure:main.ShowDiagonals);
             lines[i].enabled=show; labels[i].gameObject.SetActive(show); if(!show)continue;
             if(i==0)
@@ -44,5 +48,5 @@ public class SurfaceOverlay : MonoBehaviour
             labels[i].Billboard();
         }
     }
-    void OnDestroy(){foreach(var line in lines)if(line!=null)Destroy(line.sharedMaterial);}
+    void OnDisable(){for(int i=0;i<lines.Length;i++){if(lines[i]!=null){lines[i].gameObject.SetActive(false);Destroy(lines[i].sharedMaterial);Destroy(lines[i].gameObject);}if(labels[i]!=null){labels[i].gameObject.SetActive(false);Destroy(labels[i].gameObject);}lines[i]=null;labels[i]=null;}}
 }

@@ -78,7 +78,8 @@ public class TextBox : MonoBehaviour
 
     public void Billboard()
     {
-        transform.LookAt(Camera.main.transform);
+        var camera=Camera.main;if(camera==null)return;
+        transform.LookAt(camera.transform);
         transform.Rotate(Vector3.up * 180f);
     }
 }

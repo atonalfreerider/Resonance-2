@@ -78,13 +78,13 @@ public class Main : MonoBehaviour
     public string PitchName(int pc) => HarmonyModel.Name(pc, UseFlats);
     public Vector3 SurfaceCurve(int a, int b, float u)
     {
-        float t1=scaleToFifths[HarmonyModel.Mod(a)]/(float)Tones+currentVisualRotation;
-        float t2=scaleToFifths[HarmonyModel.Mod(b)]/(float)Tones+currentVisualRotation;
+        float t1=HarmonyModel.Mod(a*5)/(float)Tones+currentVisualRotation;
+        float t2=HarmonyModel.Mod(b*5)/(float)Tones+currentVisualRotation;
         if(t2-t1>.5f)t1++;else if(t2-t1<-.5f)t2++;
         return transform.TransformPoint(GetPointAt(Mathf.Lerp(t1,t2,u),1));
     }
 
-    public void ChordOutlinePath(int a,int b,List<Vector3> result)=>ShortSurfaceRoute(scaleToFifths[HarmonyModel.Mod(a)]/(float)Tones+currentVisualRotation,scaleToFifths[HarmonyModel.Mod(b)]/(float)Tones+currentVisualRotation,1,1,result);
+    public void ChordOutlinePath(int a,int b,List<Vector3> result)=>ShortSurfaceRoute(HarmonyModel.Mod(a*5)/(float)Tones+currentVisualRotation,HarmonyModel.Mod(b*5)/(float)Tones+currentVisualRotation,1,1,result);
 
     void Awake()
     {
@@ -345,6 +345,12 @@ public class Main : MonoBehaviour
     // then travel across the appropriate triangle edge to retain both endpoints.
     public void ShortSurfaceRoute(float from,float to,float fromRegister,float toRegister,List<Vector3> result)
     {
+        int bestShift=SurfaceRouteShift(from,to,fromRegister,toRegister);
+        result.Clear();
+        for(int j=0;j<=40;j++)result.Add(transform.TransformPoint(SurfaceRoutePoint(from,to+bestShift/3f,bestShift,fromRegister,toRegister,j/40f)));
+    }
+    int SurfaceRouteShift(float from,float to,float fromRegister,float toRegister)
+    {
         int bestShift=0;float bestLength=float.PositiveInfinity;
         for(int shift=-3;shift<=3;shift++)
         {
@@ -354,8 +360,18 @@ public class Main : MonoBehaviour
             for(int j=1;j<=40;j++){var point=SurfaceRoutePoint(from,end,shift,fromRegister,toRegister,j/40f);length+=Vector3.Distance(previous,point);previous=point;}
             if(length<bestLength){bestLength=length;bestShift=shift;}
         }
-        result.Clear();
-        for(int j=0;j<=40;j++)result.Add(transform.TransformPoint(SurfaceRoutePoint(from,to+bestShift/3f,bestShift,fromRegister,toRegister,j/40f)));
+        return bestShift;
+    }
+    public Vector2 ChordRegionCoordinate(int root,int pitch)
+    {
+        float from=HarmonyModel.Mod(root*5)/12f+currentVisualRotation,to=HarmonyModel.Mod(pitch*5)/12f+currentVisualRotation;
+        int shift=SurfaceRouteShift(from,to,1,1),corner=(((-shift)%3)+3)%3;if(corner==2)corner=-1;
+        return new Vector2(to+shift/3f,corner);
+    }
+    public Vector3 ChordRegionPoint(Vector2 uv)
+    {
+        int side=Mathf.FloorToInt(uv.y);
+        return transform.TransformPoint(Vector3.Lerp(GetPointAt(uv.x+side/3f,1),GetPointAt(uv.x+(side+1)/3f,1),uv.y-side));
     }
     Vector3 SurfaceRoutePoint(float from,float to,int shift,float ra,float rb,float u)
     {

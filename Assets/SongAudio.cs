@@ -62,10 +62,12 @@ public sealed class SongAudio : MonoBehaviour
         Source.clip=null;Alignment=null;ReportPath=null;RecordingName=null;AudioPath="";
         if(main.Synth!=null)main.Synth.GetComponent<AudioSource>().mute=false;
     }
+    public static string BundledScore=>Path.GetFullPath(Path.Combine(Application.dataPath,"../PreparedSongs/TicketToRide/aligned.mid"));
+    string StartupScore=>!Application.isEditor&&File.Exists(BundledScore)?BundledScore:PlayerPrefs.GetString("Resonance.LastMidi");
     IEnumerator Start()
     {
         yield return null;
-        string audio=PlayerPrefs.GetString("Resonance.LastAudio"),score=PlayerPrefs.GetString("Resonance.LastMidi");
+        string score=StartupScore,audio=!Application.isEditor&&score==BundledScore?"":PlayerPrefs.GetString("Resonance.LastAudio");
         if(!Busy&&!Ready&&File.Exists(score))LoadPair(audio,score);
     }
     public void LoadPair(string audio,string score){if(!Busy)StartCoroutine(Load(audio,score));}
@@ -128,7 +130,7 @@ public sealed class SongAudio : MonoBehaviour
             .Select(g=>g.OrderByDescending(s=>File.Exists(s.Substring(0,s.Length-".patterns.json".Length)+".prepared.json")).First()).ToList();
         songs.Sort(StringComparer.OrdinalIgnoreCase);
         var choices=new System.Collections.Generic.List<string>();foreach(var song in songs){string score=song.Substring(0,song.Length-".patterns.json".Length);choices.Add(Path.GetFileName(Path.GetDirectoryName(score))+(File.Exists(score+".prepared.json")?" · recording":" · restored score"));}
-        if(songs.Count>0){string last=PlayerPrefs.GetString("Resonance.LastMidi").Replace('/',Path.DirectorySeparatorChar)+".patterns.json";int selected=Math.Max(0,songs.FindIndex(s=>string.Equals(s,last,StringComparison.OrdinalIgnoreCase)));var library=new DropdownField("Prepared library",choices,selected);box.Add(library);
+        if(songs.Count>0){string last=StartupScore.Replace('/',Path.DirectorySeparatorChar)+".patterns.json";int selected=Math.Max(0,songs.FindIndex(s=>string.Equals(s,last,StringComparison.OrdinalIgnoreCase)));var library=new DropdownField("Prepared library",choices,selected);box.Add(library);
             box.Add(new Button(()=>{string score=songs[library.index];score=score.Substring(0,score.Length-".patterns.json".Length);if(File.Exists(score+".prepared.json"))LoadPair("",score);else {midi.Load(score);midiField.SetValueWithoutNotify(score);Status="Restored score preview. A recording requires offline fingerprint preparation.";}}){text="Load selected pattern bundle"});}
         var files=new Foldout{text="Load companion files",value=false};box.Add(files);
         var hint=new Label("Prepare the song outside Unity, then load aligned.mid. Its manifest selects the exact decoded recording.");hint.style.whiteSpace=WhiteSpace.Normal;files.Add(hint);

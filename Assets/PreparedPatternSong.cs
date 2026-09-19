@@ -15,7 +15,12 @@ using System.Linq;
     public Disk[] Disks;
     public Section[] Sections;
     public SongFormAnalysis.ChordStep[] Chords;
+    public SongFormAnalysis.ChordStep[] RegionPhases=Array.Empty<SongFormAnalysis.ChordStep>();
     public Frame[] Frames;
+    public DrumBar[] DrumBars=Array.Empty<DrumBar>();
+    public DrumFamily[] DrumFamilies=Array.Empty<DrumFamily>();
+    [Serializable] public sealed class DrumFamily { public int Id,Numerator,Denominator;public MidiCycleAnalysis.Hit[] Slots; }
+    [Serializable] public sealed class DrumBar { public int Family,Variant,Numerator,Denominator;public double Start,End;public MidiCycleAnalysis.Hit[] Hits;public int[] Slots; }
     public int Key=-1,TemplateNoteCount,PatternNoteCount;
     public bool Minor;
     public string KeySource;

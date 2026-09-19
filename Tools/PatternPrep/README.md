@@ -51,3 +51,7 @@ The drum changer sits below the torus in the XZ plane. Dimple positions use the 
 Section names without MIDI markers are estimates; they are not asserted to be verse/chorus labels. Fingerprint reports distinguish encoding precision from musical matching confidence.
 
 Validation: Python restoration and retiming fixtures; 785 model checks; Unity route, note-attack, release, pattern-navigation, drum-plane, recorded-playback and keyboard-focus checks.
+
+DrumBars and DrumFamilies are prepared offline: one complete notated measure per revolution (four counts in 4/4, three in 3/4), including a padded final partial measure. Similar bars reuse matched variation slots; family changes slide real discs vertically into the playing position. The kick lane and count ticks remain visible. Instrument callouts are omitted, and remaining wheel labels have transparent backgrounds.
+
+RegionPhases is a separate, continuous display timeline prepared per section. Single-tone/dyad observations and rests do not erase harmonic context: retain the preceding triad until another triad is established, seed the section opening from its first triad, and use the reviewed key if an entire section has no triad. Seventh/extension changes share their root/third/fifth region. Runtime performs only interval lookup.

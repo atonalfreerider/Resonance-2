@@ -17,6 +17,13 @@ public sealed class PatternWheelDeck : VisualElement
     public Vector2 MetaCenter=>canvas.metaCenter;
     public Vector2 FeaturedCenter=>canvas.featuredCenter;
     public int LeadVocalTrack=>canvas.LeadTrack;
+        public static Color NoteColor(PreparedPatternSong.Section section,double onset,int key,bool lead)
+        {
+            if(lead)return Color.white;
+            var chord=section.Chords.LastOrDefault(c=>c.Start<=onset&&onset<c.End);
+            return CyclicOrrery.ChordColor(chord,key);
+        }
+
     public PatternWheelDeck(Main owner,MidiPlayer player)
     {
         main=owner;midi=player;name="pattern-wheel-deck";
@@ -92,7 +99,6 @@ public sealed class PatternWheelDeck : VisualElement
             p.strokeColor=hue;p.lineWidth=1;p.BeginPath();
             for(int i=0;i<=teeth*4;i++){float r=radius+(i%4 is 1 or 2?3:0);var pt=At(c,r,i/(double)(teeth*4)-turns);if(i==0)p.MoveTo(pt);else p.LineTo(pt);}p.ClosePath();p.Stroke();
         }
-        Color Hue(int pitch)=>TonalColorField.Pitch(pitch-21,main.currentKey);
         static Color Dim(Color color,float strength)=>new Color(color.r*strength,color.g*strength,color.b*strength,color.a);
         readonly List<(Vector2 anchor,Vector2 direction,string text,bool bright)> labels=new();
         public Vector2 metaCenter,featuredCenter;
@@ -104,8 +110,6 @@ public sealed class PatternWheelDeck : VisualElement
                     float y=Mathf.Clamp(Mathf.Max(last,label.anchor.y+label.direction.y*48),48,h-84);last=y+36;
                     float x=right?w-128:85;var end=new Vector2(right?x-4:x+118,y+6);
                     Line(p,label.anchor,label.anchor+label.direction*13,new Color(.38f,.45f,.52f,.65f));Line(p,label.anchor+label.direction*13,end,new Color(.38f,.45f,.52f,.65f));
-                    float height=label.text.Contains("\n")?30:17;
-                    p.fillColor=new Color(.018f,.025f,.034f,.95f);p.BeginPath();p.MoveTo(new Vector2(x-2,y-1));p.LineTo(new Vector2(x+125,y-1));p.LineTo(new Vector2(x+125,y+height));p.LineTo(new Vector2(x-2,y+height));p.ClosePath();p.Fill();
                     ctx.DrawText(label.text,new Vector2(x,y),11,label.bright?Color.white:new Color(.83f,.86f,.9f));
                 }
             }
@@ -164,7 +168,7 @@ public sealed class PatternWheelDeck : VisualElement
                 int li=0;int laneCount=section.Lanes.Count(l=>l.Channel!=10);
                 foreach(var lane in section.Lanes.Where(l=>l.Channel!=10).OrderBy(l=>l.Track==LeadTrack?1:0))
                 {
-                    var play=active?lane.Plays.LastOrDefault(v=>v.Start<=beat&&beat<v.End):lane.Plays.FirstOrDefault();if(play==null){if(active)RadialLabel(At(center,radius*.98f,(li+.5)/Math.Max(1,laneCount)),lane.Name+"\nRest",lane.Track==LeadTrack);li++;continue;}
+                    var play=active?lane.Plays.LastOrDefault(v=>v.Start<=beat&&beat<v.End):lane.Plays.FirstOrDefault();if(play==null){li++;continue;}
                     bool lead=lane.Track==LeadTrack;float laneLight=lead?1.65f:.48f;
                     var template=source.Templates[play.Template];var variation=template.Variants[play.Variant];double position=active?beat-play.Start:0;
                     for(int i=0;i<template.Slots.Length;i++)
@@ -177,7 +181,7 @@ public sealed class PatternWheelDeck : VisualElement
                         float inner=radius*.23f,outer=radius*.8f;float r=Mathf.Lerp(inner,outer,Mathf.InverseLerp(36,96,shown));
                         // One persistent radial slot per rhythm onset; harmony only changes its radius.
                         Line(p,At(center,inner,phase),At(center,outer,phase),new Color(.17f,.28f,.37f,active?.34f:.07f),.6f);
-                        var pt=At(center,r,phase);var hue=Hue(pitch);double elapsed=position-slot.Beat-variation.BeatOffsets[i];
+                        var pt=At(center,r,phase);var hue=NoteColor(section,play.Start+slot.Beat+variation.BeatOffsets[i],main.currentKey,lead);double elapsed=position-slot.Beat-variation.BeatOffsets[i];
                         float energy=active&&midi.IsPlaying&&elapsed>=0?(float)Math.Exp(-elapsed*7):0;
                         double duration=Math.Max(0,slot.Length+variation.LengthOffsets[i]);
                         double span=duration/template.Beats,visibleSpan=Math.Min(1,span);
@@ -192,7 +196,7 @@ public sealed class PatternWheelDeck : VisualElement
                         Dot(p,pt,(active?2.3f:1.2f)+energy*2,Color.Lerp(Dim(hue,dim*laneLight),lead?Color.white:Dim(hue,.8f),energy));
                         if(active)bloom.Disk(pt,lead?2.2f:1.2f,hue,energy*variation.Velocities[i]*(lead?1.5f:.12f));
                     }
-                    if(active){var badge=At(center,radius*.98f,(li+.5)/Math.Max(1,laneCount));Ring(p,badge,5,new Color(.6f,.64f,.69f));Line(p,badge,At(badge,4,(play.Variant%12+1)/12.0),Color.white);RadialLabel(badge,$"{lane.Name}\nP{play.Template+1} · V{play.Variant+1}"+(lead?" · VOCAL":""),lead);}li++;
+                    if(active){var badge=At(center,radius*.98f,(li+.5)/Math.Max(1,laneCount));Ring(p,badge,5,new Color(.6f,.64f,.69f));Line(p,badge,At(badge,4,(play.Variant%12+1)/12.0),Color.white);}li++;
                 }
             }
             var visit=section==null?0:source.Sections.Where(s=>s.Node==section.Node&&s.Start<=section.Start).Count()-1;
