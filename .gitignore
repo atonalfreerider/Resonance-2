@@ -77,3 +77,8 @@ PreparedSongs/**/*.wav
 Tools/**/bin/
 Tools/**/obj/
 !Tools/PatternPrep/PatternPrep.csproj
+
+# Local song-ingestion runtime, models, caches and job state
+Tools/SongLibrary/.venv/
+Tools/SongLibrary/__pycache__/
+SongLibraryData/

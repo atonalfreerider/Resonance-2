@@ -4,6 +4,7 @@ public sealed class SongSettings
 {
     public int Key=-1,LeadVocalTrack=-1;
     public bool Minor;
+    public double PatternTimingToleranceBeats=0;
     public string KeySource="",SectionBoundaries="",SectionSource="";
     public string[] SectionParents=Array.Empty<string>();
 }
@@ -50,8 +51,15 @@ public static class SectionCompression
                         string key=$"{lane.Key.Track}:{lane.Key.Channel}:{Q(z-a)}:"+Signature(hits,a);
                         if(!keys.TryGetValue(key,out int id))
                         {
-                            id=templates.Count;keys.Add(key,id);variants.Add(new());variantKeys.Add(new());
-                            templates.Add(new(){Id=id,Track=lane.Key.Track,Channel=lane.Key.Channel,Beats=z-a,Slots=hits.Select(h=>new MidiCycleAnalysis.Hit{Beat=h.Beat-a,Length=h.Length,Pitch=h.Pitch,Velocity=h.Velocity,Track=h.Track,Channel=h.Channel}).ToArray()});
+                            // Neural timing jitter belongs in lossless variant residuals, not a new wheel.
+                            double tolerance=Math.Clamp(settings.PatternTimingToleranceBeats,0,.5);
+                            var related=tolerance>0?templates.FirstOrDefault(t=>t.Track==lane.Key.Track&&t.Channel==lane.Key.Channel&&Math.Abs(t.Beats-(z-a))<1e-6&&t.Slots.Length==hits.Length&&
+                                hits.Select((h,i)=>Math.Abs(h.Beat-a-t.Slots[i].Beat)<=tolerance&&Math.Abs(h.Length-t.Slots[i].Length)<=tolerance*2).All(v=>v)):null;
+                            if(related!=null){id=related.Id;keys.Add(key,id);}
+                            else {
+                                id=templates.Count;keys.Add(key,id);variants.Add(new());variantKeys.Add(new());
+                                templates.Add(new(){Id=id,Track=lane.Key.Track,Channel=lane.Key.Channel,Beats=z-a,Slots=hits.Select(h=>new MidiCycleAnalysis.Hit{Beat=h.Beat-a,Length=h.Length,Pitch=h.Pitch,Velocity=h.Velocity,Track=h.Track,Channel=h.Channel}).ToArray()});
+                            }
                         }
                         var slots=templates[id].Slots;int transpose=hits[0].Pitch-slots[0].Pitch;
                         var delta=hits.Select((h,i)=>h.Pitch-slots[i].Pitch-transpose).ToArray();

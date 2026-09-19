@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "audioPath": "recording.wav",
+  "midiPath": "aligned.mid",
+  "reportPath": "report.html",
+  "sourceAudioPath": "Ticket To Ride (Remastered 2015) pitch-shift.mp3",
+  "sourceAudioSha256": "3cfba5aa32c256a2cf59979242da7e2feda0cf226a2c70bb0239db413dfc8cae",
+  "sourceMidiSha256": "6b7f6dcb61f492d24d3717b3d63c522274c6e86867d3d2079b5393503589819b",
+  "audioSha256": "6bb5ea526a9051517e8d71517422c6487d244cf2bd70c5dfb098d2d17ea1973a",
+  "midiSha256": "31faa772210a6a8d0664575889bd7e6f457648a5f6729318e5ab720273c6d72f",
+  "featureResolutionMs": 10,
+  "status": "Local neural transcription; review required",
+  "audioDuration": 190.14820861678004
+}
