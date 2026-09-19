@@ -2,7 +2,7 @@ using System.Text.Json;
 
 public sealed class SongSettings
 {
-    public int Key=-1;
+    public int Key=-1,LeadVocalTrack=-1;
     public bool Minor;
     public string KeySource="",SectionBoundaries="",SectionSource="";
     public string[] SectionParents=Array.Empty<string>();
@@ -62,7 +62,7 @@ public static class SectionCompression
                         plays.Add(new(){Template=id,Variant=vi,Start=a,End=z});
                     }
                 }
-                lanes.Add(new(){Track=lane.Key.Track,Channel=lane.Key.Channel,Name=$"CH {lane.Key.Channel} · T{lane.Key.Track+1}",Plays=plays.ToArray()});
+                lanes.Add(new(){Track=lane.Key.Track,Channel=lane.Key.Channel,Name=lane.Key.Track<song.TrackNames.Length&&!string.IsNullOrWhiteSpace(song.TrackNames[lane.Key.Track])?song.TrackNames[lane.Key.Track]:$"Track {lane.Key.Track+1} / Ch {lane.Key.Channel}",Plays=plays.ToArray()});
             }
             section.Lanes=lanes.ToArray();
         }

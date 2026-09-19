@@ -19,10 +19,9 @@ public static class AttackLayoutValidation
             AudioListener.volume=0;midi.Pause();Camera.main.GetComponent<CameraControl>().ResetView();await Task.Delay(80);
             var view=Camera.main.WorldToViewportPoint(main.transform.position);
             Check(view.x>.55f&&view.y>.55f,"Larger default torus is framed in the upper right");
-            var drum=main.GetComponent<DrumPatternDeck>().OverheadCamera;
-            Check(drum.orthographic&&Vector3.Dot(drum.transform.forward,Vector3.down)>.999f,"Drums use a strictly overhead orthographic camera");
-            Check(drum.pixelRect.xMin>Screen.width*.5f&&drum.pixelRect.yMax<Screen.height*.5f,"Drum view stays in the bottom right");
-            Check((Camera.main.cullingMask&(1<<30))==0,"Drum geometry is excluded from the torus view");
+            var drum=main.GetComponent<DrumPatternDeck>().WheelTransform;
+            Check(drum.localPosition.y<=-2.8f,"Drum wheel sits farther beneath the torus in the shared 3D view");
+            Check((Camera.main.cullingMask&(1<<drum.gameObject.layer))!=0,"Main camera renders the drum wheel");
             test=new GameObject("Chord attack validation");test.transform.SetParent(main.transform,false);
             var line=test.AddComponent<LineRenderer>();line.sharedMaterial=new Material(Resources.Load<Shader>("HarmonicGlow"));
             var chord=test.AddComponent<Chord>();var notes=main.GetComponentsInChildren<Note>();

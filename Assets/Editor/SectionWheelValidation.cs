@@ -40,9 +40,8 @@ public static class SectionWheelValidation
             {
                 midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(section.Start+1)));deck.Tick();await Task.Delay(65);
                 Check(deck.ActiveFamilyNode==section.Node,"Section docks its own wheel: "+section.Name+" / bar "+(section.FirstBar+1));
-                int rank=Array.IndexOf(data.Form[0].Children,section.Node);double phase=rank/(double)data.Form[0].Children.Length-deck.RackTurns;
-                Check(Math.Abs(phase-Math.Round(phase))<.0001,"Active wheel reaches the fixed playing position");
-                Check(deck.RackTurns>=last,"Rack motion stays continuous in song order");last=deck.RackTurns;
+                Check(Vector2.Distance(deck.MetaCenter,deck.FeaturedCenter)<.001f,"Active pattern is centered on the meta wheel");
+                Check(deck.RackPixels>=last,"Rack motion stays continuous in song order");last=deck.RackPixels;
             }
             Check(main.currentKey==0&&!main.MinorMode,"Seeking does not restore the legacy C-major header");
             var kick=data.Notes.First(n=>n.Channel==10&&(n.Pitch==35||n.Pitch==36));var hat=data.Notes.First(n=>n.Channel==10&&(n.Pitch==42||n.Pitch==54));

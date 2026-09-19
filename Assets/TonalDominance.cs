@@ -9,6 +9,10 @@ public sealed class TonalDominance : MonoBehaviour
     readonly float[] weights=new float[12];
     public Color Hue {get;private set;}=TonalColorField.Tonic;
     public float Energy {get;private set;}
+    public int ChordRoot {get;private set;}
+    public bool ChordMinor {get;private set;}
+    public string ChordQuality {get;private set;}="";
+    public bool HasChord {get;private set;}
     public float Influence=.82f;
     public Color Blend(Color local,float energy)=>Color.Lerp(local,Hue,Influence*Mathf.Clamp01(energy*3));
     void Awake(){main=GetComponent<Main>();midi=GetComponent<MidiPlayer>();}
@@ -25,12 +29,14 @@ public sealed class TonalDominance : MonoBehaviour
             if(bass!=int.MaxValue&&pc==bass%12)evidence+=total*.18f;
             if(evidence>best){best=evidence;root=pc;minor=quality==1;}
         }
+        string qualityName=minor?"m":"";HasChord=weights.Count(w=>w>0)>=3;
         if(midi!=null&&midi.IsPlaying&&midi.SongForm!=null)
         {
             double beat=midi.Cycles.BeatAt(midi.ScorePosition);
             var chord=midi.SongForm.Timeline.LastOrDefault(c=>c.Start<=beat&&c.End>beat);
-            if(chord!=null&&!chord.Rest){root=chord.Root;minor=chord.Quality.StartsWith("m")&&!chord.Quality.StartsWith("maj");}
+            if(chord!=null&&!chord.Rest){root=chord.Root;qualityName=chord.Quality;minor=chord.Quality.StartsWith("m")&&!chord.Quality.StartsWith("maj");HasChord=total>0&&!qualityName.Contains("tone")&&!qualityName.Contains("dyad");}
         }
+        ChordRoot=root;ChordMinor=minor;ChordQuality=qualityName;
         float dt=Time.unscaledDeltaTime;
         if(total>0)Hue=Color.Lerp(Hue,TonalColorField.Chord(root,main.currentKey,minor),1-Mathf.Exp(-dt*7));
         Energy=Mathf.Lerp(Energy,total*main.Synth.Volume/.6f,1-Mathf.Exp(-dt*(total>Energy?9:1.2f)));

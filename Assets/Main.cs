@@ -84,8 +84,11 @@ public class Main : MonoBehaviour
         return transform.TransformPoint(GetPointAt(Mathf.Lerp(t1,t2,u),1));
     }
 
+    public void ChordOutlinePath(int a,int b,List<Vector3> result)=>ShortSurfaceRoute(scaleToFifths[HarmonyModel.Mod(a)]/(float)Tones+currentVisualRotation,scaleToFifths[HarmonyModel.Mod(b)]/(float)Tones+currentVisualRotation,1,1,result);
+
     void Awake()
     {
+        if(GetComponent<DominantChordOutline>()==null)gameObject.AddComponent<DominantChordOutline>();
         visualKeyForRendering = currentKey;
         currentKey = HarmonyModel.Mod(currentKey); currentVisualRotation = pathMap[currentKey].x / (float)Tones; currentVisualTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
 

@@ -5,7 +5,8 @@ using System.Linq;
 // Portable offline analysis contract. No inference or pattern discovery in playback.
 [Serializable] public sealed class PreparedPatternSong
 {
-    public int Version=1,TrackCount;
+    public int Version=1,TrackCount,LeadVocalTrack=-1;
+    public string[] TrackNames=Array.Empty<string>();
     public string MidiSha256,Title,Provenance;
     public double Duration,EndBeat;
     public Tempo[] Tempos;

@@ -2,13 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.Rendering.Universal;
 
 // Percussion has its own XZ-plane player below the torus. It never enters tonal voices.
 public sealed class DrumPatternDeck : MonoBehaviour
 {
-    MidiPlayer midi;Main main;PreparedPatternSong source;Camera drumCamera;int originalMask;
-    public Camera OverheadCamera=>drumCamera;
+    MidiPlayer midi;Main main;PreparedPatternSong source;
+    public Transform WheelTransform=>deck;
     Transform deck;Material material,discMaterial;Mesh discMesh;readonly List<LineRenderer> rings=new();readonly List<Transform> pins=new();
     readonly List<LineRenderer> waves=new();readonly List<Ripple> ripples=new();
     PreparedPatternSong.Disk[] disks=Array.Empty<PreparedPatternSong.Disk>();
@@ -20,13 +19,7 @@ public sealed class DrumPatternDeck : MonoBehaviour
     void Start()
     {
         midi=GetComponent<MidiPlayer>();main=GetComponent<Main>();
-        deck=new GameObject("Percussion CD changer · twelve o'clock playhead").transform;deck.SetParent(transform,false);deck.localPosition=new Vector3(0,-1.3f,0);
-        originalMask=Camera.main.cullingMask;Camera.main.cullingMask &= ~(1<<30);
-        var cameraObject=new GameObject("Drum overhead view");drumCamera=cameraObject.AddComponent<Camera>();
-        drumCamera.orthographic=true;drumCamera.orthographicSize=1.85f;drumCamera.nearClipPlane=.1f;drumCamera.farClipPlane=20;
-        drumCamera.cullingMask=1<<30;drumCamera.clearFlags=CameraClearFlags.SolidColor;drumCamera.backgroundColor=Color.black;drumCamera.depth=10;
-        drumCamera.allowHDR=true;drumCamera.GetUniversalAdditionalCameraData().renderPostProcessing=true;
-        drumCamera.GetUniversalAdditionalCameraData().volumeLayerMask=Camera.main.GetUniversalAdditionalCameraData().volumeLayerMask;
+        deck=new GameObject("Percussion CD changer · twelve o'clock playhead").transform;deck.SetParent(transform,false);deck.localPosition=new Vector3(0,-2.8f,0);deck.localScale=Vector3.one*1.25f;
         material=new Material(Resources.Load<Shader>("HarmonicGlow"));material.SetColor("_BaseColor",Color.white*2);
         discMaterial=new Material(Shader.Find("Universal Render Pipeline/Unlit"));discMaterial.SetColor("_BaseColor",new Color(.014f,.022f,.032f));
         var vertices=new List<Vector3>();var triangles=new List<int>();
@@ -36,15 +29,6 @@ public sealed class DrumPatternDeck : MonoBehaviour
         for(int i=0;i<10;i++)rings.Add(Line("Disc groove",.009f));
         for(int i=0;i<96;i++){var line=Line("Percussion energy ripple",.012f);line.enabled=false;waves.Add(line);}
         var needle=Line("Drum twelve o’clock triangle",.014f);needle.positionCount=4;needle.SetPositions(new[]{new Vector3(-.065f,.025f,1.27f),new Vector3(0,.025f,1.16f),new Vector3(.065f,.025f,1.27f),new Vector3(-.065f,.025f,1.27f)});needle.startColor=needle.endColor=new Color(.6f,.7f,.78f);
-    }
-    void LateUpdate()
-    {
-        if(drumCamera==null||deck==null)return;
-        drumCamera.enabled=deck.gameObject.activeSelf;
-        float size=Mathf.Min(Screen.height*.40f,Screen.width*.29f);
-        drumCamera.pixelRect=new Rect(Screen.width-size-14,10,size,size);
-        drumCamera.transform.position=deck.position+Vector3.up*8;drumCamera.transform.rotation=Quaternion.Euler(90,0,0);
-        foreach(var t in deck.GetComponentsInChildren<Transform>(true))t.gameObject.layer=30;
     }
     LineRenderer Line(string name,float width)
     {var go=new GameObject(name);go.transform.SetParent(deck,false);var l=go.AddComponent<LineRenderer>();l.sharedMaterial=material;l.useWorldSpace=false;l.widthMultiplier=width;l.positionCount=points.Length;l.startColor=l.endColor=new Color(.17f,.28f,.4f);return l;}
@@ -102,5 +86,5 @@ public sealed class DrumPatternDeck : MonoBehaviour
             line.startColor=line.endColor=new Color(.82f,.91f,1f)*(envelope*wave.Velocity*(kick?2.2f:.65f));
         }
     }
-    void OnDestroy(){if(Camera.main!=null)Camera.main.cullingMask=originalMask;if(drumCamera!=null)Destroy(drumCamera.gameObject);if(material!=null)Destroy(material);if(discMaterial!=null)Destroy(discMaterial);if(discMesh!=null)Destroy(discMesh);if(deck!=null)Destroy(deck.gameObject);}
+    void OnDestroy(){if(material!=null)Destroy(material);if(discMaterial!=null)Destroy(discMaterial);if(discMesh!=null)Destroy(discMesh);if(deck!=null)Destroy(deck.gameObject);}
 }

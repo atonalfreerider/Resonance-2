@@ -28,7 +28,7 @@ public static class VisualPlaybackValidation
             double inside=midi.Prepared.Sections[1].Start;
             midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(inside+2)));await Task.Delay(100);float before=deck.RackPixels;double turns=deck.RackTurns;
             midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(inside+3)));await Task.Delay(100);Check(deck.RackPixels>before,"Rack scrolls within a section, not just at boundaries");
-            Check(Math.Abs(turns-deck.RackTurns)<.0001,"Wheel stays docked between rack triggers");
+            Check(deck.RackTurns<turns,"Meta gear rolls continuously with upward rack travel");
             var second=midi.Prepared.Sections[2];midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(second.Start+1)));await Task.Delay(100);
             Check(deck.ActiveFamilyNode==second.Node,"Crossing a rack section trigger indexes the matching wheel");
             Check(main.GetComponentsInChildren<LineRenderer>().All(l=>l.name!="Drum playhead"),"Bright radial drum playhead removed");

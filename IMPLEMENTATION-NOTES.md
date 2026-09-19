@@ -126,3 +126,17 @@ All six WAVs from the legacy StreamingAssets/WAV folder are prepared under Prepa
 The default/reset camera is closer (5-unit radius) and frames the torus in the upper right. Percussion is isolated on layer 30 and rendered by a square, orthographic, straight-down camera in the bottom right. Main-camera orbit no longer changes the drum view. Kicks use a single broad crest with a 0.24-second envelope; follow crests are disabled for kicks only.
 
 Chord creation/retrigger starts a white HDR flash with a fast exponential decay into the harmonic color. Pattern notes retain their onset dots plus a fading circular duration ribbon calculated from each saved slot length and variant length residual. Notes longer than a full cycle carry a cycle-count label.
+
+
+Drum layout revision: restored the shared 3D camera and removed the separate overhead viewport. The wheel center is now 2.8 units below the torus instead of 1.3, preserving the current kick/ripple animations.
+
+
+## Rolling gear, vocal emphasis and harmonic outline
+
+Meta-wheel rotation now follows rack displacement divided by circumference (opposite sign for upward rack travel), with tooth spacing matched to the gear. The featured section is enlarged at the hub; dim section wheels orbit around it. Radial guide lines lead to horizontal, neutral high-contrast labels. Track/channel IDs no longer assign color: pitches retain harmonic color and the chosen vocal lane has the strongest brightness/bloom.
+
+Prepared bundles now retain MIDI track names and optional zero-based LeadVocalTrack in song.json. The UI provides a persistent per-song lead-vocal selector. Explicit vocal metadata takes priority; an unconfirmed lead-instrument name is a provisional fallback (Ticket to Ride: Lead Organ). No vocal identity is inferred from the audio.
+
+DominantChordOutline draws the current root, third and fifth on the outer/highest-register surface using Main’s shortest surface routes. Minor thirds and diminished fifths follow chord quality; secondary dominants and Neapolitan chords use their actual roots relative to the key. Lines are thin, solid, subtly colored and unmodulated, fading during rests. Drum-wheel scale is 1.25.
+
+Checks: all 785 model checks, lossless reconstruction of all 20 prepared bundles, compression fixture, and Unity gear/center/drum-scale plus major/minor/secondary-dominant/Neapolitan outline endpoints passed.
