@@ -8,7 +8,7 @@ using UnityEngine.UIElements;
 [DefaultExecutionOrder(90)]
 public sealed class SongNarration : MonoBehaviour
 {
-    [Serializable] public sealed class Segment { public double start,end; }
+    [Serializable] public sealed class Segment { public int cue;public double start,end; }
     [Serializable] public sealed class Manifest { public int version,sampleRate,samples;public string storySha256,audioSha256,audioPath,sha256;public double duration;public Segment[] segments; }
     sealed class Decoded { public Manifest Meta;public float[] Data;public int Channels,Rate; }
     MidiPlayer midi;SongDirector director;AudioSource voice;Toggle toggle;Label status;
@@ -17,6 +17,7 @@ public sealed class SongNarration : MonoBehaviour
     public bool Ready=>manifest!=null&&voice!=null&&voice.clip!=null;
     public float MusicGain {get;private set;}=1;
     public AudioSource Source=>voice;
+    public bool CueFinished(int index,double position)=>!Enabled||!Ready||!manifest.segments.Any(s=>s.cue==index&&position<s.end);
     public void Bind(VisualElement page)
     {
         midi=GetComponent<MidiPlayer>();director=GetComponent<SongDirector>();
@@ -76,8 +77,9 @@ public sealed class SongNarration : MonoBehaviour
         if(shouldPlay&&!running)Schedule(midi.ClockPosition,midi.ClockDspStart,midi.playbackSpeed,true);
         else if(!shouldPlay&&running)Stop();
         double now=midi.Position;
-        bool speaking=shouldPlay&&manifest.segments.Any(s=>now>=s.start-.08&&now<s.end+.1);
-        MusicGain=Mathf.Lerp(MusicGain,speaking?.42f:1,1-Mathf.Exp(-Time.unscaledDeltaTime*(speaking?14:5)));
+        bool released=director.CurrentCue?.releaseSoloAfterNarration==true&&CueFinished(director.CueIndex,now);
+        bool speaking=shouldPlay&&!released&&manifest.segments.Any(s=>now>=s.start-.08&&now<s.end+.1);
+        MusicGain=Mathf.Lerp(MusicGain,speaking?.42f:1,1-Mathf.Exp(-Time.unscaledDeltaTime*(speaking?14:released?50:5)));
         voice.volume=(GetComponent<Main>().Synth?.Volume??0)*.95f;
     }
     void OnDisable(){Stop();MusicGain=1;}

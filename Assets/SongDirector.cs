@@ -9,7 +9,7 @@ using UnityEngine.UIElements;
 [DefaultExecutionOrder(80)]
 public sealed class SongDirector : MonoBehaviour
 {
-    [Serializable] public sealed class Cue { public double start,end;public string text,view,stem,annotationTarget,annotationLabel;public bool uncoil; }
+    [Serializable] public sealed class Cue { public double start,end;public string text,view,stem,annotationTarget,annotationLabel;public bool uncoil,releaseSoloAfterNarration; }
     [Serializable] public sealed class Story {
         public int version;public string title,midiSha256,audioSha256,patternsSha256,model;public double duration;public Cue[] cues;
     }
@@ -91,11 +91,16 @@ public sealed class SongDirector : MonoBehaviour
         // AudioClip.length is a float; its endpoint can be fractionally earlier
         // than the sample-accurate duration stored by preprocessing.
         if(now>=Math.Min(story.duration,midi.Duration)-.001){SetDirecting(false);return;}
+        if(index>=0){
+            var active=story.cues[index];var narration=GetComponent<SongNarration>();
+            bool release=active.releaseSoloAfterNarration&&(narration==null||narration.CueFinished(index,now));
+            stems.Select(release?"":active.stem);
+        }
         if(index==current)return;
         current=index;
         if(index<0){caption.text="";footer.style.display=DisplayStyle.None;stems.Select("");return;}
         var cue=story.cues[index];views.SetView(Enum.Parse<VisualizationViews.View>(cue.view));main.SetUncoiled(cue.uncoil);
-        stems.Select(cue.stem);caption.text=cue.text;footer.style.display=DisplayStyle.Flex;
+        caption.text=cue.text;footer.style.display=DisplayStyle.Flex;
     }
     void OnDisable(){if(Directing&&views!=null)SetDirecting(false);}
 }

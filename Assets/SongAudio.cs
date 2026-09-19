@@ -137,7 +137,7 @@ public sealed class SongAudio : MonoBehaviour
         if(songs.Count>0){string last=StartupScore.Replace('/',Path.DirectorySeparatorChar)+".patterns.json";int selected=Math.Max(0,songs.FindIndex(s=>string.Equals(s,last,StringComparison.OrdinalIgnoreCase)));var library=new DropdownField("Prepared library",choices,selected);box.Add(library);
             string displayedPath=midi.midiPath;
             box.schedule.Execute(()=>{if(displayedPath==midi.midiPath)return;displayedPath=midi.midiPath;int index=songs.FindIndex(s=>string.Equals(s,displayedPath+".patterns.json",StringComparison.OrdinalIgnoreCase));if(index>=0)library.SetValueWithoutNotify(choices[index]);}).Every(250);
-            box.Add(new Button(()=>{string score=songs[library.index];score=score.Substring(0,score.Length-".patterns.json".Length);if(File.Exists(score+".prepared.json"))LoadPair("",score);else {midi.Load(score);midiField.SetValueWithoutNotify(score);Status="Restored score preview. A recording requires offline fingerprint preparation.";}}){text="Load selected pattern bundle"});}
+            var loadSelected=new Button(()=>{string score=songs[library.index];score=score.Substring(0,score.Length-".patterns.json".Length);if(File.Exists(score+".prepared.json"))LoadPair("",score);else {midi.Load(score);midiField.SetValueWithoutNotify(score);Status="Restored score preview. A recording requires offline fingerprint preparation.";}}){text="Load selected pattern bundle"};box.Add(loadSelected);box.schedule.Execute(()=>{loadSelected.SetEnabled(!Busy);library.SetEnabled(!Busy);loadSelected.text=Busy?"Loading song...":"Load selected pattern bundle";}).Every(100);}
         var files=new Foldout{text="Load companion files",value=false};box.Add(files);
         var hint=new Label("Prepare the song outside Unity, then load aligned.mid. Its manifest selects the exact decoded recording.");hint.style.whiteSpace=WhiteSpace.Normal;files.Add(hint);
         audioField=new TextField("Original MP3 / prepared WAV"){value=PlayerPrefs.GetString("Resonance.LastAudio","")};
@@ -145,7 +145,7 @@ public sealed class SongAudio : MonoBehaviour
         files.Add(audioField);files.Add(midiField);
         var row=new VisualElement();row.AddToClassList("row");files.Add(row);
         row.Add(new Button(()=>Browse(audioField,"mp3,wav")){text="Choose audio…"});row.Add(new Button(()=>Browse(midiField,"mid,midi")){text="Choose MIDI…"});
-        files.Add(new Button(()=>LoadPair(audioField.value,midiField.value)){text="Load preprocessed song"});
+        var loadFiles=new Button(()=>LoadPair(audioField.value,midiField.value)){text="Load preprocessed song"};files.Add(loadFiles);box.schedule.Execute(()=>loadFiles.SetEnabled(!Busy)).Every(100);
         box.Add(new Button(()=>{if(!string.IsNullOrEmpty(ReportPath)&&File.Exists(ReportPath))Application.OpenURL(new Uri(ReportPath).AbsoluteUri);}){text="Open offline fingerprint report"});
         var recordingLabel=new Label(){name="linked-recording"};recordingLabel.style.whiteSpace=WhiteSpace.Normal;box.Add(recordingLabel);
         box.schedule.Execute(()=>{recordingLabel.text=Ready?$"Linked recording: {RecordingName}":Busy?"Loading recording…":"MIDI preview · no recording linked";}).Every(100);

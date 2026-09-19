@@ -234,3 +234,8 @@ For the workshop, ignored `SongLibraryData/settings.json` accepts
 `narrationVoice` (voice ID). The separate storyKeyFile still configures OpenAI
 story writing. Restart an already-running workshop after changing these settings.
 No speech provider or key is needed for Unity playback.
+
+A cue can set `releaseSoloAfterNarration: true` to return audio and visuals to
+the full mix at that cue's rendered speech endpoint. This is used for the Ticket
+to Ride introduction. The view/caption can remain until the next scene; the solo
+and music ducking end with the voice. Seeking backwards restores the solo.

@@ -4,6 +4,7 @@
         <ui:VisualElement name="controls" class="controls">
             <ui:Label text="RESONANCE" class="eyebrow" />
             <ui:Label text="Harmony explorer" class="title" />
+            <ui:Label text="Umbilic torus&#10;Credit: &lt;b&gt;Dimitrios Cholidis&lt;/b&gt;" enable-rich-text="true" name="torus-credit" class="subtitle" />
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

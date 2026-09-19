@@ -54,7 +54,15 @@ public class HarmonyExplorer : MonoBehaviour
         seek=Slider(common,"Song position",0,1,0,v=>{if(midi.Loaded)midi.Seek(v*midi.Duration);});
         seek.name="side-song-position";
         clock=Label(common,"");clock.AddToClassList("side-clock");
-        controls.schedule.Execute(()=>{play.text=midi.IsPlaying?"Pause":"Play";play.SetEnabled(!recording.Busy&&!GetComponent<StemPlayback>().IsLoading);}).Every(100);
+        var readiness=Label(common,"");readiness.name="song-load-progress";readiness.style.whiteSpace=WhiteSpace.Normal;
+        void RefreshTransport(){
+            var stems=GetComponent<StemPlayback>();bool loading=recording.Busy||stems.IsLoading;
+            play.text=loading?"Loading…":midi.IsPlaying?"Pause":"Play";
+            play.SetEnabled(midi.Loaded&&!loading);
+            readiness.text=stems.IsLoading?stems.Status:recording.Busy?"Loading recording…":midi.Loaded?"":"Choose a prepared song to begin.";
+            readiness.style.display=string.IsNullOrEmpty(readiness.text)?DisplayStyle.None:DisplayStyle.Flex;
+        }
+        RefreshTransport();controls.schedule.Execute(RefreshTransport).Every(100);
         var tabs=new SideMenuTabs(common);controls.Add(tabs);
         var loading=tabs.AddPage("loading","Loading songs");
         var solo=tabs.AddPage("solo","Channel soloing");

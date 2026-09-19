@@ -206,7 +206,7 @@ def generate(bundle, key_file, model='gpt-4.1'):
         generated=[dict(start=c['start'],end=c['end'],view=c['view'],uncoil=c['uncoil'],stem=c['stem'],text=caption['text'],sourceIds=caption['sourceIds']) for c,caption in zip(plan,captions)]
         for cue,scene in zip(generated,plan):
             cue.update(annotationTarget=scene.get('annotationTarget','none'),annotationLabel=scene.get('annotationLabel',''))
-            for key in ('narrate','narrationStart','narrationEnd'):
+            for key in ('narrate','narrationStart','narrationEnd','releaseSoloAfterNarration'):
                 if key in scene:cue[key]=scene[key]
     else:generated=parsed['cues']
     cues = settle_transitions(validate_cues(generated, manifest['audioDuration'], [s['id'] for s in manifest.get('stems',[])], [s['id'] for s in context.get('sources',[])]))
