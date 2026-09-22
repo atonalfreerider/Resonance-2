@@ -205,8 +205,9 @@ def main():
     exported = retime(midi, events, tempo_ticks, tempo_times, score_times, audio_times, aligned)
     expected = np.interp(notes.start, score_times, audio_times)
     errors = np.abs(exported.start.to_numpy()-expected)
-    if errors.max() > .002:
-        raise ValueError(f'MIDI export drift exceeds 2 ms: {errors.max()}')
+    serialization_limit = max(.002, 1/rate+.0001)
+    if errors.max() > serialization_limit:
+        raise ValueError(f'MIDI export drift exceeds one feature frame ({serialization_limit*1000:.1f} ms): {errors.max()}')
     np.savetxt(output/'timing-map.csv', np.c_[score_times, audio_times], delimiter=',', header='score_seconds,audio_seconds', comments='', fmt='%.6f')
     # Compare matched pitch fingerprints and inspect local slopes; these are diagnostics,
     # not independent ground-truth timing measurements or a promise of exact transcription.

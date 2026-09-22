@@ -8,8 +8,9 @@ from common import *
 from catalog import Catalog, bitmidi_search, download_candidate, midi_info
 
 
-def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=4, notify=lambda x:None, stems=True):
+def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=4, notify=lambda x:None, stems=True, piano_hands=False):
     if midi and force_neural:raise ValueError('Choose either a companion MIDI or forced neural transcription')
+    if piano_hands and not midi:raise ValueError('Piano-hand mode requires the authored two-track ground-truth MIDI')
     audio=Path(audio).resolve()
     if not audio.is_file() or audio.suffix.lower() not in ('.mp3','.wav','.flac','.ogg','.m4a'):
         raise ValueError('Choose an existing MP3, WAV, FLAC, OGG or M4A recording')
@@ -28,7 +29,11 @@ def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=
         for existing in existing_bundles:
             try: validate_bundle(existing)
             except (ValueError,KeyError,OSError): continue
-            if stems and not read_json(existing/'aligned.mid.prepared.json').get('stems'):
+            stem_ids={stem.get('id') for stem in read_json(existing/'aligned.mid.prepared.json').get('stems',[])}
+            requested_ready={'right-hand','left-hand'}<=stem_ids if piano_hands else bool(stem_ids)
+            if stems and not requested_ready:
+                if piano_hands:
+                    break
                 from stems import enrich
                 return enrich(existing,notify)
             notify('Reusing the verified bundle for this exact recording')
@@ -37,7 +42,7 @@ def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=
     stage=job/'bundle';stage.mkdir();log=job/'process.log'
     provenance=dict(version=PIPELINE_VERSION,title=title,sourceAudioSha256=audio_hash,
                     reviewed=False,warnings=[],candidates=[],method='',sourceAudioName=audio.name)
-    atomic_json(job/'request.json',dict(audio=str(audio),midi=str(midi) if midi else None,title=title))
+    atomic_json(job/'request.json',dict(audio=str(audio),midi=str(midi) if midi else None,title=title,pianoHands=piano_hands))
     notify('Decoding recording and estimating key / beat grid')
     from features import decode,evidence,match_midi,regrid
     decode(audio,stage/'recording.wav');info,chroma=evidence(stage/'recording.wav')
@@ -118,10 +123,14 @@ def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=
     manifest=read_json(stage/'aligned.mid.prepared.json');manifest['sourceAudioPath']=audio.name
     atomic_json(stage/'aligned.mid.prepared.json',manifest)
     if stems:
-        from stems import prepare_stems
-        prepare_stems(stage,notify)
+        if piano_hands:
+            from piano_hands import prepare_piano_hands
+            prepare_piano_hands(stage,notify)
+        else:
+            from stems import prepare_stems
+            prepare_stems(stage,notify)
         provenance['stems']=read_json(stage/'stems/separation.json')
-        provenance['warnings'].append('Stem isolation and per-stem notes are estimates; high/low accompaniment is a C4 register filter.')
+        provenance['warnings'].append('Piano hand audio uses complementary score-guided masks; overlapping partials and pedal resonance can leak between solos.' if piano_hands else 'Stem isolation and per-stem notes are estimates; high/low accompaniment is a C4 register filter.')
         atomic_json(stage/'library.json',provenance)
     patterns=validate_bundle(stage)
     destination=ROOT/'PreparedSongs/Library'/(slug(title)+'-'+audio_hash[:8]+'-'+job.name[:6])
@@ -148,11 +157,16 @@ def review(directory, settings):
         regrid(work/'transcription.mid',work/'aligned.mid',read_json(work/'analysis.json')['beats'],settings['Meter'])
         manifest=read_json(work/'aligned.mid.prepared.json');manifest['midiSha256']=sha(work/'aligned.mid')
         atomic_json(work/'aligned.mid.prepared.json',manifest)
-    values.update(KeySource='User reviewed key',SectionSource='User reviewed section boundaries')
+    if 'Key' in settings or 'Minor' in settings:values['KeySource']='User reviewed key'
+    if 'SectionBoundaries' in settings or 'SectionParents' in settings:values['SectionSource']='User reviewed section boundaries'
     atomic_json(work/'song.json',values);compile_patterns(work/'aligned.mid',work.parent/'process.log')
     if read_json(work/'aligned.mid.prepared.json').get('stems'):
-        from stems import compile_stems
-        compile_stems(work)
+        if values.get('PianoHandTracks'):
+            from piano_hands import recompile_piano_hand_scores
+            recompile_piano_hand_scores(work)
+        else:
+            from stems import compile_stems
+            compile_stems(work)
     validate_bundle(work)
     provenance=read_json(work/'library.json',{});provenance.update(reviewed=True,parentBundle=directory.name)
     atomic_json(work/'library.json',provenance);shutil.move(str(work),str(revision))

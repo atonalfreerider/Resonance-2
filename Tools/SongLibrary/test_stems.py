@@ -4,8 +4,29 @@ from pathlib import Path
 import mido
 import pretty_midi
 from stems import map_to_master,filter_score,copy_master_stem
+from piano_hands import detect_hand_tracks,separate_recording
 
 class StemTests(unittest.TestCase):
+    def test_ground_truth_piano_hands_are_complementary(self):
+        import numpy as np
+        import soundfile as sf
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);score=mido.MidiFile(ticks_per_beat=480)
+            right=mido.MidiTrack([mido.MetaMessage('track_name',name='Piano'),mido.Message('note_on',note=76,velocity=100),mido.Message('note_off',note=76,time=480)])
+            left=mido.MidiTrack([mido.MetaMessage('track_name',name='Piano'),mido.Message('note_on',note=40,velocity=90),mido.Message('note_off',note=40,time=480)])
+            score.tracks.extend([right,left]);score.save(root/'score.mid')
+            hands=detect_hand_tracks(root/'score.mid')
+            self.assertEqual((hands['right'],hands['left']),(0,1))
+            sample_rate=8000;t=np.arange(sample_rate,dtype=np.float32)/sample_rate
+            mono=.2*np.sin(2*np.pi*659.25*t)+.2*np.sin(2*np.pi*82.41*t);audio=np.c_[mono,mono]
+            sf.write(root/'recording.wav',audio,sample_rate,subtype='FLOAT')
+            report=separate_recording(root/'recording.wav',root/'stems',hands,n_fft=1024,hop=256)
+            high,_=sf.read(root/'stems/right-hand.wav',always_2d=True,dtype='float32')
+            low,_=sf.read(root/'stems/left-hand.wav',always_2d=True,dtype='float32')
+            self.assertEqual(high.shape,audio.shape);self.assertEqual(low.shape,audio.shape)
+            self.assertLess(np.max(np.abs(high+low-audio)),1e-6)
+            self.assertLess(report['instrumentSumMaxError'],1e-6)
+
     def test_existing_score_keeps_polyphony_and_exact_ticks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);score=mido.MidiFile(ticks_per_beat=480)

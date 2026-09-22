@@ -48,6 +48,7 @@ Use **Add / rebuild stems** beside an existing song in Song Workshop to create a
 ```powershell
 ./Tools/SongLibrary/song-library.ps1 ingest 'D:/Music/song.mp3' --title 'Artist - Song'
 ./Tools/SongLibrary/song-library.ps1 ingest 'D:/Music/song.mp3' --midi 'D:/Scores/song.mid'
+./Tools/SongLibrary/song-library.ps1 ingest 'D:/Music/piano.mp3' --midi 'D:/Scores/two-hand-score.mid' --piano-hands
 ./Tools/SongLibrary/song-library.ps1 ingest 'D:/Music/song.mp3' --neural --offline --meter 3
 ./Tools/SongLibrary/song-library.ps1 stems 'PreparedSongs/TicketToRide-Restored'
 ./Tools/SongLibrary/song-library.ps1 index 'D:/My MIDI Collection'
@@ -58,6 +59,8 @@ Use **Add / rebuild stems** beside an existing song in Song Workshop to create a
 ```
 
 `--offline` disables public lookup. `--neural` bypasses lookup/cache and runs a new transcription. Local MIDI catalog imports remain indexed across sessions. The public provider can be unavailable; its error is recorded and local transcription proceeds.
+
+`--piano-hands` requires a ground-truth MIDI with exactly two authored pitched tracks. The higher-register track becomes **Right hand**, the lower becomes **Left hand**, and Right hand is the default white-highlight instrument. The derived aligned MIDI is labeled without modifying the supplied score. Complementary score-guided time/frequency masks create sample-aligned hand solo WAVs that add back to the full recording; shared overtones, pedal resonance, and room sound can still leak between hands.
 
 ## Setup / dependencies
 

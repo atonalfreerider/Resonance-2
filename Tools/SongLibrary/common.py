@@ -9,8 +9,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / 'SongLibraryData'
-PREP_PYTHON = ROOT / 'Tools/SongPrep/.venv/Scripts/python.exe'
-MODEL_PYTHON = ROOT / 'Tools/SongLibrary/.venv/Scripts/python.exe'
+
+
+def venv_python(directory):
+    """Return the platform-appropriate interpreter in a project-local venv."""
+    directory = Path(directory)
+    candidates = (directory/'bin/python', directory/'Scripts/python.exe')
+    return next((path for path in candidates if path.is_file()), candidates[0])
+
+
+PREP_PYTHON = venv_python(ROOT/'Tools/SongPrep/.venv')
+MODEL_PYTHON = venv_python(ROOT/'Tools/SongLibrary/.venv')
 PIPELINE_VERSION = 2
 
 
