@@ -31,7 +31,9 @@ public static class SectionWheelValidation
         {
             midi.Pause();var data=midi.Prepared;
             Check(data.Key==0&&!data.Minor&&data.Frames.All(f=>f.Key==0),"Ticket to Ride keeps the reviewed A-major context throughout playback");
-            Check(data.Form[0].Children.Length==4&&data.Form.Any(n=>n.Name=="Verse + Chorus"&&n.Children.Length==2),"Pop form nests verse and chorus on one carrier beside intro, bridge and outro");
+            Check(data.Version>=3&&data.Patterns.Length==data.Sections.Select(s=>s.Family).Distinct().Count(),"Every section family is compressed to one fundamental loop");
+            Check(data.Sections.All(s=>s.Passes.Length>0&&Math.Abs(s.Passes[0].Start-s.Start)<1e-6&&Math.Abs(s.Passes[^1].End-s.End)<1e-6),"Every visit is described as passes of its family loop, end to end");
+            Check(data.Groups.Any(g=>g.Name.Contains("Verse")&&g.Name.Contains("Chorus")&&g.Visits>=2),"Verse and chorus return together as a group");
             Check(data.Sections.Where(s=>s.Name=="Verse").Select(s=>s.Node).Distinct().Count()==1,"Verse visits reuse one family wheel");
             Check(data.Sections.All(s=>s.Lanes.Select(l=>l.Channel).Distinct().Count()>1),"Instrument channels are grouped inside their sections");
             Check(data.TemplateNoteCount<data.PatternNoteCount/2,"Rhythm slots are reused with saved pitch variations");
@@ -39,8 +41,7 @@ public static class SectionWheelValidation
             foreach(var section in data.Sections)
             {
                 midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(section.Start+1)));deck.Tick();await Task.Delay(65);
-                int expected=section.Node;while(data.Form[expected].Parent>0)expected=data.Form[expected].Parent;
-                Check(deck.ActiveFamilyNode==expected,"Section powers its carrier: "+section.Name+" / bar "+(section.FirstBar+1));
+                Check(deck.ActiveFamilyNode==section.Node&&deck.ActiveGroup==section.Group,"Section powers its family planet: "+section.Name+" / bar "+(section.FirstBar+1));
                 Check(Vector2.Distance(deck.MetaCenter,deck.FeaturedCenter)<.001f,"Active pattern is centered on the meta wheel");
                 Check(deck.RackPixels>=last,"Rack motion stays continuous in song order");last=deck.RackPixels;
             }

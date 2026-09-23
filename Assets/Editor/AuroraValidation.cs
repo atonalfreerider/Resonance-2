@@ -32,9 +32,9 @@ public static class AuroraValidation
             Check(aurora.Energy>.001f,"Recording and note energy drives the aurora");
             Check(aurora.EmitterRoot==region.RegionRoot,"Emitter is restricted to the current chord region");
             var deck=main.GetComponent<UIDocument>().rootVisualElement.Q<PatternWheelDeck>();
-            var group=midi.Prepared.Form.First(n=>n.Name=="Verse + Chorus");
-            Check(group.Children.Length==2,"Prepared parent contains verse and chorus gears");
-            Check(deck.ActiveFamilyNode==group.Id,"Orrery features the composite carrier during a verse");
+            var groups=midi.Prepared.Groups;
+            Check(groups.Any(g=>g.Name.Contains("Verse")&&g.Name.Contains("Chorus")),"A recurring group holds the verse and chorus");
+            Check(deck.ActiveGroup>=0&&groups[deck.ActiveGroup].Name.Contains("Verse"),"Pattern wheels mark the verse + chorus group during a verse");
             Directory.CreateDirectory("Temp/ResonanceChecks");ScreenCapture.CaptureScreenshot("Temp/ResonanceChecks/chord-aurora.png");
             await Task.Delay(300);midi.Pause();await Task.Delay(400);
             Check(aurora.Energy<.001f&&region.RegionVisible,"Wave decays after note-off while region persists");
