@@ -6,9 +6,42 @@ using System.Linq;
 [Serializable] public sealed class PreparedPatternSong
 {
     // Version 2 adds named form roles, progression loops and grammar words.
-    public const int CurrentVersion=2;
+    // Version 3 adds pattern compression: one fundamental loop per section family,
+    // every visit described as passes of that loop with their variations, and the
+    // repeated section groups (verse + chorus) that return through the song.
+    public const int CurrentVersion=3;
     public int Version=CurrentVersion,TrackCount,LeadVocalTrack=-1;
-    public string Style="",FormName="",Summary="";
+    public string Style="",FormName="",Summary="",FormGrammar="";
+    public int SongBars,FundamentalBars;
+    public Pattern[] Patterns=Array.Empty<Pattern>();
+    public SectionGroup[] Groups=Array.Empty<SectionGroup>();
+    // The fundamental of a section family: its shortest repeating chord loop, taken from
+    // the passes that agree most (so a varied first pass does not become the reference).
+    // Loop chords start at 0 and are spelled in the key of the family's first visit.
+    [Serializable] public sealed class Pattern
+    {
+        public int Family,Reference,LoopBars,SectionBars,Visits,Passes;
+        public double LoopBeats;
+        public string Name="",Role="",Letter="",Short="",Word="";
+        public SongFormAnalysis.ChordStep[] Loop=Array.Empty<SongFormAnalysis.ChordStep>();
+    }
+    // One turn of the family loop inside a visit. Offset is where in the loop the pass
+    // begins (a pickup begins late). Changed holds loop-relative [start,end) beat pairs
+    // whose harmony differs from the fundamental after transposition.
+    [Serializable] public sealed class Pass
+    {
+        public double Start,End,Offset;
+        public int Transpose;
+        public bool Partial;
+        public double[] Changed=Array.Empty<double>();
+    }
+    // A run of different families that recurs as a unit (Verse + Chorus, or a classical part).
+    [Serializable] public sealed class SectionGroup
+    {
+        public int Id,Visits;
+        public string Name="",Short="";
+        public int[] Families=Array.Empty<int>();
+    }
     public string[] TrackNames=Array.Empty<string>();
     public string MidiSha256,Title,Provenance;
     public double Duration,EndBeat;
@@ -90,8 +123,35 @@ using System.Linq;
         public int Visit=1,Transpose,PhraseBars=4,Loops=1,KeyRoot=-1;
         public bool KeyMinor;
         public double CycleBeats,Similarity=1;
+        // Pattern compression (v3): passes of the family loop, how this visit differs from
+        // the fundamental, and its place in a recurring group.
+        public Pass[] Passes=Array.Empty<Pass>();
+        public string Variation="",Short="";
+        public int Group=-1,GroupVisit;
         public string DisplayName=>string.IsNullOrEmpty(Label)?Name:Label;
         public double Cycle=>CycleBeats>0?CycleBeats:ProgressionBeats;
+    }
+    public Pattern PatternOf(Section section)=>Array.Find(Patterns,p=>p.Family==section.Family);
+    // Older bundles have no compression data: project each family's first visit as its own
+    // fundamental so the wheel still shows the form. Regenerating replaces this.
+    public bool EnsurePatterns()
+    {
+        Patterns??=Array.Empty<Pattern>();Groups??=Array.Empty<SectionGroup>();FormGrammar??="";
+        if(Sections==null||Sections.Length==0)return false;
+        foreach(var s in Sections){s.Passes??=Array.Empty<Pass>();s.Variation??="";s.Short??="";}
+        if(Patterns.Length>0&&Sections.All(s=>s.Passes.Length>0&&PatternOf(s)!=null))return false;
+        Patterns=Sections.GroupBy(s=>s.Family).Select(g=>{var first=g.First();double loop=Math.Max(.25,first.ProgressionBeats);
+            return new Pattern{Family=g.Key,Reference=Array.IndexOf(Sections,first),Name=first.Name,Role=string.IsNullOrEmpty(first.Role)?first.Name:first.Role,Letter=first.Letter,
+                Short=first.Name.Length<=3?first.Name:first.Name.Substring(0,1),LoopBeats=loop,Visits=g.Count(),
+                LoopBars=Math.Max(1,Measures?.Count(m=>m.Start>=first.Start-1e-6&&m.Start<first.Start+loop-1e-6)??1),Passes=Math.Max(1,(int)Math.Floor((first.End-first.Start)/loop+1e-6)),
+                Loop=(first.Chords??Array.Empty<SongFormAnalysis.ChordStep>()).Select(c=>new SongFormAnalysis.ChordStep{Start=c.Start-first.Start,End=c.End-first.Start,Root=c.Root,Quality=c.Quality,Token=c.Token,Roman=c.Roman}).ToArray()};}).ToArray();
+        foreach(var s in Sections)
+        {
+            double loop=PatternOf(s).LoopBeats;var passes=new List<Pass>();
+            for(double a=s.Start;a<s.End-1e-6;a+=loop)passes.Add(new Pass{Start=a,End=Math.Min(s.End,a+loop),Partial=s.End-a<loop-1e-6});
+            s.Passes=passes.ToArray();
+        }
+        return true;
     }
     [Serializable] public sealed class Voice { public int Pitch,Channel,Track;public float Velocity; }
     [Serializable] public sealed class Frame

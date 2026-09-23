@@ -103,13 +103,13 @@ def compile_stems(bundle,notify=lambda x:None):
         compile_patterns(score,log)
         path=Path(str(score)+'.patterns.json');patterns=read_json(path)
         # Preserve the exact full-song harmony and extent, including silence in a stem.
-        for field in ('Chords','RegionPhases','Key','Minor','KeySource','Duration','EndBeat'):
-            patterns[field]=copy.deepcopy(master[field])
+        for field in MASTER_FIELDS:
+            if field in master:patterns[field]=copy.deepcopy(master[field])
         for section in patterns['Sections']:
             reference=next((s for s in master['Sections'] if s['Start']==section['Start']),None)
             if reference:
-                section['Chords']=copy.deepcopy(reference['Chords'])
-                section['ProgressionBeats']=reference['ProgressionBeats']
+                for field in MASTER_SECTION_FIELDS:
+                    if field in reference:section[field]=copy.deepcopy(reference[field])
         atomic_json(path,patterns)
         audio=folder/(name+'.wav');info=sf.info(audio)
         entries.append(dict(id=name,name=label,audioPath=str(audio.relative_to(bundle)).replace('\\','/'),

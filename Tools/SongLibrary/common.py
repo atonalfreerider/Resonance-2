@@ -55,6 +55,14 @@ def run(command, log=None, timeout=7200, env=None):
                               errors='replace', check=True, timeout=timeout, cwd=ROOT, env=env).stdout
 
 
+# Isolated stems show the master's harmony and form: the same chords, fundamentals,
+# section groups and per-visit passes, so a stem's pattern wheels match the full mix.
+MASTER_FIELDS = ('Chords', 'RegionPhases', 'Key', 'Minor', 'KeySource', 'Duration', 'EndBeat',
+                 'Style', 'FormName', 'FormGrammar', 'SongBars', 'FundamentalBars', 'Patterns', 'Groups')
+MASTER_SECTION_FIELDS = ('Chords', 'ProgressionBeats', 'Family', 'Label', 'Role', 'Letter', 'Short',
+                         'Passes', 'Variation', 'Group', 'GroupVisit', 'CycleBeats', 'Loops')
+
+
 def compile_patterns(midi, log=None):
     run(['dotnet', 'run', '--project', ROOT/'Tools/PatternPrep/PatternPrep.csproj', '--', midi], log)
 

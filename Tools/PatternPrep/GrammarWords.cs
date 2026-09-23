@@ -15,19 +15,33 @@ public static class GrammarWords
     public static void Build(PreparedPatternSong song)
     {
         var cycles = MidiCycleAnalysis.Restore(song);
-        foreach (var section in song.Sections)
+        (int, bool) Key(PreparedPatternSong.Section section)
         {
             var (key, minor) = KeyAt(song, section.Start, cycles.SecondsAt);
-            if (key < 0) { key = section.KeyRoot >= 0 ? section.KeyRoot : 0; minor = section.KeyMinor; }
-            int from = HarmonyModel.KeyHome(key, minor).surface;
-            foreach (var chord in section.Chords)
-            {
-                if (chord.Rest) { chord.Token = ""; chord.Roman = "–"; continue; }
-                var home = HarmonyModel.Home(chord.Root, chord.Quality);
-                chord.Token = HarmonyModel.Token(from, home.surface, home.obj);
-                chord.Roman = HarmonyModel.Roman(chord.Root, chord.Quality, key, minor);
-                from = home.surface;
-            }
+            return key >= 0 ? (key, minor) : (section.KeyRoot >= 0 ? section.KeyRoot : 0, section.KeyMinor);
+        }
+        foreach (var section in song.Sections) Spell(section.Chords, Key(section));
+        // Fundamentals are spelled in the key of the family's first visit.
+        foreach (var pattern in song.Patterns ?? Array.Empty<PreparedPatternSong.Pattern>())
+        {
+            var first = song.Sections.FirstOrDefault(s => s.Family == pattern.Family);
+            if (first == null) continue;
+            Spell(pattern.Loop, Key(first));
+            pattern.Word = string.Join(" > ", pattern.Loop.Where(c => !c.Rest).Select(c => c.Token));
+        }
+    }
+
+    static void Spell(IEnumerable<SongFormAnalysis.ChordStep> chords, (int key, bool minor) context)
+    {
+        var (key, minor) = context;
+        int from = HarmonyModel.KeyHome(key, minor).surface;
+        foreach (var chord in chords)
+        {
+            if (chord.Rest) { chord.Token = ""; chord.Roman = "–"; continue; }
+            var home = HarmonyModel.Home(chord.Root, chord.Quality);
+            chord.Token = HarmonyModel.Token(from, home.surface, home.obj);
+            chord.Roman = HarmonyModel.Roman(chord.Root, chord.Quality, key, minor);
+            from = home.surface;
         }
     }
 
@@ -38,8 +52,10 @@ public static class GrammarWords
     {
         int families = song.Sections.Select(s => s.Family).Distinct().Count();
         int changes = song.Chords.Count(c => !c.Rest);
-        int loopChords = song.Sections.GroupBy(s => s.Family).Sum(g => g.First().Chords.Count(c => !c.Rest));
-        int words = song.Sections.GroupBy(s => s.Family).Select(g => Word(g.First())).Where(w => w.Length > 0).Distinct().Count();
-        return $"{song.Sections.Length} sections → {families} families · {changes} chord changes → {loopChords} loop chords in {words} grammar words · {song.PatternNoteCount} notes → {song.TemplateNoteCount} rhythm slots";
+        bool compressed = song.Patterns?.Length > 0;
+        int loopChords = compressed ? song.Patterns.Sum(p => p.Loop.Count(c => !c.Rest)) : song.Sections.GroupBy(s => s.Family).Sum(g => g.First().Chords.Count(c => !c.Rest));
+        int words = (compressed ? song.Patterns.Select(p => p.Word) : song.Sections.GroupBy(s => s.Family).Select(g => Word(g.First()))).Where(w => w.Length > 0).Distinct().Count();
+        string patterns = song.Patterns?.Length > 0 ? $" · {song.SongBars} bars → {song.Patterns.Length} fundamentals of {song.FundamentalBars} bars" : "";
+        return $"{song.Sections.Length} sections → {families} families{patterns} · {changes} chord changes → {loopChords} loop chords in {words} grammar words · {song.PatternNoteCount} notes → {song.TemplateNoteCount} rhythm slots";
     }
 }

@@ -1,0 +1,10 @@
+{
+  "title": "Scott Joplin - Maple Leaf Rag (1899, public domain)",
+  "source": "music21 corpus joplin/maple_leaf_rag, exported with score.expandRepeats() to MIDI (130 bars; the opening A repeat is not expanded by music21)",
+  "style": "classical",
+  "method": "Read from the exported bars: B and C and D strains repeat; A returns after the two B strains.",
+  "sections": [
+    [1, "A"], [17, "B"], [33, "B"], [50, "A"], [66, "C"], [82, "C"], [98, "D"], [114, "D"]
+  ],
+  "optional": [130]
+}

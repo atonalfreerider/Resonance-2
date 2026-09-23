@@ -3,6 +3,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 
 if(args.Length==1&&args[0]=="--test-harmony"){KeyContext.SelfTest();return;}
+if(args.Length==2&&args[0]=="--fixture"){SelfTests.Fixture(args[1]);return;}
+if(args.Length==3&&args[0]=="--write-fixture"){SelfTests.WriteFixture(args[1],args[2]);return;}
 if(args.Length>=1&&args[0]=="--sweep"){SelfTests.Sweep(args.Skip(1).ToArray());return;}
 if(args.Length>=1&&args[0]=="--self-test"){KeyContext.SelfTest();SelfTests.Run(args.Contains("--verbose"));return;}
 if(args.Length>=1&&args[0]=="--verbose"){FormAnalysis.Verbose=true;args=args.Skip(1).ToArray();}
@@ -27,6 +29,7 @@ for(int i=0;i<data.Sections.Length;i++){
     section.KeyRoot=info.KeyRoot;section.KeyMinor=info.KeyMinor;
     section.ParentPath=i<settings.SectionParents.Length?settings.SectionParents[i]:info.Parent;
 }
+FormAnalysis.Apply(analysis,data);
 data.LeadVocalTrack=settings.LeadVocalTrack;
 if(data.LeadVocalTrack<0)data.LeadVocalTrack=Array.FindIndex(data.TrackNames,n=>n.Contains("vocal",StringComparison.OrdinalIgnoreCase)&&!n.Contains("back",StringComparison.OrdinalIgnoreCase));
 data.Key=settings.Key;data.Minor=settings.Minor;data.KeySource=settings.KeySource;

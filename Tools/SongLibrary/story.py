@@ -72,10 +72,12 @@ def summarize(data, manifest):
             if len(pitches) == 2:
                 intervals[pitches[1]-pitches[0]] += 1
         interval_names={0:'unison',1:'minor second',2:'major second',3:'minor third',4:'major third',5:'perfect fourth',6:'tritone',7:'perfect fifth',8:'minor sixth',9:'major sixth',10:'minor seventh',11:'major seventh',12:'octave'}
-        sections.append(dict(name=section['Name'], start=round(start, 3), end=round(min(end, manifest['audioDuration']), 3),
+        sections.append(dict(name=section['Name'], label=section.get('Label') or section['Name'], variation=section.get('Variation', ''),
+                             start=round(start, 3), end=round(min(end, manifest['audioDuration']), 3),
                              estimatedStableProgression=progression[:24], vocalIntervals=[dict(semitones=k, interval=interval_names.get(k,'compound interval'), onsetCount=v) for k,v in intervals.most_common()]))
     return dict(title=data.get('Title') or 'Prepared song', duration=manifest['audioDuration'],
                 key=names[data['Key'] % 12], minor=data['Minor'], sectionEvidence=data.get('Provenance'),
+                formGrammar=data.get('FormGrammar', ''),
                 warning='MIDI approximates the recording; section labels may be estimates. Intervals are score evidence, not verified vocal identity.',
                 stems=[dict(id=s['id'], name=s['name']) for s in manifest.get('stems', [])], sections=sections)
 

@@ -9,7 +9,7 @@ import numpy as np
 import soundfile as sf
 from scipy.ndimage import gaussian_filter
 
-from common import atomic_json, compile_patterns, read_json, sha, validate_bundle
+from common import MASTER_FIELDS, MASTER_SECTION_FIELDS, atomic_json, compile_patterns, read_json, sha, validate_bundle
 from stems import copy_master_stem
 
 
@@ -186,13 +186,15 @@ def _compile_hand_scores(bundle, hands):
         compile_patterns(score, bundle.parent/'piano-hands.log')
         patterns_path = Path(str(score)+'.patterns.json')
         patterns = read_json(patterns_path)
-        for field in ('Chords', 'RegionPhases', 'Key', 'Minor', 'KeySource', 'Duration', 'EndBeat'):
-            patterns[field] = copy.deepcopy(master[field])
+        for field in MASTER_FIELDS:
+            if field in master:
+                patterns[field] = copy.deepcopy(master[field])
         for section in patterns['Sections']:
             reference = next((item for item in master['Sections'] if item['Start'] == section['Start']), None)
             if reference:
-                section['Chords'] = copy.deepcopy(reference['Chords'])
-                section['ProgressionBeats'] = reference['ProgressionBeats']
+                for field in MASTER_SECTION_FIELDS:
+                    if field in reference:
+                        section[field] = copy.deepcopy(reference[field])
         atomic_json(patterns_path, patterns)
         audio_path = folder/(identifier+'.wav')
         info = sf.info(audio_path)

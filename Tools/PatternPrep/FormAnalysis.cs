@@ -3,15 +3,16 @@
 // 1. Every bar gets a harmonic fingerprint (smoothed chords, chroma, bass, rhythm).
 // 2. Bars are compared under all 12 transpositions, so a chorus sung a step higher
 //    still counts as the same chorus.
-// 3. Dynamic programming chooses section boundaries that explain as much of the song
-//    as possible by repetition (a minimum-description-length choice), with a mild
-//    preference for 4/8/16-bar phrases and for boundaries where the texture changes.
-// 4. Repeating sections become one family. Families are named with pop roles
+// 3. Repetition comes first (FormStructure): the most compressive repeated stretches
+//    become section families, and only the through-composed bars between them are divided
+//    by dynamic programming (novelty, the phrase grid and the edges of returns).
+// 4. Families are named with pop roles
 //    (Intro, Verse, Pre-Chorus, Chorus, Bridge, Outro) or classical letters (A, B, A′)
 //    and the family sequence is matched against common forms (verse–chorus, AABA,
 //    binary, ternary, rondo, theme and variations).
-// 5. Inside each section the shortest repeating chord loop becomes the progression wheel.
-public static class FormAnalysis
+// 5. Pattern compression (FormPatterns): each family's shortest repeating chord loop is its
+//    fundamental, and every visit is described as passes of it with their variations.
+public static partial class FormAnalysis
 {
     public sealed class SectionInfo
     {
@@ -19,13 +20,19 @@ public static class FormAnalysis
         public int Visit = 1, Transpose, PhraseBars = 4, Loops = 1, KeyRoot = -1, Part = -1;
         public bool KeyMinor;
         public double CycleBeats, Similarity = 1;
+        public List<PassInfo> Passes = new();
+        public string Variation = "";
+        public int Group = -1, GroupVisit;
     }
     public sealed class Result
     {
         public SongFormAnalysis Form = new();
         public List<SectionInfo> Sections = new();
-        public string Style = "", FormName = "", Summary = "";
+        public string Style = "", FormName = "", Summary = "", Grammar = "";
         public ChordTimeline.Grid Grid = new();
+        public List<PatternInfo> Patterns = new();
+        public List<GroupInfo> Groups = new();
+        public int SongBars, FundamentalBars;
     }
 
     // ---------- Bar fingerprints and similarity ----------
@@ -150,7 +157,9 @@ public static class FormAnalysis
     // Novelty at each bar boundary: how different the window before is from the window after.
     // Windows span a whole phrase, so chord changes inside a loop average out and what is
     // left is a change of tune, harmony collection, rhythm or energy: a section boundary.
-    static double[] Novelty(Bars bars, int unit)
+    static double[] Novelty(Bars bars, int unit) => Novelty(bars, unit, out _);
+    // raw: the change curve before peak picking (0..1), for comparing positions across copies.
+    static double[] Novelty(Bars bars, int unit, out double[] raw)
     {
         var novelty = new double[bars.Count + 1];
         double[] Sum(Func<int, double[]> feature, int from, int to)
@@ -174,6 +183,7 @@ public static class FormAnalysis
         }
         double max = novelty.Max();
         if (max > 0) for (int b = 0; b < novelty.Length; b++) novelty[b] /= max;
+        raw = (double[])novelty.Clone();
         // Keep only local peaks: a boundary sits where change is greatest, not on its flanks.
         var peaks = new double[novelty.Length];
         for (int b = 1; b < bars.Count; b++)
@@ -191,25 +201,72 @@ public static class FormAnalysis
         return peaks;
     }
 
+    // Returns: a stretch of at least two phrases heard again later, at the same or another
+    // pitch, with the copies not overlapping. Where a return begins and ends a listener hears
+    // "this again" start and stop, so both edges of both copies are likely section
+    // boundaries even when the texture does not change there (a verse–chorus pair that
+    // comes back, or an A strain after two B strains). One weak bar inside a return is a
+    // variation, not its end.
+    // Classical strains repeat back to back (A A B B). In pop a short adjacent copy is a
+    // progression loop inside one section; only a long one (a verse–chorus pair played
+    // again straight away) is a return.
+    static double[] ReturnEdges(Bars bars, int unit, bool classical)
+    {
+        int n = bars.Count; var edges = new double[n + 1];
+        int minLength = Math.Max(4, unit * 2);
+        const double strong = .72, weak = .40;
+        for (int lag = minLength; lag < n; lag++)
+            for (int t = 0; t < 12; t++)
+            {
+                var sim = bars.Sim[t]; double penalty = t == 0 ? 0 : TransposePenalty;
+                for (int i = 0; i + lag < n;)
+                {
+                    if (sim[i, i + lag] - penalty < strong) { i++; continue; }
+                    int end = i; double sum = 0;
+                    while (end + lag < n)
+                    {
+                        double v = sim[end, end + lag] - penalty;
+                        if (v >= strong || v >= weak && end + 1 + lag < n && sim[end + 1, end + 1 + lag] - penalty >= strong) { sum += v; end++; }
+                        else break;
+                    }
+                    int length = end - i;
+                    // A copy that overlaps itself is a loop running on, not a return.
+                    if (length >= minLength && (length < lag || length == lag && (classical || length >= unit * 4)))
+                    {
+                        int len = length, start = i;
+                        double strength = Math.Min(1, sum / length);
+                        foreach (int edge in new[] { start, start + len, start + lag, start + lag + len })
+                            if (edge > 0 && edge < n) edges[edge] = Math.Max(edges[edge], strength);
+                    }
+                    i = end + 1;
+                }
+            }
+        return edges;
+    }
+
     public static bool Verbose;
     // Segmentation weights (chosen by PatternPrep --sweep against reviewed boundaries).
     public sealed class Tuning
     {
-        public double SegmentCost = 2.2, NoveltyReward = .6, InnerThreshold = .35, InnerWeight = 5.0, OffGridPrior = 1.8, NearGridPrior = .3, ShortPrior = .6;
+        public double SegmentCost = 1.8, NoveltyReward = .6, InnerThreshold = .5, InnerWeight = 3.0, OffGridPrior = 1.8, NearGridPrior = .3, ShortPrior = .6;
+        // Edges of long returns (see ReturnEdges): a reward for a boundary there, a cost for straddling one.
+        public double EdgeReward = 1, EdgeInner = 1;
     }
     public static Tuning Weights = new();
     // ---------- Segmentation ----------
     // Everything the segmentation needs that does not depend on the weights.
     internal sealed class SegmentModel
     {
-        public Bars Bars; public int N, Unit, MinLength, MaxLength;
-        public double[] Novelty; public double[,] Repeat; public int[,] Period;
+        public Bars Bars; public int N, Unit, MinLength, MaxLength; public bool Classical;
+        public ThumbnailSet Thumbnails;
+        public double[] Novelty, Change, Edges; public double[,] Repeat; public int[,] Period;
     }
     static SegmentModel Model(Bars bars, bool classical)
     {
         int n = bars.Count, unit = bars.Unit;
-        var m = new SegmentModel { Bars = bars, N = n, Unit = unit, MinLength = Math.Min(n, Math.Max(2, unit / 2)), MaxLength = Math.Min(n, unit * 4) };
-        m.Novelty = Novelty(bars, unit);
+        var m = new SegmentModel { Bars = bars, N = n, Unit = unit, Classical = classical, MinLength = Math.Min(n, Math.Max(2, unit / 2)), MaxLength = Math.Min(n, unit * 4) };
+        m.Novelty = Novelty(bars, unit, out m.Change);
+        m.Edges = ReturnEdges(bars, unit, classical);
         // Repetition evidence for every candidate segment: its best match anywhere else.
         // Classical variations keep their harmony while the melody is ornamented.
         m.Repeat = new double[n, m.MaxLength + 1]; m.Period = new int[n, m.MaxLength + 1];
@@ -248,16 +305,20 @@ public static class FormAnalysis
         // segment only needs describing once.
         double content = Math.Min(length * (1 - explained), m.Period[i, length]);
         double cost = content + w.SegmentCost + prior;
-        if (i > 0) cost -= w.NoveltyReward * Math.Min(1, m.Novelty[i]);
+        if (i > 0) cost -= w.NoveltyReward * Math.Min(1, m.Novelty[i]) + w.EdgeReward * m.Edges[i];
+        for (int k = i + 1; k < i + length; k++) cost += w.EdgeInner * m.Edges[k];
         // Every clear change inside the segment is a boundary it failed to mark.
         for (int k = i + 1; k < i + length; k++) if (m.Novelty[k] > w.InnerThreshold) cost += w.InnerWeight * (Math.Min(1, m.Novelty[k]) - w.InnerThreshold);
         return cost;
     }
-    static List<(int start, int length)> Solve(SegmentModel m, Tuning w)
+    static List<(int start, int length)> Solve(SegmentModel m, Tuning w) => Solve(m, w, 0, m.N);
+    // Dynamic programming over bars [from, to): through-composed stretches between returns
+    // are divided by novelty and the phrase grid.
+    static List<(int start, int length)> Solve(SegmentModel m, Tuning w, int from, int to)
     {
-        int n = m.N;
-        if (n <= 2) return new() { (0, n) };
-        var best = Enumerable.Repeat(double.PositiveInfinity, n + 1).ToArray(); var from = new int[n + 1];
+        int n = to - from;
+        if (n <= 2) return new() { (from, n) };
+        var best = Enumerable.Repeat(double.PositiveInfinity, n + 1).ToArray(); var back = new int[n + 1];
         best[0] = 0;
         for (int end = 1; end <= n; end++)
             for (int length = 1; length <= Math.Min(m.MaxLength, end); length++)
@@ -265,33 +326,32 @@ public static class FormAnalysis
                 int start = end - length;
                 bool edge = start == 0 || end == n;
                 if (length < m.MinLength && !edge) continue;
-                double value = best[start] + Cost(m, w, start, length);
-                if (value < best[end]) { best[end] = value; from[end] = start; }
+                double value = best[start] + Cost(m, w, from + start, length);
+                if (value < best[end]) { best[end] = value; back[end] = start; }
             }
         var segments = new List<(int, int)>();
-        for (int end = n; end > 0; end = from[end]) segments.Add((from[end], end - from[end]));
+        for (int end = n; end > 0; end = back[end]) segments.Add((from + back[end], end - back[end]));
         segments.Reverse();
         return segments;
     }
-    static List<(int start, int length)> Segment(Bars bars, bool classical)
+    static (List<(int start, int length)> segments, int[] family, int[] transpose, double[] similarity) Segment(Bars bars, bool classical)
     {
         var m = Model(bars, classical);
-        var segments = Solve(m, Weights);
         if (Verbose)
         {
             Console.WriteLine($"bars={m.N} unit={m.Unit} min={m.MinLength} max={m.MaxLength}");
             for (int b = 0; b < m.N; b++)
-                Console.WriteLine($"  bar {b + 1,3} nov {m.Novelty[b]:0.00} E {bars.Energy[b]:0.00} D {bars.Density[b]:0.0} R {bars.Register[b]:0} | {string.Join(" ", bars.States[b].Select(x => x < 0 ? "-" : HarmonyModel.Name(ChordTimeline.Root(x), true) + ChordTimeline.Quality(x)))} | {string.Join(",", bars.Melody[b].Select(x => x < 0 ? "." : HarmonyModel.Name(x - 21, true)))}");
-            foreach (var (a, l) in segments) Console.WriteLine($"  seg {a + 1}+{l} repeat={m.Repeat[a, l]:0.00} cost={Cost(m, Weights, a, l):0.00}");
+                Console.WriteLine($"  bar {b + 1,3} nov {m.Novelty[b]:0.00} edge {m.Edges[b]:0.00} E {bars.Energy[b]:0.00} D {bars.Density[b]:0.0} R {bars.Register[b]:0} | {string.Join(" ", bars.States[b].Select(x => x < 0 ? "-" : HarmonyModel.Name(ChordTimeline.Root(x), true) + ChordTimeline.Quality(x)))} | {string.Join(",", bars.Melody[b].Select(x => x < 0 ? "." : HarmonyModel.Name(x - 21, true)))}");
         }
-        return segments;
+        return RepeatStructure(m, Weights);
     }
 
     // Boundary search for parameter sweeps: one precomputed model, many weightings.
     public sealed class Prepared { internal SegmentModel Model; }
     public static Prepared Prepare(MidiCycleAnalysis cycles, int key, bool minor, bool classical) =>
         new() { Model = Model(Fingerprint(cycles, ChordTimeline.Build(cycles, key, minor)), classical) };
-    public static List<int> Boundaries(Prepared prepared, Tuning w) => Solve(prepared.Model, w).Select(x => x.start + 1).ToList();
+    public static List<int> Boundaries(Prepared prepared, Tuning w) => RepeatStructure(prepared.Model, w).segments.Select(x => x.start + 1).ToList();
+    public static List<int> DynamicBoundaries(Prepared prepared, Tuning w) => Solve(prepared.Model, w).Select(x => x.start + 1).ToList();
 
     // Best alignment of two segments of possibly different lengths: slide the shorter one
     // inside the longer (a verse with a two-bar riff in front still matches the verse).
@@ -311,43 +371,18 @@ public static class FormAnalysis
         return (best, bestT, bestHarm);
     }
 
-    // Link segments that repeat (possibly transposed, lengthened or ornamented) into families.
-    static (int[] family, int[] transpose, double[] similarity) Families(Bars bars, List<(int start, int length)> segments, bool classical)
-    {
-        int n = segments.Count;
-        var parent = Enumerable.Range(0, n).ToArray();
-        int Find(int x) { while (parent[x] != x) x = parent[x] = parent[parent[x]]; return x; }
-        var match = new (double score, int t, double harmonic)[n, n];
-        for (int a = 0; a < n; a++) for (int b = 0; b < n; b++) match[a, b] = a == b ? (1, 0, 1) : Align(bars, segments[a], segments[b]);
-        for (int a = 0; a < n; a++) for (int b = a + 1; b < n; b++)
-        {
-            var m = match[a, b];
-            if (m.score >= .78 || classical && m.harmonic >= .86 && m.score >= .55) parent[Find(b)] = Find(a);
-        }
-        var roots = new Dictionary<int, int>(); var family = new int[n]; var transpose = new int[n]; var similarity = new double[n];
-        for (int s = 0; s < n; s++)
-        {
-            int root = Find(s);
-            if (!roots.TryGetValue(root, out int id)) { id = roots.Count; roots[root] = id; }
-            family[s] = id;
-        }
-        for (int s = 0; s < n; s++)
-        {
-            int first = Array.IndexOf(family, family[s]);
-            transpose[s] = s == first ? 0 : HarmonyModel.Mod(match[first, s].t);
-            similarity[s] = s == first ? 1 : Math.Clamp(match[first, s].score, 0, 1);
-        }
-        return (family, transpose, similarity);
-    }
-
     // ---------- Style, roles and form ----------
     static readonly string[] PopWords = { "vocal", "voice", "vox", "guitar", "gtr", "bass", "drum", "synth", "lead", "organ", "beat" };
+    static readonly string[] ClassicalWords = { "violin", "viola", "cello", "contrabass", "double bass", "flute", "oboe", "clarinet", "bassoon", "horn", "harpsichord", "orchestra", "strings", "quartet", "sonata", "symphony", "serenade" };
     public static string Style(MidiCycleAnalysis cycles, string[] trackNames, string setting)
     {
         setting = (setting ?? "").Trim().ToLowerInvariant();
         if (setting is "pop" or "classical") return setting;
         if (cycles.Notes.Count(n => n.Channel == 10) > cycles.Measures.Count) return "pop";
-        if (trackNames.Any(t => PopWords.Any(w => (t ?? "").Contains(w, StringComparison.OrdinalIgnoreCase)))) return "pop";
+        bool Has(string[] words) => trackNames.Any(t => words.Any(w => (t ?? "").Contains(w, StringComparison.OrdinalIgnoreCase)));
+        // A contrabass is not a bass guitar: orchestral names outrank pop words without drums.
+        if (Has(ClassicalWords)) return "classical";
+        if (Has(PopWords)) return "pop";
         return "classical";
     }
 
@@ -402,6 +437,8 @@ public static class FormAnalysis
             else if (f == postChorus) roles[s] = "Post-Chorus";
             else if (count[f] == 1 && s == 0) roles[s] = "Intro";
             else if (count[f] == 1 && s == n - 1) roles[s] = "Outro";
+            // The same material only at the very start and the very end is a bookend.
+            else if (count[f] == 2 && family[0] == f && family[n - 1] == f) roles[s] = s == 0 ? "Intro" : "Outro";
             else if (count[f] == 1 && s > n / 3 && bridgeCount == 0 && (chorus < 0 || Array.IndexOf(family, chorus) < s)) { roles[s] = "Bridge"; bridgeCount++; }
             else if (count[f] == 1) roles[s] = "Interlude";
             else
@@ -473,28 +510,6 @@ public static class FormAnalysis
         return result;
     }
 
-    // ---------- Progression loops ----------
-    static int LoopBars(Bars bars, int start, int length)
-    {
-        foreach (int period in new[] { 1, 2, 3, 4, 6, 8 })
-        {
-            if (period * 2 > length) break;
-            bool uniform = Enumerable.Range(start, length).All(b => Math.Abs(bars.Length[b] - bars.Length[start + (b - start) % period]) < 1e-6);
-            if (!uniform) continue;
-            int agree = 0, total = 0; double chroma = 0;
-            for (int b = start + period; b < start + length; b++)
-            {
-                int a = start + (b - start) % period;
-                var x = bars.States[b]; var y = bars.States[a];
-                for (int k = 0; k < Math.Min(x.Length, y.Length); k++) { total++; if (x[k] == y[k]) agree++; }
-                chroma += Cos(bars.Chroma[a], bars.Chroma[b]);
-            }
-            chroma /= Math.Max(1, length - period);
-            if (total > 0 && agree / (double)total >= .8 && chroma >= .85) return period;
-        }
-        return length;
-    }
-
     // ---------- Entry point ----------
     public static Result Build(MidiCycleAnalysis cycles, SongSettings settings, string[] trackNames)
     {
@@ -539,14 +554,13 @@ public static class FormAnalysis
                 segments.Add((starts[i].bar, end - starts[i].bar)); labels.Add(starts[i].label);
             }
         }
-        else
+        int[] family; int[] transpose; double[] similarity;
+        if (labels.Count == 0)
         {
-            segments = Segment(bars, result.Style == "classical");
+            (segments, family, transpose, similarity) = Segment(bars, result.Style == "classical");
             form.BoundarySource = "Repetition-based sections (review in Song Workshop)";
         }
-
-        int[] family; int[] transpose; double[] similarity;
-        if (labels.Count > 0)
+        else
         {
             var names = labels.Select(l => l.Trim()).ToList();
             var ids = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -559,7 +573,6 @@ public static class FormAnalysis
                 var m = BestMatch(bars, segments[first].start, segments[s].start, segments[s].length); transpose[s] = m.t; similarity[s] = Math.Clamp(m.score, 0, 1);
             }
         }
-        else (family, transpose, similarity) = Families(bars, segments, result.Style == "classical");
 
         // Names: reviewed labels, pop roles or classical letters.
         int count = segments.Count;
@@ -604,21 +617,14 @@ public static class FormAnalysis
                 int total = family.Count(x => x == f);
                 info.Label = total > 1 && roles[s] is not ("Intro" or "Outro" or "Coda") ? $"{roles[s]} {visits[f]}" : roles[s];
             }
-            int loop = LoopBars(bars, start, length);
-            double loopBeats = Enumerable.Range(start, loop).Sum(b => bars.Length[b]);
-            double beatsPerBar = bars.Length[start];
-            info.PhraseBars = beatsPerBar >= 6 ? 2 : 4;
-            info.Loops = Math.Max(1, length / loop);
-            // The inner dial turns once per loop, or once per phrase for long through-composed loops.
-            info.CycleBeats = loopBeats <= 32 + 1e-6 ? loopBeats : Enumerable.Range(start, Math.Min(length, info.PhraseBars)).Sum(b => bars.Length[b]);
+            // Loops, passes and progression chords come from the family fundamental (BuildPatterns).
+            info.PhraseBars = bars.Length[start] >= 6 ? 2 : 4;
             var key = KeyArea(bars, start, length); info.KeyRoot = key.key; info.KeyMinor = key.minor;
             result.Sections.Add(info);
 
             double sectionStart = cycles.Measures[start].Start, sectionEnd = cycles.Measures[start + length - 1].End;
             if (s == count - 1) sectionEnd = Math.Max(sectionEnd, cycles.EndBeat);
-            var section = new SongFormAnalysis.Section { Start = sectionStart, End = sectionEnd, FirstBar = start, BarCount = length, ProgressionBeats = loopBeats };
-            foreach (var c in form.Timeline.Where(c => c.End > sectionStart && c.Start < sectionStart + loopBeats))
-                section.Chords.Add(new SongFormAnalysis.ChordStep { Start = Math.Max(sectionStart, c.Start), End = Math.Min(sectionStart + loopBeats, c.End), Root = c.Root, Quality = c.Quality, Energy = c.Energy });
+            var section = new SongFormAnalysis.Section { Start = sectionStart, End = sectionEnd, FirstBar = start, BarCount = length, ProgressionBeats = sectionEnd - sectionStart };
             var fam = form.Families.FirstOrDefault(x => x.Id == f);
             if (fam == null)
             {
@@ -635,7 +641,10 @@ public static class FormAnalysis
             AssignClassicalParts(result, family, bars, segments);
         var partLabels = result.Style == "classical" ? ClassicalPartLetters(result) : result.Sections.Select(s => s.Letter).ToList();
         result.FormName = FormFromLetters(partLabels, result.Style, result.Style == "classical" ? ClassicalPartRoles(result) : result.Sections.Select(s => s.Role).ToList());
-        if (result.Style == "pop") result.FormName += " · " + string.Join(" ", result.Sections.Select(s => Abbreviation(s.Role)));
+        // Pattern compression: family fundamentals, passes and variations, recurring groups.
+        BuildPatterns(result, bars, grid, cycles, segments, family, transpose);
+        BuildGroups(result, family);
+        if (result.Style == "pop") result.FormName += " · " + result.Grammar;
         return result;
     }
 

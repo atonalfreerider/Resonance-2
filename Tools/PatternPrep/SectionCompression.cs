@@ -86,25 +86,14 @@ public static class SectionCompression
         BuildHierarchy(song);
         Verify(song,pitched);
     }
+    // Reviewed forms without parents still nest their recurring groups (Verse + Chorus).
     public static void GroupRepeatedForms(PreparedPatternSong song)
     {
-        var sections=song.Sections;var occupied=new bool[sections.Length];
-        while(true){
-            int bestScore=0,bestLength=0;List<int> bestStarts=null;
-            for(int length=2;length<=sections.Length/2;length++)for(int start=0;start+length<=sections.Length;start++){
-                if(Enumerable.Range(start,length).Any(i=>occupied[i]))continue;
-                var sequence=sections.Skip(start).Take(length).Select(s=>s.Family).ToArray();
-                if(sequence.Distinct().Count()<2)continue;
-                var matches=new List<int>();
-                for(int i=0;i+length<=sections.Length;i++){
-                    if(Enumerable.Range(0,length).All(j=>!occupied[i+j]&&sections[i+j].Family==sequence[j])){matches.Add(i);i+=length-1;}
-                }
-                int score=(matches.Count-1)*(length-1);
-                if(matches.Count>=2&&score>bestScore){bestScore=score;bestLength=length;bestStarts=matches;}
-            }
-            if(bestStarts==null)break;
-            string name=string.Join(" + ",sections.Skip(bestStarts[0]).Take(bestLength).Select(s=>s.Name.Replace('/','-')));
-            foreach(int start in bestStarts)for(int j=0;j<bestLength;j++){sections[start+j].ParentPath="Song/"+name;occupied[start+j]=true;}
+        var sections=song.Sections;
+        foreach(var (start,length,_) in FormAnalysis.Combos(sections.Select(s=>s.Family).ToArray()))
+        {
+            string name=string.Join(" + ",sections.Skip(start).Take(length).Select(s=>s.Name.Replace('/','-')));
+            for(int j=start;j<start+length;j++)sections[j].ParentPath="Song/"+name;
         }
     }
     public static void BuildHierarchy(PreparedPatternSong song)
