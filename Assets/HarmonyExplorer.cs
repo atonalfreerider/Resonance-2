@@ -89,7 +89,7 @@ public class HarmonyExplorer : MonoBehaviour
         Button(panel,"Silence / release sustain",()=> { StopLesson(); midi?.Pause(); main.Silence(); });
         sounding=Label(panel,""); analysis=Label(panel,"");
         Section(panel,"GUIDED MOTION");
-        Choice(panel,"Lesson",new List<string>{"ii – V – I","I – IV – V – I","I – vi – IV – V","V – i","Major → parallel minor"},0,LoadLesson);
+        Choice(panel,"Lesson",new List<string>{"ii – V – I","I – IV – V – I","I – vi – IV – V","V – i","Major → parallel minor","I – V – vi – IV (pop loop)","Pivot bridge (remainder + anchor)","Chord names → grammar (C Major > G > BDG)"},0,LoadLesson);
         grammar=new TextField("Sequence"){value="0m > PM > M"}; panel.Add(grammar);
         var transport=Row(panel);
         Button(transport,"Prepare",Prepare); Button(transport,"◀ Back",()=>Step(-1)); Button(transport,"Step ▶",()=>Step(1));
@@ -97,7 +97,7 @@ public class HarmonyExplorer : MonoBehaviour
         Button(transport,"Stop",StopLesson);
         Slider(panel,"Tempo",40,180,bpm,v=>bpm=v);
         Toggle(panel,"Loop lesson",false,v=>loopLesson=v);
-        trace=Label(panel,"Choose a lesson or enter tokens. > starts a new chord; (objects) sustain until Stop. Grammar v1 is experimental.");
+        trace=Label(panel,"Choose a lesson or enter tokens. > starts a new chord; (objects) sustain until Stop and anchor the next object without moving the canonical surface. Note names (G, BDG, C Major, D Minor) compile to tokens.");
         Section(panel,"VIEW");
         Toggle(panel,"Continuous tonal field",true,v=>{main.ShowSurfaces=v; main.RefreshView();});
         Toggle(panel,"Harmonic partials build light",true,v=>main.ShowHarmonics=v);
@@ -160,8 +160,8 @@ public class HarmonyExplorer : MonoBehaviour
         if(grammar==null) return;
         StopLesson();
         int key=main.currentKey;
-        var starts=new[]{key+10,key,key,key+7,key};
-        var sequences=new[]{"0m > PM > M","0M > M > 2PM > M","0M > m > 0M > 2PM","0M > Sm","0M > 0Sm"};
+        var starts=new[]{key+10,key,key,key+7,key,key,key,key};
+        var sequences=new[]{"0m > PM > M","0M > M > 2PM > M","0M > m > 0M > 2PM","0M > Sm","0M > 0Sm","0M > 3PM > 2m > 0M","0m0M > (0Pc) 2d > M","C Major > G > BDG > D Minor"};
         SelectSurface(starts[index]); grammar.value=sequences[index]; frames=null; step=-1;
     }
     void Prepare()

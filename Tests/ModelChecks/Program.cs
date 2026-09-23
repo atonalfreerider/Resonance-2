@@ -18,6 +18,57 @@ for (int tonic = 0; tonic < 12; tonic++)
     for(int n=-24;n<=24;n++) { var d=HarmonyModel.Decompose(n); Check(HarmonyModel.Move(tonic,d.station,d.rotation)==HarmonyModel.Mod(tonic+5*n),"Signed normalization"); }
 }
 Check(Set(HarmonyModel.Evaluate(3,"0m0M > (0Pc) 2d")[1].Pitches,7,2,9,0),"Sustained bridge E B F# A");
+// Umbilic-surface grammar compliance, one block per rule of the reference.
+const int A=0,Bb=1,B=2,C=3,Db=4,D=5,Eb=6,E=7,F=8,Gb=9,G=10,Ab=11;
+{
+    int[] fourths={C,F,Bb,Eb,Ab,Db,Gb,B,E,A,D,G};int at=C;
+    for(int i=0;i<12;i++){Check(at==fourths[i],"§1 circle of fourths order");at=HarmonyModel.Move(at,1,0);}
+    Check(at==C,"§1 twelve stations close the circle");
+    for(int t=0;t<12;t++){
+        Check(Set(HarmonyModel.Object(t,'T'),t),"§1.1 T");Check(Set(HarmonyModel.Object(t,'e'),t,t+4),"§1.1 e = T,3rd");
+        Check(Set(HarmonyModel.Object(t,'d'),t+4,t+7),"§1.1 d = 3rd,5th");Check(Set(HarmonyModel.Object(t,'c'),t,t+7),"§1.1 c = T,5th");
+        Check(Set(HarmonyModel.Object(t,'l'),t+11,t),"§1.1 l = 7th,T");Check(Set(HarmonyModel.Object(t,'M'),t,t+4,t+7),"§1.1 M");
+        Check(Set(HarmonyModel.Object(t,'m'),t+4,t+7,t+11),"§1.1 m");
+    }
+    foreach(var tri in new[]{new[]{C,Ab,E},new[]{F,Db,A},new[]{D,Bb,Gb},new[]{G,Eb,B}})
+        for(int i=0;i<3;i++)Check(HarmonyModel.Move(tri[i],0,1)==tri[(i+1)%3],"§2 S follows the directed augmented triangle");
+    for(int n=0;n<12;n++){var d=HarmonyModel.Decompose(n);Check(d.station==n%4&&d.rotation==n/4%3,"§3 s = n mod 4, r = floor(n/4) mod 3");}
+    Check(HarmonyModel.Move(C,0,2)==HarmonyModel.Move(HarmonyModel.Move(C,0,1),0,1),"§4 P is two S rotations");
+    foreach(string same in new[]{"1 0 M","10M","1M"})Check(HarmonyModel.Evaluate(C,same)[0].Surface==HarmonyModel.Evaluate(C,"M")[0].Surface,"§5 default expansion X = 1 0 X: "+same);
+    Check(HarmonyModel.Evaluate(C,"0M")[0].Surface==C,"§5 0X reads the current surface");
+    Check(HarmonyModel.Evaluate(C,"0 S m")[0].Surface==Ab&&HarmonyModel.Evaluate(C,"0Sm")[0].Surface==Ab,"§5 station, then rotation, then object");
+    var cohered=HarmonyModel.Evaluate(C,"MMMM")[0];
+    Check(cohered.Surface==Ab&&cohered.CanonicalSteps==4&&cohered.CanonicalMove==(0,1),"§6 four stations carry into one rotation");
+    Check(Set(HarmonyModel.Evaluate(C,"e0l")[0].Pitches,F,A,E)&&Set(HarmonyModel.Evaluate(C,"0el")[0].Pitches,C,E,F),"§7 e0l and 0el are different 3-tone sets");
+    // §8: (X)Y reads Y from X's end; X's movement never advances the canonical surface.
+    var bridge=HarmonyModel.Evaluate(C,"0m0M > (0Pc) 2d > M");
+    Check(bridge[1].Surface==D&&bridge[1].Anchored,"§8.1 anchor: 2d is read from E' and reaches D'");
+    Check(bridge[1].CanonicalSurface==Bb&&bridge[1].CanonicalMove==(2,0),"§8.3 exclusion: canonical sum is (2,0), not E'+2");
+    Check(bridge[2].Surface==Eb&&!bridge[2].Anchored,"§8.2 remainder: the next object continues from canonical Bb', not D'");
+    Check(Set(bridge[2].Held,E,B)&&bridge[2].Pitches.Contains(E)&&bridge[2].Pitches.Contains(B),"§8.2 remainder sustains E-B into later events");
+    Check(HarmonyModel.Evaluate(C,"(dPd) 0M")[0].Surface!=C,"§8.4 provenance: a parenthesized history such as dPd is valid and sets the anchor");
+    Check(HarmonyModel.Evaluate(C,"(0Pc)(Sc) 0M")[0].Surface==HarmonyModel.Move(HarmonyModel.Move(E,1,1),0,0),"§8 chained remainders anchor at the final one");
+    var plain=HarmonyModel.Evaluate(C,"0M")[0];var seventh=HarmonyModel.Evaluate(C,"0m0M")[0];
+    Check(HarmonyModel.SameChord(plain,seventh)&&!Set(plain.Pitches,seventh.Pitches.ToArray()),"§9 same sums and final object: same chord, different sounding union");
+    Check(!HarmonyModel.SameChord(HarmonyModel.Evaluate(C,"M")[0],HarmonyModel.Evaluate(C,"0M")[0]),"§9 different sums: different chords");
+    var targets=HarmonyModel.Evaluate(C,"G > BDG > G");
+    Check(targets[0].Surface==G&&Set(targets[0].Pitches,G)&&targets[1].Surface==G&&Set(targets[1].Pitches,G,B,D)&&Set(targets[2].Pitches,G),"§11.2 G > BDG > G targets T=G, M on G', T=G");
+    Check(HarmonyModel.Evaluate(G,"C Major")[0].Surface==C&&HarmonyModel.Evaluate(G,"D Minor")[0].Surface==Bb,"§11.2 standard names map to C' M and Bb' m");
+    Check(Set(HarmonyModel.Evaluate(C,"D Minor")[0].Pitches,D,F,A),"§11.2 D Minor sounds D F A");
+    bool rejectedCluster=false;try{HarmonyModel.Evaluate(C,"CEGB");}catch(ArgumentException){rejectedCluster=true;}
+    Check(rejectedCluster,"§11.2 a cluster with no single surface object is flagged");
+    for(int t=0;t<12;t++)foreach(char o in HarmonyModel.Objects){var home=HarmonyModel.Identify(HarmonyModel.Object(t,o));Check(home.Count==1&&home[0]==(t,o),"Every local object has one home");}
+    Check(HarmonyModel.Home(D,"m")==(Bb,'m')&&HarmonyModel.Home(A,"m7")==(F,'m')&&HarmonyModel.Home(B,"dim")==(G,'d')&&HarmonyModel.Home(G,"7")==(G,'M'),"Axiom 2: minor triads live on the surface a third below");
+    // I-V-vi-IV is one key-invariant word from the tonic surface.
+    for(int key=0;key<12;key++){
+        var chords=new[]{(key,""),(key+7,""),(key+9,"m"),(key+5,"")};var word=new List<string>();int from=HarmonyModel.KeyHome(key,false).surface;
+        foreach(var (root,q) in chords){var home=HarmonyModel.Home(root,q);word.Add(HarmonyModel.Token(from,home.surface,home.obj));from=home.surface;}
+        Check(string.Join(" > ",word)=="0M > 3PM > 2m > 0M","I-V-vi-IV grammar word in every key");
+        var frames=HarmonyModel.Evaluate(key,string.Join(" > ",word));
+        Check(Set(frames[2].Pitches,key+9,key,key+4),"The word sounds vi");
+    }
+    Check(HarmonyModel.Roman(G,"",C,false)=="V"&&HarmonyModel.Roman(A,"m",C,false)=="vi"&&HarmonyModel.Roman(Bb,"",C,false)=="♭VII"&&HarmonyModel.Roman(Db,"",Bb,true)=="III"&&HarmonyModel.Roman(B,"dim",C,false)=="vii°","Roman numerals");
+}
 foreach(string invalid in new[]{"", "4M", "0Q", "(0M", "0M)", "M >", "0M.M", "3P"})
 {
     bool rejected=false; try{HarmonyModel.Evaluate(3,invalid);}catch(ArgumentException){rejected=true;}
