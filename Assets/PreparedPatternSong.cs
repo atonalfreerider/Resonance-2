@@ -9,7 +9,8 @@ using System.Linq;
     // Version 3 adds pattern compression: one fundamental loop per section family,
     // every visit described as passes of that loop with their variations, and the
     // repeated section groups (verse + chorus) that return through the song.
-    public const int CurrentVersion=3;
+    // Version 4 adds detected key changes and tonal tensions (tonicizations).
+    public const int CurrentVersion=4;
     public int Version=CurrentVersion,TrackCount,LeadVocalTrack=-1;
     public string Style="",FormName="",Summary="",FormGrammar="";
     public int SongBars,FundamentalBars;
@@ -35,6 +36,27 @@ using System.Linq;
         public bool Partial;
         public double[] Changed=Array.Empty<double>();
     }
+    // A modulation: the key from this beat on, the key it left, and why it counts.
+    [Serializable] public sealed class KeyChange
+    {
+        public double Beat;
+        public int Key,From;
+        public bool Minor,FromMinor;
+        public string Evidence="";
+    }
+    // A tonicization inside a key (V/V, vii°/V, the Neapolitan, a borrowed chord): the torus
+    // leans toward Target over [Start, End) and relaxes after, unless Completes, when the key
+    // change to Target follows.
+    [Serializable] public sealed class Tension
+    {
+        public double Start,End;
+        public int Target;
+        public bool TargetMinor,Completes;
+        public string Kind="";
+        public float Amount;
+    }
+    public KeyChange[] KeyChanges=Array.Empty<KeyChange>();
+    public Tension[] Tensions=Array.Empty<Tension>();
     // A run of different families that recurs as a unit (Verse + Chorus, or a classical part).
     [Serializable] public sealed class SectionGroup
     {
@@ -132,6 +154,20 @@ using System.Linq;
         public double Cycle=>CycleBeats>0?CycleBeats:ProgressionBeats;
     }
     public Pattern PatternOf(Section section)=>Array.Find(Patterns,p=>p.Family==section.Family);
+    // Older bundles: key changes are read off the key frames (no tensions without regeneration).
+    public void EnsureKeyChanges(Func<double,double> beatAt)
+    {
+        KeyChanges??=Array.Empty<KeyChange>();Tensions??=Array.Empty<Tension>();
+        if(KeyChanges.Length>0||Frames==null)return;
+        var changes=new List<KeyChange>();int key=-1;bool minor=false;
+        foreach(var f in Frames)
+        {
+            if(f.Key<0)continue;
+            if(key>=0&&(f.Key!=key||f.Minor!=minor))changes.Add(new KeyChange{Beat=beatAt(f.Time),Key=f.Key,Minor=f.Minor,From=key,FromMinor=minor,Evidence="key frames"});
+            key=f.Key;minor=f.Minor;
+        }
+        KeyChanges=changes.ToArray();
+    }
     // Older bundles have no compression data: project each family's first visit as its own
     // fundamental so the wheel still shows the form. Regenerating replaces this.
     public bool EnsurePatterns()

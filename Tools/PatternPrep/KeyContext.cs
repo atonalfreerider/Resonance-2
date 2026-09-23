@@ -23,21 +23,45 @@ public static class KeyContext
         }
         return result;
     }
+    // Keys for every frame, the detected key changes, and the tensions inside each key.
+    // Reviewed keys stay locked (tensions are still found). Several authored signatures are kept.
+    // One opening signature, or none, is only a starting point: modulations are detected from
+    // the chord timeline (KeyAnalysis).
     public static void Apply(PreparedPatternSong song,SongSettings settings,MidiCycleAnalysis cycles)
     {
         bool reviewed=settings.KeySource.Contains("reviewed",StringComparison.OrdinalIgnoreCase)||settings.KeySource.Contains("known",StringComparison.OrdinalIgnoreCase);
-        if(reviewed||!settings.InferKeyChanges){if(settings.Key>=0)foreach(var f in song.Frames){f.Key=settings.Key;f.Minor=settings.Minor;}return;}
-        if(song.Frames.Any(f=>f.Key>=0))
+        var signed=song.Frames.Where(f=>f.Key>=0).ToList();
+        // Many exporters always write "major": keep the configured tonic when it shares the collection.
+        if(settings.Key>=0)foreach(var f in signed)
+            if(HarmonyModel.Mod(f.Key+(f.Minor?3:0))==HarmonyModel.Mod(settings.Key+(settings.Minor?3:0))){f.Key=settings.Key;f.Minor=settings.Minor;}
+        var authored=new List<(double time,int key,bool minor)>();
+        foreach(var f in signed)if(authored.Count==0||authored[^1].key!=f.Key||authored[^1].minor!=f.Minor)authored.Add((f.Time,f.Key,f.Minor));
+        var chords=song.Chords??Array.Empty<SongFormAnalysis.ChordStep>();
+        List<KeyAnalysis.Region> regions;
+        if(reviewed||!settings.InferKeyChanges||authored.Count>1||cycles==null)
         {
-            // Preserve supplied MIDI key changes. A signature names a collection, and many
-            // exporters always write "major": keep the configured tonic when it shares it.
-            if(settings.Key>=0)foreach(var f in song.Frames)
-                if(f.Key>=0&&HarmonyModel.Mod(f.Key+(f.Minor?3:0))==HarmonyModel.Mod(settings.Key+(settings.Minor?3:0))){f.Key=settings.Key;f.Minor=settings.Minor;}
-            return;
+            if((reviewed||!settings.InferKeyChanges)&&settings.Key>=0)foreach(var f in song.Frames){f.Key=settings.Key;f.Minor=settings.Minor;}
+            if(cycles==null)return;
+            regions=new();
+            foreach(var f in song.Frames.Where(f=>f.Key>=0))
+            {
+                double beat=cycles.BeatAt(f.Time);
+                if(regions.Count==0||regions[^1].Key!=f.Key||regions[^1].Minor!=f.Minor)regions.Add(new KeyAnalysis.Region{Start=regions.Count==0?0:beat,End=song.EndBeat,Key=f.Key,Minor=f.Minor});
+                if(regions.Count>1)regions[^2].End=regions[^1].Start;
+            }
+            if(regions.Count==0)regions.Add(new KeyAnalysis.Region{Start=0,End=song.EndBeat,Key=Math.Max(0,settings.Key),Minor=settings.Minor});
         }
-        var changes=Infer(song.Notes,song.EndBeat,settings.Key,settings.Minor);
-        foreach(var f in song.Frames){double beat=cycles.BeatAt(f.Time);var change=changes.Last(c=>c.Beat<=beat);f.Key=change.Key;f.Minor=change.Minor;}
-        song.KeySource="Offline sustained tonal context; inferred changes require review";
+        else
+        {
+            int initial=settings.Key>=0?settings.Key:authored.Count==1?authored[0].key:-1;bool minor=settings.Key>=0?settings.Minor:authored.Count==1&&authored[0].minor;
+            double beatsPerBar=song.Measures?.Length>0?song.Measures.GroupBy(m=>Math.Round(m.End-m.Start,3)).OrderByDescending(g=>g.Count()).First().Key:4;
+            regions=KeyAnalysis.Regions(chords,initial,minor,beatsPerBar);
+            regions[^1].End=Math.Max(regions[^1].End,song.EndBeat);
+            foreach(var f in song.Frames){double beat=cycles.BeatAt(f.Time);var region=regions.LastOrDefault(r=>r.Start<=beat+1e-6)??regions[0];f.Key=region.Key;f.Minor=region.Minor;}
+            song.KeySource=regions.Count>1?(authored.Count==1?"MIDI signature; key changes detected offline (review)":"Offline chord-timeline keys; key changes detected (review)")
+                :(authored.Count==1||settings.Key>=0?song.KeySource??"":"Offline chord-timeline key (review)");
+        }
+        (song.KeyChanges,song.Tensions)=KeyAnalysis.Describe(chords,regions,song.Sections);
     }
     public static void SelfTest()
     {

@@ -54,8 +54,8 @@ public static class SelfTests
     {
         var (score, bpm) = name switch
         {
-            "pop" => (PopScore(), 112), "variation" => (VariationScore().score, 116), "strain" => (StrainScore(), 96), "ternary" => (TernaryScore(), 88),
-            _ => throw new ArgumentException("fixtures: pop, variation, strain, ternary")
+            "pop" => (PopScore(), 112), "variation" => (VariationScore().score, 116), "alternating" => (AlternatingScore(), 108), "strain" => (StrainScore(), 96), "ternary" => (TernaryScore(), 88),
+            _ => throw new ArgumentException("fixtures: pop, variation, alternating, strain, ternary")
         };
         const int ppq = 480;
         var events = new NAudio.Midi.MidiEventCollection(1, ppq);
@@ -95,8 +95,9 @@ public static class SelfTests
             "pop" => (PopScore(), new SongSettings { Key = 3 }, "pop"),
             "ternary" => (TernaryScore(), new SongSettings(), "classical"),
             "variation" => (VariationScore().score, new SongSettings { Key = 3 }, "pop"),
+            "alternating" => (AlternatingScore(), new SongSettings { Key = 3 }, "pop"),
             "strain" => (StrainScore(), new SongSettings { Key = 3 }, "classical"),
-            _ => throw new ArgumentException("fixtures: pop, ternary, variation, strain")
+            _ => throw new ArgumentException("fixtures: pop, ternary, variation, alternating, strain")
         };
         settings.Style = style;
         Dump(FormAnalysis.Build(score.Cycles(), settings, new[] { "", "Keys", "Bass", "Lead", "Drums" }));
@@ -110,9 +111,11 @@ public static class SelfTests
         Ternary();
         Variations();
         Structure();
+        Alternating();
         Console.WriteLine("PASS: hierarchy carriers, pop verse–chorus roles with transposed final chorus, classical ternary with key areas");
         Console.WriteLine("PASS: pattern compression — family fundamentals, new ending, extra pass, lead-in, transposed return, verse–chorus groups and form grammar");
         Console.WriteLine("PASS: repetition-first structure — pop and varied verse–chorus forms and adjacent classical strains found without reviewed boundaries");
+        Console.WriteLine("PASS: alternating pair — A B A B C A B C keeps A and B as one recurring group that C interrupts");
     }
 
     static Score PopScore()
@@ -162,6 +165,32 @@ public static class SelfTests
         Check(a.LoopBars == 8 && a.Visits == 3 && strain.Sections[0].Passes[1].ChangedBars.Count > 0 && strain.Sections[1].Variation == "repeats A", "an A strain is an eight-bar phrase answered with a variation, and its repeat is exact");
     }
 
+    // Two sections alternating as a pair, interrupted by a third: A B A B C A B C.
+    static Score AlternatingScore()
+    {
+        var s = new Score();
+        void Part((int root, bool minor)[] chords, int[] tune, float loudness, int style)
+        {
+            for (int pass = 0; pass < 2; pass++)
+                for (int i = 0; i < chords.Length; i++) { s.Groove(s.Beat, 4, style, pass == 1 && i == chords.Length - 1); s.Chord(chords[i].root, chords[i].minor, tune, loudness, false); }
+        }
+        var a = new[] { (C, false), (A, true), (F, false), (G, false) };
+        var b = new[] { (F, false), (G, false), (E, true), (A, true) };
+        var c = new[] { (D, true), (Bb, false), (F, false), (G, false) };
+        int[] tuneA = { 0, 4, 7, 4 }, tuneB = { 7, 9, 12, 9, 7, 4, 7, 9 }, tuneC = { 12, 7, 5, 4 };
+        void PlayA() => Part(a, tuneA, .6f, 1); void PlayB() => Part(b, tuneB, 1f, 2); void PlayC() => Part(c, tuneC, .75f, 3);
+        PlayA(); PlayB(); PlayA(); PlayB(); PlayC(); PlayA(); PlayB(); PlayC();
+        return s;
+    }
+    static void Alternating()
+    {
+        var result = FormAnalysis.Build(AlternatingScore().Cycles(), new SongSettings { Key = 3 }, new[] { "", "Keys", "Bass", "Lead Vocal", "Drums" });
+        var families = result.Form.Sections.Select(x => x.Family.Id).ToArray();
+        Check(families.Length == 8 && families[0] == families[2] && families[2] == families[5] && families[1] == families[3] && families[3] == families[6] && families[4] == families[7] && families.Distinct().Count() == 3, "A B A B C A B C: three families " + string.Join(",", families));
+        Check(result.Groups.Count == 1 && result.Groups[0].Visits == 3 && result.Groups[0].Families.Length == 2 && result.Sections[4].Group < 0 && result.Sections[7].Group < 0, "A and B return as a pair three times; C interrupts outside the pair");
+        Check(System.Text.RegularExpressions.Regex.IsMatch(result.Grammar, @"^\((\S+) (\S+)\)×2 (\S+) \(\1 \2\) \3$"), "grammar folds the pair and marks the interruption: " + result.Grammar);
+    }
+
     // Reviewed boundaries isolate the compression layer from segmentation.
     static (Score score, string boundaries) VariationScore()
     {
@@ -180,7 +209,7 @@ public static class SelfTests
         style = 2; Loop(chorus, chorusTune, 1f); Loop(chorus, chorusTune, 1f, 0, true);           // 11 chorus, fill
         style = 1; Loop(verse, verseTune, .6f); Loop(ending, verseTune, .6f);                     // 19 verse, new ending
         style = 2; Loop(chorus, chorusTune, 1f); Loop(chorus, chorusTune, 1f); Loop(chorus, chorusTune, 1f, 0, true); // 27 chorus, extra pass
-        style = 3; Loop(new[] { (F, false), (G, false), (E, true), (A, true), (D, true), (G, false), (Bb, false), (G, false) }, bridgeTune, .7f); // 39 bridge
+        style = 3; Loop(new[] { (F, false), (G, false), (E, true), (A, true), (D, false), (G, false), (Bb, false), (G, false) }, bridgeTune, .7f); // 39 bridge (D is V/V)
         style = 1; Loop(new[] { (G, false) }, new[] { 0, 2 }, .5f);                                // 47 lead-in bar
         Loop(verse, verseTune, .6f); Loop(verse, verseTune, .6f);                                 // 48 verse
         style = 2; Loop(chorus, chorusTune, 1f, 2); Loop(chorus, chorusTune, 1f, 2, true);        // 56 chorus up a step
@@ -207,7 +236,7 @@ public static class SelfTests
         // The playback contract carries the same compression.
         var song = PreparedPatternSong.Capture(s.Cycles(), result.Form);
         FormAnalysis.Apply(result, song);
-        Check(song.Version == 3 && song.Patterns.Length == result.Patterns.Count && song.Sections[3].Passes[1].Changed.Length == 2 && song.FormGrammar == result.Grammar, "prepared song v3 carries fundamentals and passes");
+        Check(song.Version == PreparedPatternSong.CurrentVersion && song.Patterns.Length == result.Patterns.Count && song.Sections[3].Passes[1].Changed.Length == 2 && song.FormGrammar == result.Grammar, "the prepared song carries fundamentals and passes");
         Check(!song.EnsurePatterns(), "a v3 song needs no runtime projection");
         var legacy = PreparedPatternSong.Capture(s.Cycles(), result.Form);
         Check(legacy.EnsurePatterns() && legacy.Sections.All(x => x.Passes.Length > 0) && legacy.Patterns.Length == 5, "older bundles get a projected fundamental per family");

@@ -148,6 +148,56 @@ public static partial class FormAnalysis
             foreach (var v in all) Console.WriteLine($"  structure {v.Start + 1,3}+{v.Length,-3} family {order[v.Family]} t{v.T} score {v.Score:0.00}");
         return (segments, family, transpose, similarity);
     }
+    // How different bars [a, b) and [b, c) are as wholes, on the novelty features.
+    static double PartContrast(Bars bars, int a, int b, int c)
+    {
+        double[] Sum(Func<int, double[]> feature, int from, int to)
+        {
+            double[] total = null;
+            for (int k = from; k < to; k++) { var f = feature(k); total ??= new double[f.Length]; if (f.Length == total.Length) for (int i = 0; i < f.Length; i++) total[i] += f[i]; }
+            return Normalize(total ?? new double[1]);
+        }
+        double Mean(double[] v, int from, int to) => Enumerable.Range(from, to - from).Average(k => v[k]);
+        double chroma = 1 - Cos(Sum(k => bars.Chroma[k], a, b), Sum(k => bars.Chroma[k], b, c));
+        double tune = 1 - Cos(Sum(k => bars.MelodyPcs[k], a, b), Sum(k => bars.MelodyPcs[k], b, c));
+        double rhythm = 1 - Cos(Sum(k => bars.Rhythm[k], a, b), Sum(k => bars.Rhythm[k], b, c));
+        double energy = 1 - Ratio(Mean(bars.Energy, a, b), Mean(bars.Energy, b, c));
+        double density = 1 - Ratio(Mean(bars.Density, a, b), Mean(bars.Density, b, c));
+        double register = Math.Min(1, Math.Abs(Mean(bars.Register, a, b) - Mean(bars.Register, b, c)) / 7);
+        return (1.2 * chroma + 1.2 * tune + .8 * rhythm + .8 * energy + .5 * density + .5 * register) / 5;
+    }
+    // How well bars [a, b) repeat a loop of their own (best period's mean bar similarity).
+    static double Loopiness(Bars bars, int a, int b)
+    {
+        double best = 0;
+        foreach (int period in new[] { 1, 2, 3, 4, 6, 8 })
+        {
+            if (period * 2 > b - a) break;
+            double sum = 0; for (int i = a; i < b - period; i++) sum += bars.Sim[0][i, i + period];
+            best = Math.Max(best, sum / (b - a - period));
+        }
+        return best;
+    }
+    // A cut should separate parts that differ as wholes and leave each part a loop of its own
+    // (a verse's loop twice, then the chorus's). A part that already repeats its own loop is one
+    // section and is not cut again.
+    static void Contrast(SegmentModel m, List<Visit> copies, int from, int to, SortedSet<int> cuts, int depth)
+    {
+        int unit = m.Unit; if (depth > 3 || to - from < 2 * unit) return;
+        if (depth > 0 && copies.Average(v => Loopiness(m.Bars, v.Start + from, v.Start + to)) >= .85) return;
+        int best = -1; double bestScore = double.NegativeInfinity;
+        for (int r = from + unit; r <= to - unit; r++)
+        {
+            double contrast = copies.Average(v => PartContrast(m.Bars, v.Start + from, v.Start + r, v.Start + to));
+            if (contrast < .15) continue;
+            double loops = copies.Average(v => Loopiness(m.Bars, v.Start + from, v.Start + r) + Loopiness(m.Bars, v.Start + r, v.Start + to)) / 2;
+            double score = contrast + .5 * loops;
+            if (score > bestScore + 1e-9) { bestScore = score; best = r; }
+        }
+        if (best < 0) return;
+        cuts.Add(best); Contrast(m, copies, from, best, cuts, depth + 1); Contrast(m, copies, best, to, cuts, depth + 1);
+    }
+
     internal sealed class ThumbnailSet { public List<Visit> visits; public int families; }
     static ThumbnailSet Thumbnails(SegmentModel m)
     {
@@ -227,16 +277,9 @@ public static partial class FormAnalysis
                 if (bestR + bestPart < to) { cuts.Add(bestR + bestPart); PartialReturns(bestR + bestPart, to); }
             }
             PartialReturns(0, length);
-            // Otherwise cut at clear changes that every copy shares (the change curve averaged
-            // over the copies), into parts of at least a phrase.
-            if (cuts.Count == 0)
-                for (int r = unit; r <= length - unit; r++)
-                {
-                    double Change(int x) => copies.Average(v => m.Change[v.Start + x]);
-                    double change = Change(r);
-                    if (change < .55 || Change(r - 1) > change || Change(r + 1) > change) continue;
-                    if (cuts.Count == 0 || r - cuts.Max >= unit) cuts.Add(r);
-                }
+            // Otherwise cut where the two parts differ most as wholes (harmony, tune, rhythm,
+            // energy), averaged over every copy, and again inside each part.
+            if (cuts.Count == 0) Contrast(m, copies, 0, length, cuts, 0);
             cuts.RemoveWhere(c => c <= 0 || c >= length);
             if (cuts.Count == 0) continue;
             var edges = cuts.Prepend(0).Append(length).Distinct().OrderBy(x => x).ToList();
