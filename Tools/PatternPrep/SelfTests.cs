@@ -101,9 +101,20 @@ public static class SelfTests
             ("pop fixture", FormAnalysis.Prepare(PopScore().Cycles(), 3, false, false), new[] { 5, 13, 21, 29, 37, 45, 53 }, Array.Empty<int>()),
             ("ternary fixture", FormAnalysis.Prepare(TernaryScore().Cycles(), 0, true, true), new[] { 9, 21, 29 }, new[] { 17 }),
         };
-        foreach (var line in reviewed)
+        foreach (var raw in reviewed)
         {
-            // path|boundaries|optional|classical
+            // path|boundaries|optional|classical, or path|reference-form.json
+            string line = raw;
+            var split = raw.Split('|');
+            if (split.Length == 2 && split[1].EndsWith(".json"))
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(split[1]));
+                var root = doc.RootElement;
+                var starts = root.GetProperty("sections").EnumerateArray().Select(x => x[0].GetInt32()).Where(b => b > 1);
+                // A count-in bar makes the intro start a boundary too.
+                var optional = root.GetProperty("optional").EnumerateArray().Select(x => x.GetInt32());
+                line = $"{split[0]}|{string.Join(",", starts)}|{string.Join(",", optional)}|{root.GetProperty("style").GetString()}";
+            }
             var parts = line.Split('|');
             var midi = new NAudio.Midi.MidiFile(parts[0], false);
             cases.Add((Path.GetFileName(Path.GetDirectoryName(parts[0])), FormAnalysis.Prepare(MidiCycleAnalysis.Analyze(midi, true), -1, false, parts.Length > 3 && parts[3] == "classical"),
