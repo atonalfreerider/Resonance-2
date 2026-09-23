@@ -18,7 +18,7 @@ public static class AttackLayoutValidation
         try{
             AudioListener.volume=0;midi.Pause();Camera.main.GetComponent<CameraControl>().ResetView();await Task.Delay(80);
             var view=Camera.main.WorldToViewportPoint(main.transform.position);
-            Check(view.x>.55f&&view.y>.55f,"Larger default torus is framed in the upper right");
+            Check(view.y>.5f&&view.x>.3f&&view.x<.7f,"Larger default torus is framed above the drum wheel in its own viewport");
             var drum=main.GetComponent<DrumPatternDeck>().WheelTransform;
             Check(drum.localPosition.y<=-2.8f,"Drum wheel sits farther beneath the torus in the shared 3D view");
             Check((Camera.main.cullingMask&(1<<drum.gameObject.layer))!=0,"Main camera renders the drum wheel");

@@ -142,6 +142,22 @@ public class MidiPlayer : MonoBehaviour
         var notes=visualIndex>0?frames[visualIndex-1].Notes:new List<Tuple<int,float>>();
         if(!recorded)main.Synth.Schedule(originDsp,notes);main.SetNotes(new List<Tuple<int,float>>(),false);primeVisuals=true;
         ApplyKey(visualIndex>0?frames[visualIndex-1]:null);
+        UpdateTension(scorePosition);
+    }
+    // Over a tonicization (V/V, vii°/V, the Neapolitan, a borrowed chord) the torus leans toward
+    // the key it points at, growing until the next chord, then relaxes back. When the key change
+    // to that key follows, the frames change the key and the lean hands over to it.
+    public PreparedPatternSong.Tension CurrentTension {get;private set;}
+    void UpdateTension(double scorePosition)
+    {
+        var tensions=HarmonicPrepared?.Tensions;
+        if(!FollowKey||tensions==null||tensions.Length==0||HarmonicCycles==null){CurrentTension=null;main.SetTension(main.currentKey,0);return;}
+        double beat=HarmonicCycles.BeatAt(scorePosition);
+        var t=CurrentTension!=null&&CurrentTension.Start<=beat&&beat<CurrentTension.End?CurrentTension:Array.Find(tensions,x=>x.Start<=beat&&beat<x.End);
+        CurrentTension=t;
+        if(t==null){main.SetTension(main.currentKey,0);return;}
+        float rise=Mathf.SmoothStep(0,1,(float)((beat-t.Start)/Math.Max(.25,t.End-t.Start)));
+        main.SetTension(t.Target,t.Amount*Mathf.Lerp(.35f,1,rise));
     }
     void ApplyKey(Frame frame)
     {
@@ -189,6 +205,7 @@ public class MidiPlayer : MonoBehaviour
         int previous=visualIndex;
         while (visualIndex<frames.Count && frames[visualIndex].Time<=position) { foreach(var attack in frames[visualIndex].Attacks) main.StrikeNote(attack.Pitch-21,attack.Velocity);visualIndex++; }
         if ((visualIndex!=previous||primeVisuals) && visualIndex>0) { var frame=frames[visualIndex-1]; main.SetNotes(frame.Notes,false); ApplyKey(frame); }
+        UpdateTension(position);
         primeVisuals=false;
         if (Position>=Duration-.025 || (Recording!=null && Recording.Ready && AudioSettings.dspTime>originDsp+.1 && !Recording.Source.isPlaying)) { if (Loop) { originPosition=0; Rebase(0); } else Stop(); }
     }

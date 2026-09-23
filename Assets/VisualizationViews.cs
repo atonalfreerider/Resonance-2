@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.UIElements;
 
 [DefaultExecutionOrder(1000)]
@@ -17,14 +18,19 @@ public sealed class VisualizationViews : MonoBehaviour
     MaterialPropertyBlock block;
     readonly List<Renderer> renderers=new();
     readonly Dictionary<Material,Shader> replacedShaders=new();
-    Camera camera;CameraControl orbit;DrumPatternDeck drums;
+    Camera camera,clear;CameraControl orbit;DrumPatternDeck drums;
     Vector3 overviewPosition;Quaternion overviewRotation;Vector3 overviewAngles;
-    float panelOpen=1,timelineOpacity=1,timelineFocus;
+    float panelOpen=1,timelineOpacity=1,timelineFocus,overviewSplit=1;
     bool cameraMoving;
     void Awake(){block=new MaterialPropertyBlock();}
     public void Bind(VisualElement ui,VisualElement controls,PatternWheelDeck wheels)
     {
         root=ui;panel=controls;overlay=wheels.Overlay;camera=Camera.main;orbit=camera.GetComponent<CameraControl>();drums=GetComponent<DrumPatternDeck>();
+        // The scene camera renders only its part of a split screen; this one clears the whole
+        // screen first, so the wheels never draw over stale frames.
+        var clearing=new GameObject("Screen clear"){hideFlags=HideFlags.DontSave};clear=clearing.AddComponent<Camera>();
+        clear.cullingMask=0;clear.clearFlags=CameraClearFlags.SolidColor;clear.backgroundColor=camera.backgroundColor;clear.depth=camera.depth-10;clear.rect=new Rect(0,0,1,1);
+        var clearData=clear.GetUniversalAdditionalCameraData();clearData.renderPostProcessing=false;clearData.renderShadows=false;
         toolbar=new VisualElement{name="visualization-views"};toolbar.style.position=Position.Absolute;toolbar.style.top=12;toolbar.style.right=16;
         toolbar.style.flexDirection=FlexDirection.Row;toolbar.style.alignItems=Align.Center;toolbar.style.backgroundColor=new Color(.055f,.09f,.14f,.92f);
         toolbar.style.borderTopLeftRadius=18;toolbar.style.borderTopRightRadius=18;toolbar.style.borderBottomLeftRadius=18;toolbar.style.borderBottomRightRadius=18;
@@ -74,15 +80,29 @@ public sealed class VisualizationViews : MonoBehaviour
         panel.style.visibility=panelOpen<.005f?Visibility.Hidden:Visibility.Visible;
         float left=panelWidth*panelOpen;
         tuck.style.left=left;tuck.style.top=Mathf.Max(90,(height-64)*.5f);
-        camera.rect=new Rect(left/width,0,1-left/width,1);
         float available=width-left;
         timelineFocus=Mathf.Lerp(timelineFocus,Current==View.Timeline?1:0,blend);
         timelineOpacity=Mathf.Lerp(timelineOpacity,Current==View.Overview||Current==View.Timeline?1:0,blend);
-        float wheelWidth=Mathf.Lerp(Mathf.Min(510,available*.49f),Mathf.Min(available-24,(height-70)*1.12f),timelineFocus);
-        overlay.style.maxWidth=StyleKeyword.None;overlay.style.width=wheelWidth;
-        overlay.style.height=Mathf.Lerp(Mathf.Min(620,height-60),height-70,timelineFocus);
-        overlay.style.left=left+30+timelineFocus*(available-wheelWidth)*.5f-(1-timelineOpacity)*available;
-        overlay.style.top=52;overlay.style.opacity=timelineOpacity;
+        // The overview splits the screen so the pattern wheels and the 3D scene (torus and drum
+        // wheel) never overlap: side by side in a landscape window, stacked in a portrait one
+        // (scene above, wheels below). The camera renders only its own part.
+        overviewSplit=Mathf.Lerp(overviewSplit,Current==View.Overview?1:0,blend);
+        bool portrait=available<height*.9f;
+        // In portrait the wheels take only the height their width can use (ring, rack and
+        // caption); the rest goes to the scene.
+        float dockHeight=portrait?Mathf.Clamp(available+150,380,height*.58f):height-64;
+        var dock=portrait?new Rect(left+12,height-dockHeight-10,available-24,dockHeight)
+            :new Rect(left+16,52,Mathf.Clamp(available*.46f,340,640),dockHeight);
+        float focusWidth=Mathf.Min(available-24,(height-70)*1.12f);
+        var focus=new Rect(left+(available-focusWidth)*.5f,52,focusWidth,height-70);
+        overlay.style.maxWidth=StyleKeyword.None;
+        overlay.style.width=Mathf.Lerp(dock.width,focus.width,timelineFocus);overlay.style.height=Mathf.Lerp(dock.height,focus.height,timelineFocus);
+        overlay.style.left=Mathf.Lerp(dock.x,focus.x,timelineFocus)-(1-timelineOpacity)*available;
+        overlay.style.top=Mathf.Lerp(dock.y,focus.y,timelineFocus);overlay.style.opacity=timelineOpacity;
+        float split=overviewSplit*(1-timelineFocus);
+        if(portrait){float below=(height-dock.y+4)/height*split;camera.rect=new Rect(left/width,below,1-left/width,1-below);}
+        else{float beside=(dock.xMax+8-left)*split;camera.rect=new Rect((left+beside)/width,0,1-(left+beside)/width,1);}
+        if(orbit!=null)orbit.SideFrame=1-split;
         overlay.style.visibility=timelineOpacity<.005f?Visibility.Hidden:Visibility.Visible;
         TorusOpacity=Mathf.Lerp(TorusOpacity,Current==View.Overview||Current==View.Torus?1:0,blend);
         var shape=GetComponent<Main>();
@@ -91,7 +111,7 @@ public sealed class VisualizationViews : MonoBehaviour
         if(Current==View.Drums||Current==View.Timeline||cameraMoving){
             Vector3 position=overviewPosition;Quaternion rotation=overviewRotation;
             if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);float unfold=GetComponent<Main>().UncoilAmount;position=Vector3.Slerp(position-target,-transform.forward*(6f/Mathf.Min(1,camera.aspect)),unfold)+target;position=target+(position-target)*(1+.55f*GetComponent<Main>().TransitionWiden);rotation=Quaternion.LookRotation(target-position,transform.up);}
-            if(Current==View.Drums){Vector3 target=drums?.WheelTransform!=null?drums.WheelTransform.position:transform.position+Vector3.down*2.8f;position=target+Vector3.up*(3.6f/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);}
+            if(Current==View.Drums){Vector3 target=drums?.WheelTransform!=null?drums.WheelTransform.position:transform.position+Vector3.down*DrumPatternDeck.DeckDepth;position=target+Vector3.up*(3.6f/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);}
             if(Current==View.Timeline){position=overviewPosition+Vector3.right*5;rotation=overviewRotation;}
             camera.transform.position=Vector3.Lerp(camera.transform.position,position,blend);camera.transform.rotation=Quaternion.Slerp(camera.transform.rotation,rotation,blend);
             orbit?.MovementUpdater?.Invoke();
@@ -119,5 +139,6 @@ public sealed class VisualizationViews : MonoBehaviour
         }
     }
     static float Snap(float value)=>value<.0001f?0:value>.9999f?1:value;
+    void OnDestroy(){if(clear!=null)Destroy(clear.gameObject);}
     void OnDisable(){foreach(var renderer in renderers)if(renderer!=null){renderer.forceRenderingOff=false;renderer.GetPropertyBlock(block);block.SetFloat("_ViewOpacity",1);renderer.SetPropertyBlock(block);}foreach(var entry in replacedShaders)if(entry.Key!=null)entry.Key.shader=entry.Value;replacedShaders.Clear();if(orbit!=null)orbit.enabled=true;}
 }

@@ -46,13 +46,34 @@ public static class PatternWheelValidation
                 Check(deck.RackPixels>lastPixels&&deck.RackTurns<lastTurns,"Rack and ring advance together: "+section.DisplayName);
                 lastPixels=deck.RackPixels;lastTurns=deck.RackTurns;
             }
-            // The drum wheel speaks the same form language: the chorus groove wears the chorus hatch.
+            // Key changes are detected offline: the lifted last chorus moves the key from C to D.
+            const int C=3,D=5,G=10;var lift=data.Sections[7];
+            Check(data.KeyChanges.Length==1&&data.KeyChanges[0].From==C&&data.KeyChanges[0].Key==D&&Math.Abs(data.KeyChanges[0].Beat-lift.Start)<1e-6,"Key change C → D at the lifted chorus: "+string.Join(", ",data.KeyChanges.Select(k=>k.Beat+" "+k.Evidence)));
+            midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(lift.Start+2)));await Task.Delay(1200);
+            Check(main.currentKey==D,"The torus completes the change into D");
+            // A V/V in the bridge leans the torus toward G and relaxes back into C.
+            var vv=data.Tensions.First(t=>t.Kind=="V/V");
+            Check(vv.Target==G&&!vv.Completes,"The bridge's D major is V/V pointing at G, without a key change");
+            midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(vv.End-.2)));await Task.Delay(700);
+            Check(main.currentKey==C&&midi.CurrentTension==vv&&main.TensionKey==G&&main.TensionAmount>.25f,"During V/V the torus leans toward G while the key stays C");
+            midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(vv.End+2.5)));await Task.Delay(1500);
+            Check(main.currentKey==C&&main.TensionAmount<.03f,"After V/V the torus relaxes back into C");
+            // The drum wheel names the section each groove belongs to.
             var drums=main.GetComponent<DrumPatternDeck>();var chorus=data.Sections[2];
             midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(chorus.Start+1)));await Task.Delay(150);
-            Check(drums.CurrentFamily>=0&&drums.CurrentGrooveSection=="C"&&drums.CurrentHatch==FormHatch.ForRole(data.PatternOf(chorus).Role,Array.IndexOf(data.Patterns,data.PatternOf(chorus))),"Chorus groove disc wears the chorus hatch");
+            Check(drums.CurrentFamily>=0&&drums.CurrentGrooveSection=="C","Chorus groove disc is the chorus's");
             var verseGroove=data.Sections[1];midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(verseGroove.Start+1)));await Task.Delay(150);
-            Check(drums.CurrentGrooveSection=="V"&&drums.CurrentHatch==FormHatch.Pattern.Diagonal,"Verse groove disc wears the verse hatch");
+            Check(drums.CurrentGrooveSection=="V","Verse groove disc is the verse's");
+            var beats=drums.WheelTransform.GetComponentsInChildren<LineRenderer>().Where(l=>l.name=="Beat line"&&l.enabled).ToArray();
+            Check(beats.Length==drums.CurrentCounts*2,"The playing disc has a radial line on every beat and upbeat");
             Check(FormHatch.ForRole("Verse",0)!=FormHatch.ForRole("Chorus",1)&&FormHatch.ForRole("Chorus",1)!=FormHatch.ForRole("Bridge",3),"Verse, chorus and bridge are told apart by texture, not colour");
+            // The wheels and the 3D scene share the screen without overlapping.
+            main.GetComponent<VisualizationViews>().SetView(VisualizationViews.View.Overview);await Task.Delay(1500);
+            var overlay=deck.Overlay.worldBound;var screen=root.worldBound;var view=Camera.main.rect;
+            // Portrait stacks the scene above the wheels (the camera starts above them); landscape
+            // puts it beside them (the camera starts right of them).
+            bool stacked=view.yMin>.05f;
+            Check(stacked?overlay.yMin/screen.height>=1-view.yMin-.01f:overlay.xMax/screen.width<=view.xMin+.01f,"Pattern wheels and the torus/drum viewport do not overlap");
             var verse=data.Sections[3];midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(verse.Start+30)));deck.Tick();await Task.Delay(120);
             Directory.CreateDirectory("Temp/ResonanceChecks");ScreenCapture.CaptureScreenshot("Temp/ResonanceChecks/pattern-wheels.png");await Task.Delay(200);
             results.Add("ALL PATTERN WHEEL CHECKS PASSED");

@@ -3,6 +3,7 @@ using UnityEngine;
 [RequireComponent(typeof(MeshFilter),typeof(MeshRenderer))]
 public class UmbilicField : MonoBehaviour
 {
+    MeshRenderer occluder;
     const int Along=240, Across=24;
     Main main;
     Mesh mesh;
@@ -41,6 +42,11 @@ public class UmbilicField : MonoBehaviour
         GetComponent<MeshFilter>().sharedMesh=mesh;
         material=new Material(Resources.Load<Shader>("UmbilicField"));
         rendererComponent=GetComponent<MeshRenderer>();rendererComponent.sharedMaterial=material;
+        // The torus hides what lies behind it (the drum wheel below) without changing its glow:
+        // the same surface, depth only, drawn after the torus's layers and before the drum wheel.
+        if(occluder==null){occluder=new GameObject("Torus depth occluder"){layer=gameObject.layer}.AddComponent<MeshRenderer>();occluder.transform.SetParent(transform,false);
+            occluder.gameObject.AddComponent<MeshFilter>().sharedMesh=mesh;occluder.sharedMaterial=new Material(Resources.Load<Shader>("TorusOccluder"));
+            occluder.shadowCastingMode=UnityEngine.Rendering.ShadowCastingMode.Off;occluder.receiveShadows=false;}
         UpdateGeometry();
     }
     void UpdateGeometry()
@@ -127,7 +133,7 @@ public class UmbilicField : MonoBehaviour
     {
         if(main==null)return;
         
-        UpdateGeometry();UpdateCoverage();rendererComponent.enabled=main.ShowSurfaces;
+        UpdateGeometry();UpdateCoverage();rendererComponent.enabled=main.ShowSurfaces;if(occluder!=null)occluder.enabled=main.ShowSurfaces;
         HarmonicSpectrum.Accumulate(main.ActiveNotes,target,main.ShowHarmonics);
         if(integratedFrame!=Time.frameCount)Integrate(main.ActiveNotes,Time.unscaledDeltaTime);
         for(int pc=0;pc<12;pc++)
@@ -143,5 +149,5 @@ public class UmbilicField : MonoBehaviour
         material.SetFloat("_Key",main.currentKey);material.SetFloat("_Unfold",main.UncoilAmount);material.SetFloat("_Opacity",main.FieldDensity*Mathf.Lerp(1,1.8f,main.UncoilAmount));material.SetFloat("_Flow",Main.ReducedMotion?0:1);
         material.SetFloat("_Diatonic",main.DiatonicStrip?1:0);material.SetFloat("_SoundingOnly",main.SoundingOnly?1:0);
     }
-    void OnDestroy(){if(mesh!=null)Destroy(mesh);if(material!=null)Destroy(material);}
+    void OnDestroy(){if(mesh!=null)Destroy(mesh);if(material!=null)Destroy(material);if(occluder!=null)Destroy(occluder.sharedMaterial);}
 }

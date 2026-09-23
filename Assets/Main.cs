@@ -30,6 +30,15 @@ public class Main : MonoBehaviour
     public float UncoilAmount {get;private set;}
     float unfoldProgress;
     int uncoilKeyFrom;float keyBlend=1;
+    // Tonal tension: the key's pose (animated by ChangeKey) plus a partial lean toward the key a
+    // tonicization points at (V/V, the Neapolitan…). The lean eases in and relaxes back.
+    float baseRotation,baseTwist,tensionTarget,tensionAmount;int tensionKey;
+    public float TensionAmount=>tensionAmount;
+    public int TensionKey=>tensionKey;
+    static float PoseRotation(int key)=>pathMap[HarmonyModel.Mod(key)].x/(float)Tones;
+    static float PoseTwist(int key)=>Mathf.PI+pathMap[HarmonyModel.Mod(key)].y*2f*Mathf.PI/3f;
+    void ApplyPose(){currentVisualRotation=Mathf.Lerp(baseRotation,PoseRotation(tensionKey),tensionAmount);currentVisualTwist=Mathf.Lerp(baseTwist,PoseTwist(tensionKey),tensionAmount);}
+    public void SetTension(int key,float amount){amount=Mathf.Clamp01(amount);if(amount>0)tensionKey=HarmonyModel.Mod(key);tensionTarget=amount;}
     public bool KeyChanging=>keyBlend<1;
     public bool UncoilMoving=>Mathf.Abs(unfoldProgress-(Uncoiled?1:0))>.00001f;
     public float CoiledVisibility=>1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.38f,unfoldProgress));
@@ -137,7 +146,7 @@ public class Main : MonoBehaviour
         if(GetComponent<ChordAurora>()==null)gameObject.AddComponent<ChordAurora>();
         if(GetComponent<FeaturedInstrument>()==null)gameObject.AddComponent<FeaturedInstrument>();
         visualKeyForRendering = currentKey;
-        currentKey = HarmonyModel.Mod(currentKey); currentVisualRotation = pathMap[currentKey].x / (float)Tones; currentVisualTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
+        currentKey = HarmonyModel.Mod(currentKey); baseRotation = currentVisualRotation = PoseRotation(currentKey); baseTwist = currentVisualTwist = PoseTwist(currentKey); tensionKey = currentKey;
 
         for (int j = 0; j < Octaves; j++)
         {
@@ -319,8 +328,7 @@ public class Main : MonoBehaviour
         if (ReducedMotion || duration <= 0)
         {
             keyBlend=1;
-            currentVisualRotation = pathMap[currentKey].x / (float)Tones;
-            currentVisualTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
+            baseRotation=PoseRotation(currentKey);baseTwist=PoseTwist(currentKey);ApplyPose();
             RefreshView(); keyChangeCoroutine = null;
         }
         else keyChangeCoroutine = StartCoroutine(KeyChangeRoutine(duration));
@@ -328,19 +336,19 @@ public class Main : MonoBehaviour
     }
     System.Collections.IEnumerator KeyChangeRoutine(float duration)
     {
-        float rotation = currentVisualRotation, twist = currentVisualTwist;
-        float targetRotation = pathMap[currentKey].x / (float)Tones;
-        float targetTwist = Mathf.PI + pathMap[currentKey].y * 2f * Mathf.PI / 3f;
+        float rotation = baseRotation, twist = baseTwist;
+        float targetRotation = PoseRotation(currentKey);
+        float targetTwist = PoseTwist(currentKey);
         float elapsed = 0;
         while (elapsed < duration)
         {
             float t = Mathf.SmoothStep(0, 1, Mathf.Clamp01(elapsed / duration));
             keyBlend=t;
-            currentVisualRotation = Mathf.Lerp(rotation, targetRotation, t);
-            currentVisualTwist = Mathf.Lerp(twist, targetTwist, t);
-            RefreshView(); yield return null;elapsed += Time.unscaledDeltaTime;
+            baseRotation = Mathf.Lerp(rotation, targetRotation, t);
+            baseTwist = Mathf.Lerp(twist, targetTwist, t);
+            ApplyPose();RefreshView(); yield return null;elapsed += Time.unscaledDeltaTime;
         }
-        currentVisualRotation=targetRotation;currentVisualTwist=targetTwist;
+        baseRotation=targetRotation;baseTwist=targetTwist;ApplyPose();
         keyBlend=1;RefreshView();keyChangeCoroutine = null;
     }
     public void RefreshView()
@@ -476,6 +484,14 @@ public class Main : MonoBehaviour
     }
     void Update()
     {
+        if(Mathf.Abs(tensionAmount-tensionTarget)>.0005f)
+        {
+            // Leaning in follows the music; relaxing back is a little slower, like a release.
+            float rate=tensionTarget>tensionAmount?6:3.5f;
+            tensionAmount=ReducedMotion?tensionTarget:Mathf.Lerp(tensionAmount,tensionTarget,1-Mathf.Exp(-Time.unscaledDeltaTime*rate));
+            if(Mathf.Abs(tensionAmount-tensionTarget)<=.0005f)tensionAmount=tensionTarget;
+            ApplyPose();if(keyChangeCoroutine==null)RefreshView();
+        }
         float target=Uncoiled?1:0;
         if(unfoldProgress!=target){unfoldProgress=Mathf.MoveTowards(unfoldProgress,target,ReducedMotion?1:Time.unscaledDeltaTime/5.85f);UncoilAmount=unfoldProgress*unfoldProgress*unfoldProgress*(unfoldProgress*(unfoldProgress*6-15)+10);RefreshView();}
         foreach(var id in chordLineRenderers.Keys.Where(id=>chordLineRenderers[id].TailComplete).ToArray())

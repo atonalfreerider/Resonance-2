@@ -23,7 +23,7 @@ public static class VisualPlaybackValidation
             var root=main.GetComponent<UIDocument>().rootVisualElement;var deck=root.Q<PatternWheelDeck>();
             main.GetComponent<CameraControl>();Camera.main.GetComponent<CameraControl>().ResetView();
             var screen=Camera.main.WorldToViewportPoint(main.transform.position);
-            Check(screen.x>.53f&&screen.y>.55f,"Torus framed in the upper right");
+            Check(screen.y>.5f&&screen.x>.3f&&screen.x<.7f,"Torus framed above the drum wheel in its own viewport");
             Check(Camera.main.transform.forward.y<-.6f,"Opening camera is more overhead");
             double inside=midi.Prepared.Sections[1].Start;
             midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(inside+2)));await Task.Delay(100);float before=deck.RackPixels;double turns=deck.RackTurns;
