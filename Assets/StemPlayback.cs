@@ -49,7 +49,7 @@ public sealed class StemPlayback : MonoBehaviour
                 var result=task.Result;var master=recording.Source.clip;
                 if(result.rate!=master.frequency||result.pcm.Length/result.channels!=master.samples)throw new InvalidDataException("Stem sample clock differs from recording.");
                 var data=JsonUtility.FromJson<PreparedPatternSong>(result.analysis);
-                if(data.Version!=1||data.MidiSha256!=stem.midiSha256||data.Frames==null||data.Form==null)throw new InvalidDataException("Invalid stem analysis.");
+                if(data.Version<1||data.Version>PreparedPatternSong.CurrentVersion||data.MidiSha256!=stem.midiSha256||data.Frames==null||data.Form==null)throw new InvalidDataException("Invalid stem analysis.");
                 var clip=AudioClip.Create(stem.name,master.samples,result.channels,result.rate,false);clip.SetData(result.pcm,0);
                 var go=new GameObject("Preloaded stem · "+stem.name);go.transform.SetParent(transform,false);
                 var source=go.AddComponent<AudioSource>();source.clip=clip;source.playOnAwake=false;source.spatialBlend=0;source.priority=0;source.volume=0;

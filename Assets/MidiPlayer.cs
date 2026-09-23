@@ -71,7 +71,7 @@ public class MidiPlayer : MonoBehaviour
             if(prepared?.Templates==null||prepared.Form==null)throw new ArgumentException("Regenerate this song with Tools/PatternPrep to prepare section wheels and pitch variations.");
             using(var hash=System.Security.Cryptography.SHA256.Create())
             using(var stream=System.IO.File.OpenRead(path))
-                if(prepared.Version!=1 || BitConverter.ToString(hash.ComputeHash(stream)).Replace("-","").ToLowerInvariant()!=prepared.MidiSha256)
+                if(prepared.Version<1 || prepared.Version>PreparedPatternSong.CurrentVersion || BitConverter.ToString(hash.ComputeHash(stream)).Replace("-","").ToLowerInvariant()!=prepared.MidiSha256)
                     throw new ArgumentException("Pattern analysis is stale. Rebuild it offline for this MIDI.");
             Prepared=HarmonicPrepared=prepared;Cycles=HarmonicCycles=MidiCycleAnalysis.Restore(prepared);SongForm=HarmonicForm=prepared.RestoreForm();TrackCount=prepared.TrackCount;
             ScoreDuration=prepared.Duration;

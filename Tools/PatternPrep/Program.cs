@@ -3,23 +3,35 @@ using System.Security.Cryptography;
 using System.Text.Json;
 
 if(args.Length==1&&args[0]=="--test-harmony"){KeyContext.SelfTest();return;}
-if(args.Length==0)throw new ArgumentException("PatternPrep score.mid [legacy-authored.json]");
+if(args.Length>=1&&args[0]=="--sweep"){SelfTests.Sweep(args.Skip(1).ToArray());return;}
+if(args.Length>=1&&args[0]=="--self-test"){KeyContext.SelfTest();SelfTests.Run(args.Contains("--verbose"));return;}
+if(args.Length>=1&&args[0]=="--verbose"){FormAnalysis.Verbose=true;args=args.Skip(1).ToArray();}
+if(args.Length==0)throw new ArgumentException("PatternPrep score.mid [legacy-authored.json] | --self-test");
 var path=Path.GetFullPath(args[0]);
 var jsonOptions=new JsonSerializerOptions{IncludeFields=true,WriteIndented=false};
 string settingsPath=Path.Combine(Path.GetDirectoryName(path),"song.json");
 var settings=File.Exists(settingsPath)?JsonSerializer.Deserialize<SongSettings>(File.ReadAllText(settingsPath),jsonOptions):new SongSettings();
 var midi=new MidiFile(path,false);
 var cycles=MidiCycleAnalysis.Analyze(midi,true);
-var form=SongFormAnalysis.Build(cycles,8,settings.SectionBoundaries);
+var trackNames=Enumerable.Range(0,midi.Tracks).Select(t=>midi.Events[t].OfType<TextEvent>().FirstOrDefault(e=>e.MetaEventType==MetaEventType.SequenceTrackName)?.Text??"").ToArray();
+for(int i=0;i<trackNames.Length;i++)if(settings.TrackAliases.TryGetValue(trackNames[i],out var alias))trackNames[i]=alias;
+var analysis=FormAnalysis.Build(cycles,settings,trackNames);
+var form=analysis.Form;
+if(FormAnalysis.Verbose)SelfTests.Dump(analysis);
 var data=PreparedPatternSong.Capture(cycles,form);
-data.TrackNames=Enumerable.Range(0,midi.Tracks).Select(t=>midi.Events[t].OfType<TextEvent>().FirstOrDefault(e=>e.MetaEventType==MetaEventType.SequenceTrackName)?.Text??"").ToArray();
+data.TrackNames=trackNames;data.Style=analysis.Style;data.FormName=analysis.FormName;
+for(int i=0;i<data.Sections.Length;i++){
+    var info=analysis.Sections[i];var section=data.Sections[i];
+    section.Label=info.Label;section.Role=info.Role;section.Letter=info.Letter;section.Visit=info.Visit;section.Transpose=info.Transpose;
+    section.PhraseBars=info.PhraseBars;section.Loops=info.Loops;section.CycleBeats=info.CycleBeats;section.Similarity=info.Similarity;
+    section.KeyRoot=info.KeyRoot;section.KeyMinor=info.KeyMinor;
+    section.ParentPath=i<settings.SectionParents.Length?settings.SectionParents[i]:info.Parent;
+}
 data.LeadVocalTrack=settings.LeadVocalTrack;
-for(int i=0;i<data.TrackNames.Length;i++)if(settings.TrackAliases.TryGetValue(data.TrackNames[i],out var alias))data.TrackNames[i]=alias;
 if(data.LeadVocalTrack<0)data.LeadVocalTrack=Array.FindIndex(data.TrackNames,n=>n.Contains("vocal",StringComparison.OrdinalIgnoreCase)&&!n.Contains("back",StringComparison.OrdinalIgnoreCase));
 data.Key=settings.Key;data.Minor=settings.Minor;data.KeySource=settings.KeySource;
 if(!string.IsNullOrWhiteSpace(settings.SectionSource))data.Provenance=settings.SectionSource;
-else data.Provenance=data.Provenance.Replace("rename / edit boundaries","prepared offline");
-data.Title=Path.GetFileNameWithoutExtension(Path.GetDirectoryName(path));data.TrackCount=midi.Tracks;
+data.Title=SongTitle(path);data.TrackCount=midi.Tracks;
 data.MidiSha256=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
 if(args.Length>1){var authored=JsonSerializer.Deserialize<PreparedPatternSong>(File.ReadAllText(args[1]),jsonOptions);
     if(authored.Disks?.Length>0){data.Disks=authored.Disks;foreach(var disk in data.Disks)foreach(var visit in disk.Visits)visit.Seconds=cycles.SecondsAt(visit.Beat);data.Provenance="Legacy authored pattern sequences; section boundaries estimated offline";}}
@@ -63,9 +75,25 @@ foreach(var hit in data.Notes.Concat(data.Disks.SelectMany(d=>d.Hits.Concat(d.Vi
     (hit.RippleRadius,hit.RippleWidth,hit.StrikeRadius)=hit.RippleFrequency switch {
         4=>(1.7f,.06f,.42f),18=>(.58f,.027f,.66f),48=>(hit.Pitch==46?.23f:.16f,.009f,1.02f),32=>(.43f,.017f,1.02f),_=>(.5f,.025f,.83f)};
 }
+GrammarWords.Build(data);
 SectionCompression.Build(data,settings);
 DrumCompression.Build(data);
+data.Summary=GrammarWords.Summary(data);
 RegionPhases.Build(data);
 MelodyStratification.Build(data,cycles.SecondsAt);
 string output=path+".patterns.json",temporary=output+".tmp";File.WriteAllText(temporary,JsonSerializer.Serialize(data,jsonOptions));File.Move(temporary,output,true);
-Console.WriteLine($"{output}: {data.Notes.Length} notes, {data.Templates.Length} rhythm templates / {data.TemplateNoteCount} stored slots, {data.Sections.Length} sections; lossless reconstruction verified");
+Console.WriteLine($"{output}: {data.FormName}\n  {data.Summary}\n  lossless reconstruction verified");
+
+// Bundle folders are staged as ".../bundle" or ".../stems"; prefer the library title.
+static string SongTitle(string midiPath)
+{
+    var folder=new DirectoryInfo(Path.GetDirectoryName(midiPath));
+    foreach(var dir in new[]{folder,folder.Parent})
+    {
+        if(dir==null)continue;
+        var library=Path.Combine(dir.FullName,"library.json");
+        if(!File.Exists(library))continue;
+        try{using var doc=JsonDocument.Parse(File.ReadAllText(library));if(doc.RootElement.TryGetProperty("title",out var title)&&title.GetString() is {Length:>0} text)return text;}catch(JsonException){}
+    }
+    return folder.Name;
+}

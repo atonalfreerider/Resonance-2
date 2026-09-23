@@ -13,6 +13,9 @@ public sealed class SongFormAnalysis
         public int Root=-1;
         public string Quality="";
         public float Energy;
+        // Section loops only: grammar token from the previous chord's home surface
+        // (the first chord moves from the key's surface) and the Roman numeral.
+        public string Token="",Roman="";
         public bool Rest=>Root<0;
         public string Name(bool flats=false)=>Rest?"Rest":HarmonyModel.Name(Root,flats)+Quality;
         public string Identity=>Root+":"+Quality;

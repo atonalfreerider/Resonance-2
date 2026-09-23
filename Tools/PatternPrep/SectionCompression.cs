@@ -5,6 +5,7 @@ public sealed class SongSettings
     public int Key=-1,LeadVocalTrack=-1;
     public bool Minor;
     public bool InferKeyChanges=true;
+    public string Style="";
     public double PatternTimingToleranceBeats=0;
     public string KeySource="",SectionBoundaries="",SectionSource="";
     public string[] SectionParents=Array.Empty<string>();
@@ -27,7 +28,8 @@ public static class SectionCompression
         foreach(var section in song.Sections)
         {
             int sectionIndex=Array.IndexOf(song.Sections,section);
-            section.ParentPath=sectionIndex<settings.SectionParents.Length?settings.SectionParents[sectionIndex]:"Song";
+            if(sectionIndex<settings.SectionParents.Length)section.ParentPath=settings.SectionParents[sectionIndex];
+            if(string.IsNullOrWhiteSpace(section.ParentPath))section.ParentPath="Song";
             var lanes=new List<PreparedPatternSong.InstrumentLane>();
             foreach(var lane in pitched.Where(n=>n.Beat>=section.Start&&n.Beat<section.End).GroupBy(n=>(n.Track,n.Channel)).OrderBy(g=>g.Key.Track).ThenBy(g=>g.Key.Channel))
             {
@@ -50,12 +52,13 @@ public static class SectionCompression
                     for(double a=start;a<end-.0000001;a+=period)
                     {
                         double z=Math.Min(end,a+period);var hits=notes.Where(n=>n.Beat>=a&&n.Beat<z).ToArray();if(hits.Length==0)continue;
-                        string key=$"{lane.Key.Track}:{lane.Key.Channel}:{Q(z-a)}:"+Signature(hits,a);
+                        // Lanes share templates: the same rhythm cell in two instruments is stored once.
+                        string key=$"{Q(z-a)}:"+Signature(hits,a);
                         if(!keys.TryGetValue(key,out int id))
                         {
                             // Neural timing jitter belongs in lossless variant residuals, not a new wheel.
                             double tolerance=Math.Clamp(settings.PatternTimingToleranceBeats,0,.5);
-                            var related=tolerance>0?templates.FirstOrDefault(t=>t.Track==lane.Key.Track&&t.Channel==lane.Key.Channel&&Math.Abs(t.Beats-(z-a))<1e-6&&t.Slots.Length==hits.Length&&
+                            var related=tolerance>0?templates.FirstOrDefault(t=>Math.Abs(t.Beats-(z-a))<1e-6&&t.Slots.Length==hits.Length&&
                                 hits.Select((h,i)=>Math.Abs(h.Beat-a-t.Slots[i].Beat)<=tolerance&&Math.Abs(h.Length-t.Slots[i].Length)<=tolerance*2).All(v=>v)):null;
                             if(related!=null){id=related.Id;keys.Add(key,id);}
                             else {
@@ -78,7 +81,8 @@ public static class SectionCompression
         }
         for(int i=0;i<templates.Count;i++)templates[i].Variants=variants[i].ToArray();
         song.Templates=templates.ToArray();song.TemplateNoteCount=templates.Sum(t=>t.Slots.Length);
-        if(settings.SectionParents.Length==0)GroupRepeatedForms(song);
+        // Pop songs group repeated section runs (Verse + Chorus); classical parts come from FormAnalysis.
+        if(settings.SectionParents.Length==0&&song.Sections.All(s=>s.ParentPath=="Song"))GroupRepeatedForms(song);
         BuildHierarchy(song);
         Verify(song,pitched);
     }

@@ -25,9 +25,16 @@ public static class KeyContext
     }
     public static void Apply(PreparedPatternSong song,SongSettings settings,MidiCycleAnalysis cycles)
     {
-        bool reviewed=settings.KeySource.Contains("reviewed",StringComparison.OrdinalIgnoreCase);
+        bool reviewed=settings.KeySource.Contains("reviewed",StringComparison.OrdinalIgnoreCase)||settings.KeySource.Contains("known",StringComparison.OrdinalIgnoreCase);
         if(reviewed||!settings.InferKeyChanges){if(settings.Key>=0)foreach(var f in song.Frames){f.Key=settings.Key;f.Minor=settings.Minor;}return;}
-        if(song.Frames.Any(f=>f.Key>=0))return; // Preserve supplied MIDI key changes.
+        if(song.Frames.Any(f=>f.Key>=0))
+        {
+            // Preserve supplied MIDI key changes. A signature names a collection, and many
+            // exporters always write "major": keep the configured tonic when it shares it.
+            if(settings.Key>=0)foreach(var f in song.Frames)
+                if(f.Key>=0&&HarmonyModel.Mod(f.Key+(f.Minor?3:0))==HarmonyModel.Mod(settings.Key+(settings.Minor?3:0))){f.Key=settings.Key;f.Minor=settings.Minor;}
+            return;
+        }
         var changes=Infer(song.Notes,song.EndBeat,settings.Key,settings.Minor);
         foreach(var f in song.Frames){double beat=cycles.BeatAt(f.Time);var change=changes.Last(c=>c.Beat<=beat);f.Key=change.Key;f.Minor=change.Minor;}
         song.KeySource="Offline sustained tonal context; inferred changes require review";

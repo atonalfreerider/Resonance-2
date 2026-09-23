@@ -5,7 +5,10 @@ using System.Linq;
 // Portable offline analysis contract. No inference or pattern discovery in playback.
 [Serializable] public sealed class PreparedPatternSong
 {
-    public int Version=1,TrackCount,LeadVocalTrack=-1;
+    // Version 2 adds named form roles, progression loops and grammar words.
+    public const int CurrentVersion=2;
+    public int Version=CurrentVersion,TrackCount,LeadVocalTrack=-1;
+    public string Style="",FormName="",Summary="";
     public string[] TrackNames=Array.Empty<string>();
     public string MidiSha256,Title,Provenance;
     public double Duration,EndBeat;
@@ -80,6 +83,15 @@ using System.Linq;
         public string ParentPath="Song";
         public int Node;
         public InstrumentLane[] Lanes;
+        // Form analysis (v2): display label ("Verse 2", "A′"), pop/classical role, family letter,
+        // visit number, transposition from the family's first visit, loop count and the
+        // inner-dial cycle (one progression loop, or one phrase of a long loop).
+        public string Label="",Role="",Letter="";
+        public int Visit=1,Transpose,PhraseBars=4,Loops=1,KeyRoot=-1;
+        public bool KeyMinor;
+        public double CycleBeats,Similarity=1;
+        public string DisplayName=>string.IsNullOrEmpty(Label)?Name:Label;
+        public double Cycle=>CycleBeats>0?CycleBeats:ProgressionBeats;
     }
     [Serializable] public sealed class Voice { public int Pitch,Channel,Track;public float Velocity; }
     [Serializable] public sealed class Frame
