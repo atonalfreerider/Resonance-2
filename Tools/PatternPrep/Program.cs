@@ -7,6 +7,7 @@ if(args.Length==2&&args[0]=="--fixture"){SelfTests.Fixture(args[1]);return;}
 if(args.Length==3&&args[0]=="--write-fixture"){SelfTests.WriteFixture(args[1],args[2]);return;}
 if(args.Length>=1&&args[0]=="--sweep"){SelfTests.Sweep(args.Skip(1).ToArray());return;}
 if(args.Length>=1&&args[0]=="--self-test"){KeyContext.SelfTest();KeyAnalysis.SelfTest();SelfTests.Run(args.Contains("--verbose"));return;}
+if(args.Length>=1&&args[0]=="--syllables"){foreach(var w in args.Skip(1)){var parts=LyricEnglish.Syllables(w);var stress=LyricEnglish.Stress(w,parts.Length);Console.WriteLine($"{w}: {string.Join("-",parts)} [{string.Join("",stress)}] rhyme {LyricEnglish.RhymeKey(w,parts,stress)}");}return;}
 if(args.Length>=1&&args[0]=="--verbose"){FormAnalysis.Verbose=true;args=args.Skip(1).ToArray();}
 if(args.Length==0)throw new ArgumentException("PatternPrep score.mid [legacy-authored.json] | --self-test");
 var path=Path.GetFullPath(args[0]);
@@ -84,9 +85,13 @@ InstrumentPatterns.Build(data,cycles,analysis.Grid,settings.Key,settings.Minor);
 DrumCompression.Build(data);
 data.Summary=GrammarWords.Summary(data);
 RegionPhases.Build(data);
+string folder=Path.GetDirectoryName(path);
+Lyrics.Build(data,cycles,midi,Path.Combine(folder,string.IsNullOrWhiteSpace(settings.Lyrics)?"lyrics.txt":settings.Lyrics),Path.Combine(folder,string.IsNullOrWhiteSpace(settings.LyricTiming)?"lyrics.timing.json":settings.LyricTiming),settings.PitchBendRange);
 MelodyStratification.Build(data,cycles.SecondsAt);
 string output=path+".patterns.json",temporary=output+".tmp";File.WriteAllText(temporary,JsonSerializer.Serialize(data,jsonOptions));File.Move(temporary,output,true);
 Console.WriteLine($"{output}: {data.FormName}\n  {data.Summary}\n  lossless reconstruction verified");
+foreach(var part in data.Parts)Console.WriteLine($"  {part.Name}: {part.Grammar} ({part.Bars} bars → {part.Patterns.Length} patterns of {part.FundamentalBars} bars)");
+if(data.Lyrics!=null)Console.WriteLine($"  lyrics: {data.Lyrics.Syllables.Length} syllables, {data.Lyrics.Lines.Length} lines, {data.Lyrics.Stanzas.Length} stanzas · {data.Lyrics.Sync}");
 
 // Bundle folders are staged as ".../bundle" or ".../stems"; prefer the library title.
 static string SongTitle(string midiPath)

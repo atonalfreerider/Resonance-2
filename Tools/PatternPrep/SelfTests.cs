@@ -1,5 +1,5 @@
 // Synthetic fixtures for the offline form pipeline (run: PatternPrep --self-test).
-public static class SelfTests
+public static partial class SelfTests
 {
     static void Check(bool value, string message) { if (!value) throw new Exception("FAIL: " + message); }
 
@@ -52,10 +52,11 @@ public static class SelfTests
     // (keys, bass, lead vocal line, drums), for previewing the pattern wheels.
     public static void WriteFixture(string name, string path)
     {
+        if (name == "lyrics") { WriteLyricFixture(path); return; }
         var (score, bpm) = name switch
         {
             "pop" => (PopScore(), 112), "variation" => (VariationScore().score, 116), "alternating" => (AlternatingScore(), 108), "strain" => (StrainScore(), 96), "ternary" => (TernaryScore(), 88),
-            _ => throw new ArgumentException("fixtures: pop, variation, alternating, strain, ternary")
+            _ => throw new ArgumentException("fixtures: pop, variation, alternating, strain, ternary, lyrics")
         };
         const int ppq = 480;
         var events = new NAudio.Midi.MidiEventCollection(1, ppq);
@@ -112,6 +113,7 @@ public static class SelfTests
         Variations();
         Structure();
         Alternating();
+        LyricChecks();
         Console.WriteLine("PASS: hierarchy carriers, pop verse–chorus roles with transposed final chorus, classical ternary with key areas");
         Console.WriteLine("PASS: pattern compression — family fundamentals, new ending, extra pass, lead-in, transposed return, verse–chorus groups and form grammar");
         Console.WriteLine("PASS: repetition-first structure — pop and varied verse–chorus forms and adjacent classical strains found without reviewed boundaries");

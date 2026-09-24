@@ -10,6 +10,10 @@ public sealed class SongSettings
     public string KeySource="",SectionBoundaries="",SectionSource="";
     public string[] SectionParents=Array.Empty<string>();
     public Dictionary<string,string> TrackAliases=new();
+    // Lyric sheet and audio alignment beside the MIDI (lyrics.txt, lyrics.timing.json by
+    // default), and the vocal's pitch-bend range in semitones for reading vibrato.
+    public string Lyrics="",LyricTiming="";
+    public int PitchBendRange=2;
 }
 
 // Lossless musical reconstruction: quantization chooses template candidates;
