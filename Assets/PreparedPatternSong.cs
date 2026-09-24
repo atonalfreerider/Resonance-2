@@ -10,7 +10,9 @@ using System.Linq;
     // every visit described as passes of that loop with their variations, and the
     // repeated section groups (verse + chorus) that return through the song.
     // Version 4 adds detected key changes and tonal tensions (tonicizations).
-    public const int CurrentVersion=4;
+    // Version 5 adds instrument patterns (each pitched lane's own chord loops, their
+    // repetitions and variations) and a lyric sheet synced to the music, with meter and rhyme.
+    public const int CurrentVersion=5;
     public int Version=CurrentVersion,TrackCount,LeadVocalTrack=-1;
     public string Style="",FormName="",Summary="",FormGrammar="";
     public int SongBars,FundamentalBars;
@@ -63,6 +65,88 @@ using System.Linq;
         public int Id,Visits;
         public string Name="",Short="";
         public int[] Families=Array.Empty<int>();
+    }
+    // Instrument patterns (v5). Each pitched lane is read as the chords it plays; windows of
+    // the song's loop grid (cut shorter where the lane's own chords repeat sooner) that play
+    // the same chords are one pattern, and windows that change one or more chords are its
+    // variations. A run of the same pattern is one play repeated (×n).
+    public InstrumentPart[] Parts=Array.Empty<InstrumentPart>();
+    [Serializable] public sealed class InstrumentPart
+    {
+        public int Track,Channel,Bars,FundamentalBars;
+        public string Name="",Role="",Grammar="";
+        public bool Vocal;
+        public LanePattern[] Patterns=Array.Empty<LanePattern>();
+        public LanePlay[] Plays=Array.Empty<LanePlay>();
+    }
+    // A lane's fundamental: loop-relative chords (the consensus of its plays), in the key of
+    // its first play. Variations counts the distinct chord changes heard against it.
+    [Serializable] public sealed class LanePattern
+    {
+        public int Id,LoopBars,Plays,Variations;
+        public double LoopBeats;
+        public string Letter="";
+        public SongFormAnalysis.ChordStep[] Loop=Array.Empty<SongFormAnalysis.ChordStep>();
+    }
+    // One window of a lane: which pattern it plays (-1: the lane rests), which variation (0 is
+    // the fundamental itself), its transposition, and its place in a run of repeats
+    // (Repeat of Run). Changed holds loop-relative [start,end) beat pairs of changed chords.
+    [Serializable] public sealed class LanePlay
+    {
+        public double Start,End,Offset;
+        public int Pattern=-1,Variation,Transpose,Run=1,Repeat=1;
+        public bool Partial;
+        public double[] Changed=Array.Empty<double>();
+    }
+    public InstrumentPart PartOf(int track,int channel)=>Array.Find(Parts??Array.Empty<InstrumentPart>(),p=>p.Track==track&&p.Channel==channel);
+    // Lyrics (v5): a lyric sheet synced to the music. Sung syllables follow the vocal lane's
+    // notes; spoken (rapped) syllables sit on the drum grid. Every syllable carries its lexical
+    // stress, where it falls in the bar, and how strongly it is delivered.
+    public LyricSheet Lyrics;
+    [Serializable] public sealed class LyricSheet
+    {
+        public string Source="",Sync="";
+        public int Track=-1,Channel=-1;
+        public Syllable[] Syllables=Array.Empty<Syllable>();
+        public LyricLine[] Lines=Array.Empty<LyricLine>();
+        public Stanza[] Stanzas=Array.Empty<Stanza>();
+        public MeterMatch[] Matches=Array.Empty<MeterMatch>();
+    }
+    // Index is the syllable's place in its word. Position is its beat within the bar; Metric is
+    // 2 on the bar's downbeat, 1 on a beat, 0 on an upbeat (the "and"), -1 between. Teeth is how
+    // many eighth-note teeth of the drum rack it is held across. Vibrato depth is in semitones
+    // and rate in hertz, from VibratoStart.
+    [Serializable] public sealed class Syllable
+    {
+        public string Text="",Word="";
+        public int Line,WordIndex,Index,Pitch=-1,Stress,Metric,Teeth=1;
+        public double Start,End,VibratoStart;
+        public float Emphasis,Position,Vibrato,VibratoRate;
+        public bool Spoken,WordStart,WordEnd;
+    }
+    // Stresses is the line's lexical pattern (/ stressed, x unstressed); Beats the delivered
+    // pattern (/ on a beat, x off it). Letter is the end-rhyme scheme letter within the stanza,
+    // and FrontGroup links lines that begin alike (alliteration, a head rhyme or repeated words).
+    [Serializable] public sealed class LyricLine
+    {
+        public int Stanza,First,Count,RhymeGroup=-1,FrontGroup=-1;
+        public double Start,End;
+        public string Text="",Stresses="",Beats="",Meter="",EndRhyme="",FrontRhyme="",Letter="",FrontKind="";
+        public bool Spoken;
+    }
+    [Serializable] public sealed class Stanza
+    {
+        public int FirstLine,Lines,Section=-1;
+        public string Name="",Scheme="",Meter="";
+        public bool Spoken;
+    }
+    // Line A against line B (the same line of two stanzas sung or spoken to the same pattern):
+    // how well their stresses line up on the beat, and what differs.
+    [Serializable] public sealed class MeterMatch
+    {
+        public int A,B;
+        public float Score;
+        public string Note="";
     }
     public string[] TrackNames=Array.Empty<string>();
     public string MidiSha256,Title,Provenance;

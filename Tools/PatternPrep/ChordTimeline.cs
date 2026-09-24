@@ -68,6 +68,44 @@ public static class ChordTimeline
         return grid;
     }
 
+    // One lane's chords on the song's grid: its own pitch classes, with the song's harmony as a
+    // context that is strong under a single line (a bass A under Am is Am, a melody E over C is
+    // C) and faint under chords (a pad holding C through C–Am–F–G stays C). A step where the
+    // lane sounds nothing rests; its release tails colour the chroma but do not make it sound.
+    public static Grid Lane(Grid song, MidiCycleAnalysis cycles, IEnumerable<MidiCycleAnalysis.Hit> notes, int key = -1, bool minor = false)
+    {
+        int n = song.Count;
+        var grid = new Grid { Start = song.Start, End = song.End, Bar = song.Bar, Chroma = Enumerable.Range(0, n).Select(_ => new double[12]).ToArray(), Bass = Enumerable.Repeat(int.MaxValue, n).ToArray(), Weight = new double[n] };
+        var classes = new int[n];
+        foreach (var note in notes)
+        {
+            int pc = HarmonyModel.Mod(note.Pitch - 21);
+            double on = note.Beat, off = note.Beat + note.Length, tail = off + Math.Min(1, Math.Max(.25, note.Length));
+            int i = Array.BinarySearch(grid.End, on); if (i < 0) i = ~i;
+            for (; i < n && grid.Start[i] < tail; i++)
+            {
+                double body = Math.Max(0, Math.Min(grid.End[i], off) - Math.Max(grid.Start[i], on));
+                double decay = Math.Max(0, Math.Min(grid.End[i], tail) - Math.Max(grid.Start[i], off));
+                grid.Chroma[i][pc] += note.Velocity * (body + .5 * decay);
+                if (body <= 0) continue;
+                grid.Weight[i] += note.Velocity * body; classes[i] |= 1 << pc;
+                grid.Bass[i] = Math.Min(grid.Bass[i], note.Pitch);
+            }
+        }
+        for (int i = 0; i < n; i++)
+        {
+            double total = song.Chroma[i].Sum(); if (grid.Weight[i] <= 0 || total <= 0) continue;
+            double context = (System.Numerics.BitOperations.PopCount((uint)classes[i]) <= 2 ? 1.5 : .35) * grid.Weight[i] / total;
+            for (int pc = 0; pc < 12; pc++) grid.Chroma[i][pc] += context * song.Chroma[i][pc];
+        }
+        grid.State = Decode(grid, cycles, key, minor);
+        // A single line (one or two pitch classes in a step) plays the song's chord: its
+        // passing tones do not make chords of their own.
+        for (int i = 0; i < n; i++)
+            if (grid.Weight[i] > 0 && song.State[i] >= 0 && System.Numerics.BitOperations.PopCount((uint)classes[i]) <= 2) grid.State[i] = song.State[i];
+        return grid;
+    }
+
     static readonly int[] MajorScale = { 0, 2, 4, 5, 7, 9, 11 };
     static bool Diatonic(int root, string quality, int key, bool minor)
     {

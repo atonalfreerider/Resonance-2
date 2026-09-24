@@ -80,6 +80,7 @@ foreach(var hit in data.Notes.Concat(data.Disks.SelectMany(d=>d.Hits.Concat(d.Vi
 }
 GrammarWords.Build(data);
 SectionCompression.Build(data,settings);
+InstrumentPatterns.Build(data,cycles,analysis.Grid,settings.Key,settings.Minor);
 DrumCompression.Build(data);
 data.Summary=GrammarWords.Summary(data);
 RegionPhases.Build(data);
