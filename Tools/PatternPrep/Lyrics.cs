@@ -92,7 +92,7 @@ public static class Lyrics
     // and vibrato spans found in the vocal's pitch track.
     public sealed class Timing
     {
-        public sealed class Item { public string text { get; set; } = ""; public double start { get; set; } public double end { get; set; } public float confidence { get; set; } = 1; }
+        public sealed class Item { public string text { get; set; } = ""; public double start { get; set; } public double end { get; set; } public float confidence { get; set; } = 1; public List<double> syllables { get; set; } = new(); }
         public sealed class Wobble { public double start { get; set; } public double end { get; set; } public float rate { get; set; } public float depth { get; set; } }
         public List<Item> words { get; set; } = new();
         public List<Wobble> vibrato { get; set; } = new();
@@ -153,7 +153,21 @@ public static class Lyrics
         if (timingPath != null && File.Exists(timingPath))
         {
             timing = JsonSerializer.Deserialize<Timing>(File.ReadAllText(timingPath));
-            if (timing != null && flat.Any(f => double.IsNaN(f.Start)) && SyncWords(flat, timing, cycles)) syncs.Add("audio alignment" + (timing.method.Length > 0 ? $" ({timing.method})" : ""));
+            var untimed = flat.Where(f => double.IsNaN(f.Start)).ToHashSet();
+            if (timing != null && untimed.Count > 0 && SyncWords(flat, timing, cycles))
+            {
+                syncs.Add("audio alignment" + (timing.method.Length > 0 ? $" ({timing.method})" : ""));
+                // Where the vocal has notes they are the better clock: a sung syllable the audio
+                // placed within a third of a beat of a note onset takes that onset (and its note).
+                var onsets = notes.Select(n => n.Beat).Distinct().OrderBy(b => b).ToArray();
+                foreach (var f in flat.Where(f => untimed.Contains(f) && !f.Spoken && !double.IsNaN(f.Start)))
+                {
+                    int k = Array.BinarySearch(onsets, f.Start); if (k < 0) k = ~k;
+                    double best = double.NaN;
+                    foreach (int c in new[] { k - 1, k }) if (c >= 0 && c < onsets.Length && Math.Abs(onsets[c] - f.Start) <= 1 / 3.0 && (double.IsNaN(best) || Math.Abs(onsets[c] - f.Start) < Math.Abs(best - f.Start))) best = onsets[c];
+                    if (!double.IsNaN(best)) { f.Start = best; f.End = double.NaN; }
+                }
+            }
         }
         // 3. Vocal notes for sung syllables still untimed.
         if (flat.Any(f => !f.Spoken && double.IsNaN(f.Start)) && notes.Length > 0 && SyncNotes(flat.Where(f => !f.Spoken && double.IsNaN(f.Start)).ToList(), notes)) syncs.Add("vocal notes");
@@ -256,8 +270,15 @@ public static class Lyrics
                 if (double.IsNaN(word[0].Start) && Distance(Letters(word[0].Source.Text), Letters(item.text)) < .6)
                 {
                     double start = cycles.BeatAt(item.start), end = cycles.BeatAt(Math.Max(item.end, item.start + .05));
-                    double total = word.Sum(f => Math.Max(1, f.Text.Length)), at = start;
-                    foreach (var f in word) { double share = (end - start) * Math.Max(1, f.Text.Length) / total; f.Start = at; f.End = at + share; at += share; }
+                    if (item.syllables != null && item.syllables.Count == word.Count)
+                        // The aligner timed each syllable: each lasts until the next, the last until the word ends.
+                        for (int k = 0; k < word.Count; k++) { word[k].Start = cycles.BeatAt(item.syllables[k]); word[k].End = k + 1 < word.Count ? cycles.BeatAt(item.syllables[k + 1]) : Math.Max(end, word[k].Start + 1 / 16.0); }
+                    else
+                    {
+                        // Otherwise share the word's span among its syllables by their letters.
+                        double total = word.Sum(f => Math.Max(1, f.Text.Length)), at = start;
+                        foreach (var f in word) { double share = (end - start) * Math.Max(1, f.Text.Length) / total; f.Start = at; f.End = at + share; at += share; }
+                    }
                     matched++;
                 }
                 i--; j--;
