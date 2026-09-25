@@ -142,7 +142,7 @@ public sealed class LyricWheel
             if(now)
             {
                 float age=(float)(midi.Cycles.SecondsAt(beat)-midi.Cycles.SecondsAt(s.Start));
-                float glow=(.06f+.16f*s.Emphasis*Mathf.Exp(-age*2))*(midi.IsPlaying?1:.6f);
+                float glow=(.06f+.16f*s.Emphasis*Mathf.Exp(-age*6))*(midi.IsPlaying?1:.6f);
                 p.fillColor=Color.white;p.BeginPath();p.Arc(at,3.5f,Angle.Degrees(0),Angle.Degrees(360));p.Fill();
                 bloom.Disk(at,2.5f+2.5f*s.Emphasis,Color.white,glow);
                 bloom.Line(middle+new Vector2(-s.Text.Length*Glyph(size)*.5f,size*.7f),middle+new Vector2(s.Text.Length*Glyph(size)*.5f,size*.7f),2,Color.white,glow);
