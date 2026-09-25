@@ -149,17 +149,31 @@ public static class Lyrics
 
         // 1. Lyric events.
         if (events.Count > 0 && SyncEvents(flat, events)) syncs.Add("MIDI lyric events");
-        // 2. The vocal's notes for sung syllables still untimed: MIDI vocal notes aligned to the
+        Timing timing = timingPath != null && File.Exists(timingPath) ? JsonSerializer.Deserialize<Timing>(File.ReadAllText(timingPath)) : null;
+        // 2. A phonetic forced alignment of the audio is reliable enough to say which note each
+        //    sung syllable takes; the vocal's notes then give the exact time.
+        if (timing != null && timing.method.Contains("forced", StringComparison.OrdinalIgnoreCase) && flat.Any(f => double.IsNaN(f.Start)))
+        {
+            var sungUntimed = flat.Where(f => !f.Spoken && double.IsNaN(f.Start)).ToList();
+            if (SyncWords(flat, timing, cycles))
+            {
+                syncs.Add("forced alignment" + (notes.Length > 0 && sungUntimed.Count > 0 ? " guiding the vocal notes" : ""));
+                var guided = sungUntimed.Where(f => !double.IsNaN(f.Start)).ToList();
+                if (notes.Length > 0 && guided.Count > 0)
+                {
+                    var prior = guided.Select(f => (f.Start, f.End)).ToArray();
+                    foreach (var f in guided) { f.Start = double.NaN; f.End = double.NaN; }
+                    SyncNotes(guided, notes, prior.Select(x => x.Start).ToArray());
+                    for (int i = 0; i < guided.Count; i++) if (double.IsNaN(guided[i].Start)) (guided[i].Start, guided[i].End) = prior[i];
+                }
+            }
+        }
+        // 3. The vocal's notes for sung syllables still untimed: MIDI vocal notes aligned to the
         //    recording are exact, and laying the syllables on them by phrase and breath is more
         //    reliable than syllable onsets heard in a stem.
         if (flat.Any(f => !f.Spoken && double.IsNaN(f.Start)) && notes.Length > 0 && SyncNotes(flat.Where(f => !f.Spoken && double.IsNaN(f.Start)).ToList(), notes)) syncs.Add("vocal notes");
-        // 3. Audio alignment for what remains: spoken lines, or sung lines with no vocal notes.
-        Timing timing = null;
-        if (timingPath != null && File.Exists(timingPath))
-        {
-            timing = JsonSerializer.Deserialize<Timing>(File.ReadAllText(timingPath));
-            if (timing != null && flat.Any(f => double.IsNaN(f.Start)) && SyncWords(flat, timing, cycles)) syncs.Add("audio alignment" + (timing.method.Length > 0 ? $" ({timing.method})" : ""));
-        }
+        // 4. Audio alignment for what remains: spoken lines, or sung lines with no vocal notes.
+        if (timing != null && flat.Any(f => double.IsNaN(f.Start)) && SyncWords(flat, timing, cycles)) syncs.Add("audio alignment" + (timing.method.Length > 0 ? $" ({timing.method})" : ""));
         // Every sung syllable takes its note's pitch, length and loudness; a held syllable runs
         // through the notes that follow it until the next syllable.
         var timed = flat.Where(f => !double.IsNaN(f.Start)).OrderBy(f => f.Start).ToList();
@@ -280,7 +294,8 @@ public static class Lyrics
     // Sung syllables on the vocal notes, in order. A syllable may hold over several notes
     // (cheaper on a stressed or marked syllable), a note may go unsung (costly), and lines
     // prefer to end where the melody breathes rather than breathe inside a line.
-    static bool SyncNotes(List<Flat> syllables, MidiCycleAnalysis.Hit[] all)
+    // With a prior (a syllable's time from a forced alignment, in beats), a note far from it costs more.
+    static bool SyncNotes(List<Flat> syllables, MidiCycleAnalysis.Hit[] all, double[] prior = null)
     {
         // Chords in the vocal lane: sing the top note.
         var notes = all.GroupBy(n => Math.Round(n.Beat * 48)).Select(g => g.OrderByDescending(n => n.Pitch).First()).OrderBy(n => n.Beat).ToArray();
@@ -303,6 +318,7 @@ public static class Lyrics
                 {
                     double before = cost[i - 1, j - k]; if (double.IsInfinity(before)) continue;
                     double c = before + (k - 1) * (f.Hold ? .1 : stressed ? .7 : 1.3);
+                    if (prior != null && !double.IsNaN(prior[i - 1])) c += 1.5 * Math.Min(4, Math.Abs(notes[j - k].Beat - prior[i - 1]));
                     for (int x = j - k; x < j - 1; x++) if (Breath(x)) c += 2;
                     if (lineEnd && !Breath(j - 1)) c += 1.2;
                     if (!lineEnd && Breath(j - 1)) c += 1.6;
@@ -487,6 +503,7 @@ public static class Lyrics
             return new PreparedPatternSong.Stanza { Name = st.Name, Spoken = st.Spoken, FirstLine = lines.IndexOf(own[0]), Lines = own.Count, Section = section, Meter = meter, Scheme = string.Concat(own.Select(l => l.Letter.Length > 0 ? l.Letter : "·")) };
         }).ToArray();
         sheet.Matches = Matchups(song, sheet).ToArray();
+        sheet.Links = Links(stanzas, sheet).GroupBy(l => (l.A, l.B, l.Kind)).Select(g => g.First()).ToArray();
     }
 
     // Metrical weight: 3 on the bar's downbeat, 2 mid-bar, 1 on a beat, 0 on an upbeat, -1 between.
@@ -556,6 +573,71 @@ public static class Lyrics
                 if (notes.Count == 0) notes.Add(beats >= .999 && stresses >= .999 ? "same meter, same beats" : beats >= .999 ? "same beats" + stressNote : "same meter, beats shift");
                 yield return new PreparedPatternSong.MeterMatch { A = sa.FirstLine + i, B = sb.FirstLine + i, Score = (float)(.6 * beats + .4 * stresses), Note = string.Join(" · ", notes) };
             }
+        }
+    }
+    // Semantic links between words: end rhymes (each line end to the next in its rhyme group),
+    // internal rhymes (a word inside a line rhyming with its own line's end or a neighbouring
+    // line's end, or two words inside one line), front rhymes (openings of lines in one front
+    // group) and repeats (a line heard again anywhere later, linked to its last hearing).
+    static IEnumerable<PreparedPatternSong.RhymeLink> Links(List<SheetStanza> stanzas, PreparedPatternSong.LyricSheet sheet)
+    {
+        var lines = sheet.Lines; var syl = sheet.Syllables;
+        List<(int first, string text, string key, bool weak)> Words(PreparedPatternSong.LyricLine line)
+        {
+            var list = new List<(int, string, string, bool)>();
+            for (int i = line.First; i < line.First + line.Count;)
+            {
+                int j = i; while (j + 1 < line.First + line.Count && syl[j + 1].WordIndex == syl[i].WordIndex) j++;
+                var parts = Enumerable.Range(i, j - i + 1).Select(k => syl[k].Text.ToLowerInvariant()).ToArray();
+                var stress = Enumerable.Range(i, j - i + 1).Select(k => syl[k].Stress).ToArray();
+                string word = LyricEnglish.Clean(syl[i].Word);
+                list.Add((i, word, LyricEnglish.RhymeKey(syl[i].Word, parts, stress).perfect, parts.Length == 1 && LyricEnglish.IsWeak(word)));
+                i = j + 1;
+            }
+            return list;
+        }
+        var words = lines.Select(l => l.Count > 0 ? Words(l) : new List<(int first, string text, string key, bool weak)>()).ToArray();
+        for (int s = 0; s < sheet.Stanzas.Length; s++)
+        {
+            var st = sheet.Stanzas[s]; var own = Enumerable.Range(st.FirstLine, st.Lines).Where(i => lines[i].Count > 0).ToList();
+            foreach (var group in own.Where(i => lines[i].RhymeGroup >= 0).GroupBy(i => lines[i].RhymeGroup))
+            {
+                var members = group.ToList();
+                for (int k = 0; k + 1 < members.Count; k++)
+                    yield return new PreparedPatternSong.RhymeLink { A = words[members[k]][^1].first, B = words[members[k + 1]][^1].first, Kind = "end", Key = lines[members[k]].EndRhyme };
+            }
+            foreach (var group in own.Where(i => lines[i].FrontGroup >= 0).GroupBy(i => lines[i].FrontGroup))
+            {
+                var members = group.ToList();
+                for (int k = 0; k + 1 < members.Count; k++)
+                    yield return new PreparedPatternSong.RhymeLink { A = words[members[k]][0].first, B = words[members[k + 1]][0].first, Kind = "front", Key = lines[members[k]].FrontRhyme };
+            }
+            for (int n = 0; n < own.Count; n++)
+            {
+                var line = words[own[n]]; var inner = line.Take(line.Count - 1).Where(w => !w.weak && w.key.Length >= 2).ToList();
+                // Inside the line: two words that rhyme with each other.
+                for (int a = 0; a < inner.Count; a++)
+                    for (int b = a + 1; b < inner.Count; b++)
+                        if (inner[a].key == inner[b].key && inner[a].text != inner[b].text)
+                            yield return new PreparedPatternSong.RhymeLink { A = inner[a].first, B = inner[b].first, Kind = "internal", Key = inner[a].key };
+                // A word rhyming with this line's end or a neighbouring line's end.
+                foreach (int m in new[] { n - 1, n, n + 1 })
+                {
+                    if (m < 0 || m >= own.Count) continue;
+                    var end = words[own[m]][^1];
+                    foreach (var w in inner.Where(w => w.key == end.key && w.text != end.text))
+                        yield return new PreparedPatternSong.RhymeLink { A = Math.Min(w.first, end.first), B = Math.Max(w.first, end.first), Kind = "internal", Key = end.key };
+                }
+            }
+        }
+        // Repeats: the same words heard again, linked to their last hearing.
+        string Norm(PreparedPatternSong.LyricLine l) => new string(l.Text.ToLowerInvariant().Where(char.IsLetter).ToArray());
+        var last = new Dictionary<string, int>();
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Count == 0) continue; string key = Norm(lines[i]);
+            if (key.Length > 6 && last.TryGetValue(key, out int before)) yield return new PreparedPatternSong.RhymeLink { A = lines[before].First, B = lines[i].First, Kind = "repeat", Key = lines[i].Text };
+            last[key] = i;
         }
     }
     // Global alignment score of two stress strings, 0..1.

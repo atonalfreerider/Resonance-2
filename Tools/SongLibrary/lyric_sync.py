@@ -76,7 +76,7 @@ def read_sheet(path: Path):
                 continue
             parts = [p.strip('_') for p in clean.split('-') if p.strip('_')] if '-' in clean else None
             text = ''.join(parts) if parts else clean.strip('_')
-            words.append({'text': text, 'syllables': len(parts) if parts else vowel_groups(text)})
+            words.append({'text': text, 'syllables': len(parts) if parts else vowel_groups(text), 'parts': parts or []})
         if words:
             current['lines'].append(words)
     return [s for s in stanzas if s['lines']]
@@ -294,6 +294,11 @@ def align_onsets(stanzas, vocal: np.ndarray, beats: list[float], semis: np.ndarr
 
 # ---------- word alignment with torchaudio's MMS forced aligner ----------
 def align_mms(stanzas, vocal_path: Path, download: bool):
+    """Phonetic forced alignment (wav2vec2 MMS, CTC) of the sheet's words to the vocal.
+    Emissions are computed in 30 s chunks with overlap, so a whole song fits in memory, then
+    the transcript is aligned against the joined emissions in one pass. A wildcard token
+    between lines absorbs sung sounds the sheet does not write (ad-libs, oohs). Each word's
+    character spans give its syllables' times."""
     import torch
     import torchaudio
     os.environ['TORCH_HOME'] = str(MODELS)
@@ -302,22 +307,54 @@ def align_mms(stanzas, vocal_path: Path, download: bool):
     if not weights.exists() and not download:
         raise RuntimeError(f'MMS aligner weights not cached ({weights}); pass --download-aligner to fetch them (~1.2 GB) or use --aligner onsets')
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = bundle.get_model(with_star=False).to(device)
+    model = bundle.get_model(with_star=True).to(device)
     tokenizer, aligner = bundle.get_tokenizer(), bundle.get_aligner()
     waveform, rate = torchaudio.load(str(vocal_path))
     waveform = torchaudio.functional.resample(waveform.mean(0, keepdim=True), rate, bundle.sample_rate)
-    transcript = [re.sub(r"[^a-z']", '', w['text'].lower()) for s in stanzas for line in s['lines'] for w in line]
-    keep = [i for i, w in enumerate(transcript) if w]
+    total, hop = waveform.size(1), 320                       # 20 ms emission frames
+    chunk, pad = 30 * bundle.sample_rate, int(1.5 * bundle.sample_rate)
+    pieces = []
     with torch.inference_mode():
-        emission, _ = model(waveform.to(device))
-        spans = aligner(emission[0], tokenizer([transcript[i] for i in keep]))
-    ratio = waveform.size(1) / emission.size(1) / bundle.sample_rate
-    texts = [w['text'] for s in stanzas for line in s['lines'] for w in line]
+        for start in range(0, total, chunk):
+            a, b = max(0, start - pad), min(total, start + chunk + pad)
+            emission, _ = model(waveform[:, a:b].to(device))
+            k0 = round((start - a) / hop); k1 = min(emission.size(1), k0 + round(min(chunk, total - start) / hop))
+            pieces.append(emission[0, k0:k1].cpu())
+        emission = torch.cat(pieces)
+        # The transcript: every sheet word, a wildcard between lines.
+        entries = []
+        for s_, stanza in enumerate(stanzas):
+            for line in stanza['lines']:
+                entries.append(None)
+                for word in line:
+                    entries.append(word)
+        tokens, index = [], []
+        for e in entries:
+            if e is None:
+                tokens.append('*'); index.append(None); continue
+            clean = re.sub(r"[^a-z']", '', e['text'].lower())
+            if clean:
+                tokens.append(clean); index.append(e)
+        spans = aligner(emission, tokenizer(tokens))
+    ratio = total / emission.size(0) / bundle.sample_rate
     words = []
-    for i, span in zip(keep, spans):
-        words.append({'text': texts[i], 'start': round(span[0].start * ratio, 4), 'end': round(span[-1].end * ratio, 4),
-                      'confidence': round(float(np.mean([t.score for t in span])), 3)})
-    return words, 'MMS forced alignment (torchaudio)'
+    for word, span in zip(index, spans):
+        if word is None:
+            continue
+        start, end = span[0].start * ratio, span[-1].end * ratio
+        # Syllables start at their first letter's span: the sheet's parts, else an even share of letters.
+        letters = [t for t in span]
+        count = word['syllables']
+        if word['parts']:
+            cuts, at = [], 0
+            for part in word['parts']:
+                cuts.append(min(len(letters) - 1, at)); at += len(re.sub(r"[^a-z']", '', part.lower()))
+        else:
+            cuts = [min(len(letters) - 1, round(len(letters) * k / count)) for k in range(count)]
+        words.append({'text': word['text'], 'start': round(start, 4), 'end': round(end, 4),
+                      'confidence': round(float(np.mean([t.score for t in span])), 3),
+                      'syllables': [round(letters[c].start * ratio, 4) for c in cuts] if len(cuts) == count else []})
+    return words, 'MMS forced alignment (torchaudio, wav2vec2)'
 
 
 # ---------- vibrato ----------

@@ -111,6 +111,7 @@ using System.Linq;
         public LyricLine[] Lines=Array.Empty<LyricLine>();
         public Stanza[] Stanzas=Array.Empty<Stanza>();
         public MeterMatch[] Matches=Array.Empty<MeterMatch>();
+        public RhymeLink[] Links=Array.Empty<RhymeLink>();
     }
     // Index is the syllable's place in its word. Position is its beat within the bar; Metric is
     // 2 on the bar's downbeat, 1 on a beat, 0 on an upbeat (the "and"), -1 between. Teeth is how
@@ -139,6 +140,14 @@ using System.Linq;
         public int FirstLine,Lines,Section=-1;
         public string Name="",Scheme="",Meter="";
         public bool Spoken;
+    }
+    // The lyric's semantic structure as links between words (A, B: the first syllable of each):
+    // "end" rhymes between line ends, "internal" rhymes inside or across neighbouring lines,
+    // "front" rhymes between line openings, and "repeat" for a line heard again (a refrain).
+    [Serializable] public sealed class RhymeLink
+    {
+        public int A,B;
+        public string Kind="",Key="";
     }
     // Line A against line B (the same line of two stanzas sung or spoken to the same pattern):
     // how well their stresses line up on the beat, and what differs.

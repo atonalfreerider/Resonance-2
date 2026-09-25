@@ -62,6 +62,12 @@ public static partial class SelfTests
         Check(day.Spoken && day.Teeth >= 6 && day.Metric == 2 && shall.Metric == 0, $"the sonnet's line-end stress is held over {day.Teeth} teeth from a downbeat; its pickup is an upbeat");
         var by = lyrics.Syllables.Where(x => x.Line == stanza["Rap 1"].FirstLine).ToArray();
         Check(new string(by.Select(x => x.Metric >= 1 ? '/' : 'x').ToArray()) == "/x/x/x/x" && by[2].Emphasis > by[3].Emphasis, "trochees: stresses on the beats, unstressed on the upbeats, emphasis follows");
+        // The lyric graph's links, word to word (each word by its first syllable).
+        var links = lyrics.Links;
+        int LastWord(int line) { var l = lyrics.Lines[line]; int i = l.First + l.Count - 1; while (i > l.First && !lyrics.Syllables[i].WordStart) i--; return i; }
+        Check(links.Any(l => l.Kind == "end" && l.A == LastWord(0) && l.B == LastWord(1)) && links.Any(l => l.Kind == "front" && l.A == hiawatha[0].First && l.B == hiawatha[1].First)
+            && links.Any(l => l.Kind == "repeat" && l.A == lyrics.Lines[0].First && l.B == lyrics.Lines[4].First),
+            $"rhyme links: star–are, By the / By the, the refrain heard again ({links.Count(l => l.Kind == "end")} end, {links.Count(l => l.Kind == "front")} front, {links.Count(l => l.Kind == "internal")} internal, {links.Count(l => l.Kind == "repeat")} repeat)");
 
         // Without lyric events: sung syllables fall on the vocal's notes in order, spoken ones
         // are placed on the beat grid.
@@ -71,7 +77,7 @@ public static partial class SelfTests
         Check(fromNotes.Sync == "vocal notes + estimated spoken placement" && fromNotes.Track == 3, "without events: " + fromNotes.Sync);
         var sung = lyrics.Syllables.Where(x => !x.Spoken).ToArray(); var guessed = fromNotes.Syllables.Where(x => !x.Spoken).ToArray();
         Check(sung.Length == guessed.Length && sung.Zip(guessed).All(p => Math.Abs(p.First.Start - p.Second.Start) < 1e-6 && p.First.Pitch == p.Second.Pitch), "every sung syllable lands on the same note as with events");
-        Console.WriteLine("PASS: lyrics — syllables, rhyme keys and meter; events and note-only sync; trochaic and iambic stanzas, end and front rhyme, matchups, vibrato and held syllables");
+        Console.WriteLine("PASS: lyrics — syllables, rhyme keys and meter; events and note-only sync; trochaic and iambic stanzas, end and front rhyme, rhyme links, matchups, vibrato and held syllables");
         Console.WriteLine("PASS: instrument patterns — per-lane chords, runs, variations (a changed bar, a varied pass) and lane grammars");
     }
 }
