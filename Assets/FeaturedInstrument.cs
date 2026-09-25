@@ -66,6 +66,7 @@ public sealed class FeaturedInstrument : MonoBehaviour
     public void Select(int track,int channel)
     {
         if(!choices.Contains((track,channel)))return;Track=track;Channel=channel;ClearHistory();lastPosition=-1;BuildVoices();
+        int index=Array.IndexOf(choices,(track,channel));if(selector!=null&&index>=0&&index<selector.choices.Count)selector.SetValueWithoutNotify(selector.choices[index]);
         if(source!=null){string pref="Resonance.Featured."+source.MidiSha256;PlayerPrefs.SetInt(pref+".track",track);PlayerPrefs.SetInt(pref+".channel",channel);}
     }
     void BuildVoices()

@@ -10,8 +10,8 @@ using UnityEngine.UIElements;
 
 // Lyric mode and instrument changers on a generated song of public-domain words and tunes
 // (Taylor's "The Star", Longfellow's Hiawatha, Shakespeare's Sonnet 18): PatternPrep writes
-// and prepares it with its lyric sheet, then Play Mode walks the changers, the vocal wheel,
-// the drum rack and the rhyme board through their moments.
+// and prepares it with its lyric sheet, then Play Mode walks the changers (and a click on one),
+// the vocal wheel, the reader on the drum wheel and the lyric graph through their moments.
 public static class LyricModeValidation
 {
     const string Folder="Temp/LyricMode",Score=Folder+"/lyrics-song.mid",Checks="Temp/ResonanceChecks";
@@ -51,52 +51,64 @@ public static class LyricModeValidation
             Check(keys.token=="C′"&&keys.repeat==3&&keys.run==3,"Rap 2's last pass: the keys' rap loop on its third repeat of three, varied (C′ 3/3)");
             voice=deck.Changers.Showing.First(s=>s.name=="Lead Vocal");
             Check(!voice.top&&voice.token=="·","The vocal rests during the rap: no disc on top of its stack");
-            await At(data.Sections[1].Start+6,300,true);await Shot("instrument-changers");
+            // A click on a changer makes its lane the highlighted instrument.
+            var feature=main.GetComponent<FeaturedInstrument>();var before=(feature.Track,feature.Channel);
+            await At(data.Sections[1].Start+6,300,true);
+            int keysCell=deck.Changers.Cells.FindIndex(c=>c.name=="Keys");var pick=root.Q<VisualElement>("changer-select-"+keysCell);
+            Check(deck.Changers.Cells.Count==3&&keysCell>=0&&pick!=null&&pick.resolvedStyle.display==DisplayStyle.Flex&&pick.worldBound.width>20&&pick.worldBound.height>40,$"Each changer has a click target over it (Keys: {pick?.worldBound.size})");
+            using(var down=PointerDownEvent.GetPooled(new Event{type=EventType.MouseDown,button=0,mousePosition=pick.worldBound.center})){down.target=pick;pick.SendEvent(down);}
+            await Task.Delay(300);
+            var keysPart=data.Parts.First(x=>x.Name=="Keys");
+            Check(feature.Matches(keysPart.Track,keysPart.Channel)&&deck.Changers.FeaturedTrack==keysPart.Track,"Clicking the Keys changer makes the keys the highlighted instrument, ringed in white");
+            await Shot("instrument-changers");
+            feature.Select(before.Item1,before.Item2);
 
-            // Lyric mode: the panel turns to the vocal wheel and rhyme board, the drum wheel grows its rack.
+            // Lyric mode: the reader and the drum wheel take most of the screen; the lyric graph and
+            // a small vocal wheel sit in the panel below.
             views.SetView(VisualizationViews.View.Lyrics);await Task.Delay(1800);
-            Check(deck.LyricLayout&&rack.Shown,"Lyric mode shows the vocal wheel, the rhyme board and the drum rack");
+            Check(deck.LyricLayout&&rack.Shown,"Lyric mode shows the reader on the drum wheel, the lyric graph and the vocal wheel");
             var overlay=deck.Overlay.worldBound;var screen=root.worldBound;var view=Camera.main.rect;
-            Check(view.yMin>.3f&&overlay.yMin/screen.height>=1-view.yMin-.02f,"The drum rack's strip sits above the lyric panel without overlap");
+            Check(view.yMin>.28f&&view.yMin<.46f&&overlay.yMin/screen.height>=1-view.yMin-.02f,$"The reader's strip takes {1-view.yMin:P0} of the height, above the lyric panel without overlap");
+            Check(deck.Graph.Columns==lyrics.Stanzas.Length&&deck.Graph.LinkCount>=20,$"The lyric graph lays out {deck.Graph.Columns} stanzas and {deck.Graph.LinkCount} rhyme links ({lyrics.Links.Length} in the sheet, repeats marked as refrains)");
 
-            // Sung: the held "star" is lit on the vocal wheel, with vibrato.
+            // Sung: the held "star" is lit on the vocal wheel and in the graph, with its rhyme links glowing.
             var star=lyrics.Syllables.First(s=>s.Line==0&&s.Text=="star");
             await At(star.VibratoStart+.3,500,true);
             Check(deck.Lyrics.Sung==star&&star.Vibrato>.2f,$"The vocal wheel lights the sung syllable \"{deck.Lyrics.Sung?.Text}\" (vibrato {star.Vibrato:0.00} st at {star.VibratoRate:0.0} Hz)");
-            Check(deck.Lyrics.SyllablesShown>=6,$"{deck.Lyrics.SyllablesShown} upright syllables sit on the melody curve");
-            Check(deck.Lyrics.BoardLine==0&&deck.Lyrics.BoardRows==6,"The word graph shows Verse 1, its first line current");
+            Check(deck.Graph.Stanza=="VERSE 1"&&deck.Graph.LitWord.Contains("star",StringComparison.OrdinalIgnoreCase)&&deck.Graph.LitLinks>0,$"The lyric graph lights \"{deck.Graph.LitWord}\" in Verse 1 with {deck.Graph.LitLinks} links of its line glowing");
             await Shot("lyric-sung");
+            await At(star.Start+1,150);
+            Check(rack.ReaderSyllable==star&&rack.Holding,"The reader holds \"star\" on the centerline, its hold bar running out");
+            // The bloom: white on landing, resolved into the chord's colour 0.8 s later.
+            double starAt=midi.Cycles.SecondsAt(star.Start);
+            midi.Seek(midi.AudioTime(starAt+.02));midi.Pause();await Task.Delay(150);
+            var flash=rack.ReaderColor;var chord=rack.ChordColor;
+            midi.Seek(midi.AudioTime(starAt+.8));midi.Pause();await Task.Delay(150);
+            var settled=rack.ReaderColor;chord=rack.ChordColor;
+            Vector3 Hue(Color c){var v=new Vector3(c.r,c.g,c.b);return v/Mathf.Max(1e-4f,Mathf.Max(v.x,Mathf.Max(v.y,v.z)));}
+            Check(flash.maxColorComponent>chord.maxColorComponent*2&&Vector3.Distance(Hue(settled),Hue(chord))<.08f&&settled.maxColorComponent<chord.maxColorComponent*1.25f,$"The syllable lands in a white bloom ({flash.maxColorComponent:0.0}x) that resolves to the chord's colour ({settled.maxColorComponent:0.00} vs {chord.maxColorComponent:0.00})");
 
-            // Spoken trochees: a stressed downbeat lands hard in its well on the beat and stays low;
-            // the upbeat after it is bumped over the saw. The saw's cliffs are the drum hits.
+            // Spoken trochees: the stressed downbeat "Stood" comes down the lane above and is shoved
+            // down onto the centerline exactly on its beat; the upbeat "the" comes up from below.
             var stood=lyrics.Syllables.First(s=>s.Text=="Stood");var the=lyrics.Syllables.First(s=>s.Spoken&&s.Start>stood.Start);
             var drumBeats=data.Notes.Where(n=>n.Channel==10).Select(n=>n.Beat).ToArray();
-            await At(stood.Start-.5,60,true);
-            var waiting=rack.Placed.FirstOrDefault(p=>p.syllable==stood);
-            Check(waiting.syllable!=null&&waiting.state=="waiting"&&waiting.lift>DrumLyricRack.Crest*.5f,"Before its beat, \"Stood\" waits on the crest");
+            await At(stood.Start-1,60,true);
+            Check(rack.LaneOf(stood)==1&&rack.LaneOf(the)==-1,"Before its beat, \"Stood\" rides the downbeat lane above the centerline and \"the\" the upbeat lane below");
             Check(rack.VisibleTeeth.Count>4&&rack.VisibleTeeth.All(t=>drumBeats.Any(b=>Math.Abs(b-t)<1e-3))&&rack.VisibleTeeth.Any(t=>Math.Abs(t-stood.Start)<1e-3),$"Every cliff of the saw is a drum hit, one under \"Stood\" ({rack.VisibleTeeth.Count} on the rack)");
             double onsetMs=(midi.Cycles.SecondsAt(stood.Start)-midi.ScorePosition)*1000;
             await Task.Delay(Mathf.Max(0,Mathf.RoundToInt((float)onsetMs))+25);
-            var landed=rack.Placed.First(p=>p.syllable==stood);
-            Check(landed.state=="in well"&&Mathf.Abs(landed.lift-DrumLyricRack.TextLift)<.01f,$"Just after its beat \"Stood\" has already landed low in its well (lift {landed.lift:0.00})");
-            await Task.Delay(Mathf.RoundToInt((float)(midi.Cycles.SecondsAt(the.Start)-midi.ScorePosition)*1000)+60);
-            var dropped=rack.Placed.First(p=>p.syllable==stood);var bumped=rack.Placed.First(p=>p.syllable==the);
-            Check(dropped.state=="in well"&&Mathf.Abs(dropped.lift-DrumLyricRack.TextLift)<.01f,$"\"Stood\" stays low, no bounce (lift {dropped.lift:0.00})");
-            Check(bumped.state=="bumped"&&bumped.lift>dropped.lift+.05f,$"The upbeat \"the\" is bumped up over the saw (lift {bumped.lift:0.00})");
-            Check(rack.Caption.Contains("Stood")&&rack.Caption.Contains("wig"),"The spoken line is written above the rack");
-            var rap1=lyrics.Stanzas.First(s=>s.Name=="Rap 1");
-            Check(deck.Lyrics.BoardRows==8&&lyrics.Lines[deck.Lyrics.BoardLine].Stanza==Array.IndexOf(lyrics.Stanzas,rap1),"The word graph follows into Rap 1 (8 trochaic lines)");
+            Check(rack.ReaderSyllable==stood&&rack.ReaderFrom==1&&Mathf.Abs(rack.ReaderOffset)<.005f&&Mathf.Abs(rack.ReaderOrpX)<.01f,$"Just after its beat \"Stood\" has been shoved down onto the centerline, no overshoot (offset {rack.ReaderOffset:0.000}), its recognition letter on the reticle (x {rack.ReaderOrpX:0.000})");
+            await Task.Delay(Mathf.RoundToInt((float)(midi.Cycles.SecondsAt(the.Start)-midi.ScorePosition)*1000)+40);
+            Check(rack.ReaderSyllable==the&&rack.ReaderFrom==-1&&Mathf.Abs(rack.ReaderOffset)<.005f,$"The upbeat \"the\" is shoved up onto the centerline from below (offset {rack.ReaderOffset:0.000})");
+            Check(rack.Caption.Contains("Stood")&&rack.Caption.Contains("wig"),"The spoken line is written above the reader");
+            Check(deck.Graph.Stanza=="RAP 1"&&deck.Graph.LitWord.Length>0,$"The lyric graph follows into Rap 1, lighting \"{deck.Graph.LitWord}\"");
             await Task.Delay(700);await Shot("lyric-rap");
 
-            // Pentameter: the held line-end "day" floats in an arc over the teeth, at the comb, then dives.
+            // Pentameter: the held line-end "day" stays on the centerline with its hold bar.
             var day=lyrics.Syllables.First(s=>s.Text=="day");
             await At(day.Start+1.2,200,true);
-            var floating=rack.Placed.First(p=>p.syllable==day);
-            Check(floating.state=="floating"&&floating.lift>DrumLyricRack.Crest+.2f&&Mathf.Abs(floating.x)<.6f,$"\"day\", held over {day.Teeth} teeth, floats above the saw at the comb (x {floating.x:0.00}, lift {floating.lift:0.00})");
+            Check(rack.ReaderSyllable==day&&rack.Holding&&Mathf.Abs(rack.ReaderOffset)<.03f,$"\"day\", held over {day.Teeth} teeth, stays on the centerline with its hold bar");
             await Shot("lyric-sonnet");
-            await At(Math.Ceiling(day.End)+.6,250);
-            var dived=rack.Placed.FirstOrDefault(p=>p.syllable==day);
-            Check(dived.syllable!=null&&dived.state=="in well"&&dived.lift<.14f,"After its hold, \"day\" has dived into the well where it ends");
             views.SetView(VisualizationViews.View.Overview);await Task.Delay(1500);
             Check(!rack.Shown&&!deck.LyricLayout,"Leaving lyric mode hides the lyrics");
             results.Add("ALL LYRIC MODE CHECKS PASSED");

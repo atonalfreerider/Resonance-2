@@ -15,6 +15,8 @@ using UnityEngine.UIElements;
 //  Stack     — the other patterns waiting below, lettered on their edge; when the lane moves
 //              to another pattern its disc slides up and the old one sinks.
 //  Grammar   — the lane written out below (C A B×2 A B′…), the current token lit: compression.
+// A changer is clickable: it becomes the highlighted instrument (white notes and comet trail),
+// shown by a white ring and white dimples; the one under the pointer gets a faint ring.
 // The vocal changer's melody is drawn as a curve through its notes; in lyric mode it faces
 // the viewer and the sung syllables ride it (LyricWheel).
 public sealed class InstrumentChangers
@@ -35,6 +37,9 @@ public sealed class InstrumentChangers
     public int LaneCount=>lanes.Count;
     // For validation: the pattern and repeat each lane shows now.
     public readonly List<(string name,string token,int repeat,int run,bool top)> Showing=new();
+    // Where each changer was drawn (for its click target), the highlighted lane and the hovered cell.
+    public readonly List<(Rect rect,int track,int channel,string name)> Cells=new();
+    public int FeaturedTrack=-1,FeaturedChannel=-1,Hover=-1;
     public InstrumentChangers(Main main,MidiPlayer midi){this.main=main;this.midi=midi;}
     public PreparedPatternSong.InstrumentPart VocalPart=>lanes.FirstOrDefault(l=>l.Part.Vocal)?.Part;
 
@@ -125,7 +130,7 @@ public sealed class InstrumentChangers
     // at the comb (for the spark) and whether a changed chord is passing it.
     readonly List<(Vector2 at,double onset,MidiCycleAnalysis.Hit note,SongFormAnalysis.ChordStep chord)> points=new(256);
     readonly List<(int key,Color color,Vector2 at,float size)> dimples=new(256);
-    public (Vector2 comb,bool varied) Face(MeshGenerationContext ctx,Painter2D p,OrreryBloom bloom,Disc d,PreparedPatternSong.InstrumentPart part,MidiCycleAnalysis.Hit[] notes,SongFormAnalysis.ChordStep[] noteChord,int low,int high,PreparedPatternSong.LanePlay play,double beat,float alpha,bool melody)
+    public (Vector2 comb,bool varied) Face(MeshGenerationContext ctx,Painter2D p,OrreryBloom bloom,Disc d,PreparedPatternSong.InstrumentPart part,MidiCycleAnalysis.Hit[] notes,SongFormAnalysis.ChordStep[] noteChord,int low,int high,PreparedPatternSong.LanePlay play,double beat,float alpha,bool melody,bool featured=false)
     {
         var pattern=part.Patterns[play.Pattern];double loop=Math.Max(.25,pattern.LoopBeats);
         double phase=LoopPhase(part,play,beat),spin=-phase;
@@ -167,7 +172,7 @@ public sealed class InstrumentChangers
             double elapsed=beat-onset;bool played=elapsed>=0;bool sounding=played&&beat<onset+n.Length;
             float size=Mathf.Clamp(d.Radius*.035f,1.2f,3.2f)*(sounding?1.5f:1);
             var hue=CyclicOrrery.ChordColor(chord,main.currentKey);
-            var color=played?Alpha(Color.Lerp(hue,Color.white,sounding?.6f:.15f),alpha):Alpha(FormHatch.Ink(.4f),alpha);
+            var color=played?Alpha(featured?Color.white:Color.Lerp(hue,Color.white,sounding?.6f:.15f),alpha):Alpha(FormHatch.Ink(.4f),alpha);
             Color32 key=color;dimples.Add((key.r|key.g<<8|key.b<<16|key.a<<24,color,at,size));
             float energy=midi.IsPlaying&&played?Mathf.Exp(-(float)elapsed*5):0;
             if(energy>.04f)bloom.Disk(at,size*1.2f,hue,energy*.8f*alpha);
@@ -186,7 +191,7 @@ public sealed class InstrumentChangers
     public void Draw(MeshGenerationContext ctx,Painter2D p,OrreryBloom bloom,Rect area,double beat,bool skipVocal=false)
     {
         using var perf=Perf.Changers.Auto();
-        Showing.Clear();
+        Showing.Clear();Cells.Clear();
         var shown=lanes.Where(l=>!(skipVocal&&l.Part.Vocal)).Take(6).ToList();
         if(shown.Count==0||area.width<40||area.height<60)return;
         float cell=area.width/shown.Count,tilt=.42f;
@@ -197,6 +202,8 @@ public sealed class InstrumentChangers
         {
             var lane=shown[k];var part=lane.Part;
             int pi=PlayAt(part,beat);var play=pi>=0?part.Plays[pi]:null;
+            bool featured=part.Track==FeaturedTrack&&part.Channel==FeaturedChannel;
+            Cells.Add((new Rect(area.x+cell*k,area.y,cell,area.height),part.Track,part.Channel,part.Name));
             int top=play!=null&&play.Pattern>=0?play.Pattern:-1;
             // Target stack: the playing pattern on top, the rest in order of their last play.
             if(lane.OrderedPlay!=pi)
@@ -223,7 +230,7 @@ public sealed class InstrumentChangers
                 float alpha=Mathf.Clamp01(1-rank*2);
                 if(play!=null&&play.Pattern==i)
                 {
-                    var (comb,varied)=Face(ctx,p,bloom,d,part,lane.Notes,lane.NoteChord,lane.Low,lane.High,play,beat,alpha,part.Vocal);
+                    var (comb,varied)=Face(ctx,p,bloom,d,part,lane.Notes,lane.NoteChord,lane.Low,lane.High,play,beat,alpha,part.Vocal,featured);
                     Dot(p,comb,varied?3.2f:2,varied?Color.white:FormHatch.Label(.8f));
                     if(varied){bloom.Disk(comb,3,Color.white,midi.IsPlaying?.9f:.3f);}
                     string letter=Token(part,play);
@@ -234,10 +241,15 @@ public sealed class InstrumentChangers
             }
             if(top<0)Showing.Add((part.Name,"·",0,0,false));
             Comb(p,new Disc{Center=center,Radius=radius,Tilt=tilt},FormHatch.Label(.85f));
+            // The highlighted lane is ringed in white; the one under the pointer faintly.
+            var rim=new Disc{Center=center,Radius=radius+4,Tilt=tilt};
+            if(featured){Arc(p,rim,radius+4,0,.9999,Color.white,2);for(int s=0;s<24;s++)bloom.Line(rim.At(s/24.0,radius+4),rim.At((s+1)/24.0,radius+4),3,Color.white,.08f);}
+            else if(Hover==k)Arc(p,rim,radius+4,0,.9999,FormHatch.Label(.45f),1.2f);
             // Name, compression and grammar under the stack.
             float y=center.y+radius*tilt+3*gap+thickness+8;
             string name=part.Name.Length>16?part.Name.Substring(0,15)+"…":part.Name;
-            Text(ctx,name,new Vector2(center.x,y),10,FormHatch.Label(.9f));
+            Text(ctx,name,new Vector2(center.x,y),10,featured?Color.white:FormHatch.Label(.9f));
+            if(featured)Text(ctx,"HIGHLIGHT",new Vector2(center.x,center.y-radius*tilt-14),8,Color.white);
             Text(ctx,$"{part.Bars} bars → {part.FundamentalBars}",new Vector2(center.x,y+12),8,FormHatch.Label(.5f));
             Grammar(ctx,p,lane,pi,new Vector2(center.x,y+25),cell-6);
         }

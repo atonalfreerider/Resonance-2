@@ -43,6 +43,7 @@ public sealed class PatternWheelDeck : VisualElement
     public float FeaturedRadius=>canvas.FeaturedRadius;
     public InstrumentChangers Changers=>canvas.Changers;
     public LyricWheel Lyrics=>canvas.Lyrics;
+    public LyricGraph Graph=>canvas.Graph;
     public bool LyricLayout=>canvas.LyricLayout;
     public static Color NoteColor(PreparedPatternSong.Section section,double onset,int key,bool lead)
     {
@@ -133,7 +134,7 @@ public sealed class PatternWheelDeck : VisualElement
         readonly VisualElement rackInput;readonly Button transport;int dragPointer=-1;float dragY;double dragTime;
         public int ActiveNode=-1,ActiveGroup=-1,LeadTrack=-1,LeadChannel=-1;public double Turns;public float RackScroll;
         public Vector2 metaCenter,featuredCenter;public float FeaturedRadius;
-        public readonly InstrumentChangers Changers;public readonly LyricWheel Lyrics;public bool LyricLayout;float lyricFocus,spokenFocus;
+        public readonly InstrumentChangers Changers;public readonly LyricWheel Lyrics;public readonly LyricGraph Graph=new();public bool LyricLayout;float lyricFocus;
         float pixelsPerSong=1000;
         // Cached per bundle: where every bar and section sits on the song ring (0..1).
         double[] barU=Array.Empty<double>(),sectionStartU=Array.Empty<double>(),sectionEndU=Array.Empty<double>(),keyU=Array.Empty<double>();double cachedDuration=-1;
@@ -148,7 +149,7 @@ public sealed class PatternWheelDeck : VisualElement
         public WheelCanvas(Main main,MidiPlayer midi)
         {
             this.main=main;this.midi=midi;generateVisualContent+=Draw;
-            Changers=new InstrumentChangers(main,midi);Lyrics=new LyricWheel(main,midi,Changers);
+            Changers=new InstrumentChangers(main,midi);Lyrics=new LyricWheel(main,midi,Changers);Add(Graph.Element);
             transport=new Button(()=>{ExplorerInputFocus.ClaimUI();if(midi.IsPlaying)midi.Pause();else midi.Play();}){name="rack-play-pause",text="Play",pickingMode=PickingMode.Position};
             transport.style.position=Position.Absolute;transport.style.left=0;transport.style.top=0;transport.style.width=76;Add(transport);
             rackInput=new VisualElement{name="time-rack-seek",pickingMode=PickingMode.Position,tooltip="Drag upward to seek forward; drag downward to rewind."};
@@ -162,14 +163,45 @@ public sealed class PatternWheelDeck : VisualElement
             RegisterCallback<DetachFromPanelEvent>(_=>{bloom?.Dispose();bloom=null;});
             schedule.Execute(()=>bloom?.Place(this)).Every(50);
         }
+        // Click targets over the instrument changers, placed where they were last drawn: a click
+        // makes that lane the highlighted instrument.
+        readonly List<VisualElement> picks=new();
         public void TickControls()
         {
             transport.text=midi.IsPlaying?"Pause":"Play";transport.SetEnabled(midi.Loaded);
+            Changers.FeaturedTrack=LeadTrack;Changers.FeaturedChannel=LeadChannel;if(midi.Cycles!=null)Graph.Tick(LyricLayout&&Lyrics.HasLyrics,midi.Cycles.BeatAt(midi.ScorePosition));
+            var cells=Changers.Cells;
+            while(picks.Count<cells.Count)
+            {
+                int index=picks.Count;var pick=new VisualElement{name="changer-select-"+index,pickingMode=PickingMode.Position};pick.style.position=Position.Absolute;
+                pick.RegisterCallback<PointerDownEvent>(e=>
+                {
+                    if(e.button!=0||index>=Changers.Cells.Count)return;
+                    ExplorerInputFocus.ClaimUI();var c=Changers.Cells[index];SelectLane(c.track,c.channel);e.StopPropagation();
+                });
+                pick.RegisterCallback<PointerEnterEvent>(_=>Changers.Hover=index);
+                pick.RegisterCallback<PointerLeaveEvent>(_=>{if(Changers.Hover==index)Changers.Hover=-1;});
+                Add(pick);picks.Add(pick);
+            }
+            for(int i=0;i<picks.Count;i++)
+            {
+                var pick=picks[i];bool on=i<cells.Count;
+                pick.style.display=on?DisplayStyle.Flex:DisplayStyle.None;if(!on)continue;
+                var r=cells[i].rect;pick.style.left=r.x;pick.style.top=r.y;pick.style.width=r.width;pick.style.height=r.height;
+                bool featured=cells[i].track==LeadTrack&&cells[i].channel==LeadChannel;
+                pick.tooltip=featured?$"{cells[i].name} is the highlighted instrument":$"Click to highlight {cells[i].name} in white";
+            }
+            if(Changers.Hover>=cells.Count)Changers.Hover=-1;
+        }
+        public void SelectLane(int track,int channel)
+        {
+            main.GetComponent<FeaturedInstrument>().Select(track,channel);
+            LeadTrack=track;LeadChannel=channel;Changers.FeaturedTrack=track;Changers.FeaturedChannel=channel;MarkDirtyRepaint();
         }
         public void Load(PreparedPatternSong data)
         {
             source=data;cachedDuration=-1;leadKey=int.MinValue;
-            orbits.Clear();Changers.Load(data);Lyrics.Load(data);
+            orbits.Clear();Changers.Load(data);Lyrics.Load(data);Graph.Load(data);
             if(source?.Sections==null){familyIndex=visitNumber=orbitOf=memberOf=Array.Empty<int>();hatch=Array.Empty<FormHatch.Pattern>();return;}
             familyIndex=source.Sections.Select(s=>Array.FindIndex(source.Patterns,p=>p.Family==s.Family)).ToArray();
             visitNumber=source.Sections.Select((s,i)=>source.Sections.Take(i+1).Count(x=>x.Family==s.Family)).ToArray();
@@ -248,10 +280,11 @@ public sealed class PatternWheelDeck : VisualElement
             if(contentRect.width<1||bloom==null)return;
             var p=ctx.painter2D;float w=contentRect.width,h=contentRect.height;
             bloom.Begin(w,h,resolvedStyle.display!=DisplayStyle.None);
+            Changers.Cells.Clear();
             if(source?.Sections==null||source.Sections.Length==0||source.Patterns.Length==0||midi.Cycles==null){ctx.DrawText("PREPARE PATTERN WHEELS OFFLINE",new Vector2(20,45),12,Color.gray);bloom.End();return;}
             Cache();CacheLead();
-            // Lyric mode: the vocal wheel and the rhyme board take the panel (the spoken lines
-            // ride the drum wheel in the scene).
+            // Lyric mode: the lyric graph and a small vocal wheel take the panel (the reader rides
+            // the drum wheel in the scene above).
             bool lyricView=main.GetComponent<VisualizationViews>()?.Current==VisualizationViews.View.Lyrics;
             lyricFocus=Main.ReducedMotion?(lyricView?1:0):Mathf.MoveTowards(lyricFocus,lyricView?1:0,Time.unscaledDeltaTime*2.5f);
             LyricLayout=lyricView;rackInput.style.display=lyricView?DisplayStyle.None:DisplayStyle.Flex;
@@ -296,15 +329,14 @@ public sealed class PatternWheelDeck : VisualElement
                 return;
             }
             Lyrics.Tilt=Mathf.Lerp(.42f,1,Mathf.SmoothStep(0,1,lyricFocus));
-            bool wide=area.width>area.height*1.15f;Rect wheel,board;
-            // While a spoken stanza is heard the resting vocal wheel steps back and the board widens.
-            var lyricsData=source.Lyrics;var heard=lyricsData.Lines.FirstOrDefault(l=>l.Count>0&&l.Start<=beat+2&&beat<l.End+1)??lyricsData.Lines.FirstOrDefault(l=>l.Count>0&&l.Start>beat);
-            spokenFocus=Main.ReducedMotion?(heard!=null&&heard.Spoken?1:0):Mathf.MoveTowards(spokenFocus,heard!=null&&heard.Spoken?1:0,Time.unscaledDeltaTime*1.5f);
-            if(wide){float side=Mathf.Min(area.height,area.width*.5f)*Mathf.Lerp(1,.55f,Mathf.SmoothStep(0,1,spokenFocus));wheel=new Rect(area.x,area.y,side,side);board=new Rect(area.x+side+10,area.y+6,area.width-side-12,area.height-8);}
-            else{float side=Mathf.Min(area.width,area.height*.56f);wheel=new Rect(area.x+(area.width-side)/2,area.y,side,side);board=new Rect(area.x,area.y+side+8,area.width,area.height-side-10);}
-            ctx.DrawText("LYRIC MODE · sung lines ride the vocal wheel, spoken lines the drum rack",new Vector2(90,12),11,Label(.7f));
+            // The graph takes the width; the vocal wheel keeps a small square at the left (above
+            // the graph in a narrow panel).
+            bool wide=area.width>area.height*1.6f;Rect wheel,graph;
+            if(wide){float side=Mathf.Min(area.height,area.width*.24f);wheel=new Rect(area.x,area.y,side,side);graph=new Rect(area.x+side+12,area.y,area.width-side-14,area.height-4);}
+            else{float side=Mathf.Min(area.width*.6f,area.height*.4f);wheel=new Rect(area.x+(area.width-side)/2,area.y,side,side);graph=new Rect(area.x,area.y+side+8,area.width,area.height-side-10);}
+            ctx.DrawText("LYRIC MODE · the reader on the drum wheel, the words' rhymes and refrains below",new Vector2(90,12),11,Label(.7f));
             Lyrics.DrawVocal(ctx,p,bloom,wheel,beat);
-            Lyrics.DrawGraph(ctx,p,bloom,board,beat);
+            Graph.Draw(bloom,graph);
         }
         float Level(int j,int si)=>j==si?.8f:familyIndex[j]==familyIndex[si]?.5f:.22f;
 

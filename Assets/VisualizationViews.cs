@@ -88,14 +88,14 @@ public sealed class VisualizationViews : MonoBehaviour
         // The overview splits the screen so the pattern wheels and the 3D scene (torus and drum
         // wheel) never overlap: side by side in a landscape window, stacked in a portrait one
         // (scene above, wheels below). The camera renders only its own part.
-        // Lyric mode always stacks: the drum wheel and its lyric rack in a wide strip above, the
-        // vocal wheel and rhyme board below.
+        // Lyric mode always stacks: the reader and the drum wheel dominate, in a wide strip taking
+        // nearly two thirds of the height; the lyric graph and a small vocal wheel sit below.
         overviewSplit=Mathf.Lerp(overviewSplit,Current==View.Overview||Current==View.Lyrics?1:0,blend);
         lyricDock=Mathf.Lerp(lyricDock,Current==View.Lyrics?1:0,blend);
         bool portrait=available<height*.9f||lyricDock>.5f;
         // In portrait the wheels take only the height their width can use (ring, rack and
         // caption); the rest goes to the scene.
-        float dockHeight=lyricDock>.5f?Mathf.Clamp(height*.6f,420,height-220):portrait?Mathf.Clamp(available+150,380,height*.58f):height-64;
+        float dockHeight=lyricDock>.5f?Mathf.Clamp(height*.36f,250,height*.45f):portrait?Mathf.Clamp(available+150,380,height*.58f):height-64;
         var dock=portrait?new Rect(left+12,height-dockHeight-10,available-24,dockHeight)
             :new Rect(left+16,52,Mathf.Clamp(available*.46f,340,640),dockHeight);
         float focusWidth=Mathf.Min(available-24,(height-70)*1.12f);
