@@ -36,6 +36,7 @@ public class Note : MonoBehaviour
     public void ClearTail(){release.Clear();attack=attackWhite=0;previousAmp=0;}
     void LateUpdate()
     {
+        using var perf=Perf.Notes.Auto();
         if(sphere==null)return;
         release.Set(CurrentAmp);release.Advance(Time.unscaledDeltaTime,releaseSeconds);
         float glow=release.Level;

@@ -71,6 +71,7 @@ public sealed class SongDirector : MonoBehaviour
     public void Reload(){if(Directing)SetDirecting(false);source=null;}
     void Update()
     {
+        using var perf=Perf.Director.Auto();
         if(midi==null)return;
         if(source!=midi.midiPath){
             if(Directing)SetDirecting(false);

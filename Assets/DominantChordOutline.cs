@@ -9,6 +9,8 @@ public sealed class DominantChordOutline : MonoBehaviour
     readonly List<Vector3> fillVertices=new();readonly List<int> fillTriangles=new();
     readonly LineRenderer[] edges=new LineRenderer[3];readonly List<Vector3> path=new(41);
     float visibility;int root,third=4,fifth=7;Color hue;
+    // The outline and tint are rebuilt only when the chord, the torus pose or the camera moves.
+    (int root,int third,int fifth,float rotation,float twist,float unfold,Vector3 camera,Matrix4x4 frame) built;bool hasBuilt;float shownVisibility=-1;Color shownHue;
     public bool RegionVisible=>visibility>0;
     public bool HasRegion {get;private set;}
     public int RegionRoot=>root;
@@ -39,7 +41,7 @@ public sealed class DominantChordOutline : MonoBehaviour
         }
     }
     static int VertexIndex(int row,int col)=>row*(Resolution+1)-row*(row-1)/2+col;
-    void LateUpdate(){
+    void LateUpdate(){using var perf=Perf.Outline.Auto();
         if(main==null)main=GetComponent<Main>();if(dominance==null)dominance=GetComponent<TonalDominance>();var camera=Camera.main;if(main==null||dominance==null||camera==null||fillObject==null)return;
         if(midi==null)midi=GetComponent<MidiPlayer>();
         bool show=dominance.HasChord,minor=dominance.ChordMinor;string quality=dominance.ChordQuality;int nextRoot=dominance.ChordRoot;
@@ -49,10 +51,20 @@ public sealed class DominantChordOutline : MonoBehaviour
         }
         if(show){root=nextRoot;third=minor||quality=="dim"?3:4;fifth=quality=="dim"?6:7;hue=TonalColorField.Chord(root,main.currentKey,minor);}
         HasRegion=show;visibility=show?main.CoiledVisibility:0;
+        bool on=visibility>.001f;
+        for(int i=0;i<3;i++)if(edges[i]!=null&&edges[i].enabled!=on)edges[i].enabled=on;
+        if(fillObject.activeSelf!=on)fillObject.SetActive(on);
+        if(!on)return;
+        var state=(root,third,fifth,main.VisualRotation,main.VisualTwist,main.UncoilAmount,camera.transform.position,transform.localToWorldMatrix);
+        bool moved=!hasBuilt||state.root!=built.root||state.third!=built.third||state.fifth!=built.fifth||state.Item4!=built.rotation||state.Item5!=built.twist||state.Item6!=built.unfold||state.Item8!=built.frame||(state.Item7-built.camera).sqrMagnitude>.0025f;
+        if(!moved&&shownVisibility==visibility&&shownHue==hue)return;
+        if(moved||shownHue!=hue||shownVisibility!=visibility)for(int i=0;i<3;i++)edges[i].startColor=edges[i].endColor=hue*visibility;
+        fillMaterial.SetColor("_BaseColor",new Color(hue.r,hue.g,hue.b,.19f*visibility));shownVisibility=visibility;shownHue=hue;
+        if(!moved)return;
+        built=state;hasBuilt=true;
         var vertices=new[]{root,root+third,root+fifth};
-        for(int i=0;i<3;i++){var line=edges[i];if(line==null)continue;line.enabled=visibility>.001f;if(!line.enabled)continue;main.ChordOutlinePath(vertices[i],vertices[(i+1)%3],path);for(int j=0;j<path.Count;j++)line.SetPosition(j,path[j]+(camera.transform.position-path[j]).normalized*.012f);line.startColor=line.endColor=hue*visibility;}
-        fillObject.SetActive(visibility>.001f);
-        if(visibility>.001f){
+        for(int i=0;i<3;i++){var line=edges[i];if(line==null)continue;main.ChordOutlinePath(vertices[i],vertices[(i+1)%3],path);for(int j=0;j<path.Count;j++)line.SetPosition(j,path[j]+(camera.transform.position-path[j]).normalized*.012f);}
+        {
             Vector2 a=main.ChordRegionCoordinate(root,root),b=main.ChordRegionCoordinate(root,root+third),c=main.ChordRegionCoordinate(root,root+fifth);
             fillVertices.Clear();
             for(int row=0;row<=Resolution;row++)for(int col=0;col<=Resolution-row;col++){
@@ -61,7 +73,6 @@ public sealed class DominantChordOutline : MonoBehaviour
                 fillVertices.Add(transform.InverseTransformPoint(world));
             }
             fillMesh.SetVertices(fillVertices);fillMesh.SetTriangles(fillTriangles,0);fillMesh.RecalculateBounds();
-            fillMaterial.SetColor("_BaseColor",new Color(hue.r,hue.g,hue.b,.19f*visibility));
         }
     }
     void OnDisable(){if(material!=null)Destroy(material);foreach(var edge in edges)if(edge!=null){edge.gameObject.SetActive(false);Destroy(edge.gameObject);}if(fillObject!=null){fillObject.SetActive(false);Destroy(fillObject);}if(fillMesh!=null)Destroy(fillMesh);if(fillMaterial!=null)Destroy(fillMaterial);fillObject=null;}

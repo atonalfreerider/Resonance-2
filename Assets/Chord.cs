@@ -53,6 +53,7 @@ public class Chord : MonoBehaviour
     }
     void LateUpdate()
     {
+        using var perf=Perf.Chords.Auto();
         if (Note1 == null || Note2 == null || basis == null) return;
         release.Advance(Time.unscaledDeltaTime,releaseSeconds);
         if (!curved) for (int i = 0; i < basis.Length; i++)

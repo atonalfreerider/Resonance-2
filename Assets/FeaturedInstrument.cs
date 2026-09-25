@@ -11,8 +11,14 @@ public sealed class FeaturedInstrument : MonoBehaviour
     (int track,int channel)[] choices=Array.Empty<(int,int)>();
     readonly HashSet<int> pitches=new();
     readonly List<VoiceTrail> voices=new();
-    readonly Dictionary<(int,int),Vector3[]> routes=new();
+    // Routes over the torus between two notes, for the pose they were computed in. While the
+    // pose moves (a key change, a tension's lean) the trail's last second is always exact and
+    // older stretches catch up a few routes per frame, so no frame recomputes them all.
+    sealed class RouteCache {public Vector3[] Points;public float Length;public int Version=-1;}
+    readonly Dictionary<(int,int),RouteCache> routes=new();readonly List<Vector3> routeScratch=new(64);
+    int poseVersion,refreshBudget;
     float routeRotation=float.NaN,routeTwist,routeUncoil;Matrix4x4 routeTransform;
+
     Material material,headMaterial;double lastPosition=-1;int frameIndex;
     sealed class Sample { public int From,To;public float Progress,Stamp,Impact; }
     sealed class VoiceTrail { public PreparedPatternSong.MelodyStrand Data;public LineRenderer Line;public Transform Head;public readonly List<Sample> Samples=new(); }
@@ -81,6 +87,7 @@ public sealed class FeaturedInstrument : MonoBehaviour
     public void ResetPosition(){ClearHistory();lastPosition=-1;}
     void Update()
     {
+        using var perf=Perf.FeaturedFrames.Auto();
         if(midi==null)midi=GetComponent<MidiPlayer>();if(midi==null)return;EnsureLoaded(midi.Prepared);
         if(source?.Frames==null)return;double now=midi.VisualScorePosition;
         bool jump=lastPosition<0||now<lastPosition-.001||now-lastPosition>Math.Max(.5,Time.unscaledDeltaTime*midi.playbackSpeed*3);
@@ -90,14 +97,20 @@ public sealed class FeaturedInstrument : MonoBehaviour
         main.FeatureNotes(pitches);
     }
     bool Accepted(PreparedPatternSong.Voice v)=>v.Pitch>=21&&v.Pitch<117&&(midi.TrackFilter<0||midi.TrackFilter==v.Track)&&(midi.ChannelFilter==0||midi.ChannelFilter==v.Channel);
-    Vector3[] Route(int from,int to)
+    RouteCache Route(int from,int to,bool fresh=true)
     {
-        if(!routes.TryGetValue((from,to),out var result)){var list=new List<Vector3>();main.NoteHistoryPath(Mathf.Clamp(from-21,0,95),Mathf.Clamp(to-21,0,95),list);result=list.ToArray();routes[(from,to)]=result;}return result;
+        if(!routes.TryGetValue((from,to),out var r)){r=new RouteCache();routes[(from,to)]=r;}
+        if(r.Version!=poseVersion&&(fresh||r.Points==null||refreshBudget-->0))
+        {
+            routeScratch.Clear();main.NoteHistoryPath(Mathf.Clamp(from-21,0,95),Mathf.Clamp(to-21,0,95),routeScratch);
+            r.Points=routeScratch.ToArray();r.Length=Length(r.Points);r.Version=poseVersion;
+        }
+        return r;
     }
     static float Length(Vector3[] points){float d=0;for(int i=1;i<points.Length;i++)d+=Vector3.Distance(points[i-1],points[i]);return d;}
-    Vector3 Point(Sample sample)
+    Vector3 Point(Sample sample,bool fresh=true)
     {
-        var points=Route(sample.From,sample.To);float remaining=Length(points)*sample.Progress;
+        var route=Route(sample.From,sample.To,fresh);var points=route.Points;float remaining=route.Length*sample.Progress;
         for(int i=1;i<points.Length;i++){float d=Vector3.Distance(points[i-1],points[i]);if(remaining<=d)return Vector3.Lerp(points[i-1],points[i],d>0?remaining/d:0);remaining-=d;}return points[points.Length-1];
     }
     public static float TrailFalloff(float distance)=>1-Mathf.Log(1+31*Mathf.Clamp01(distance))/Mathf.Log(32);
@@ -109,14 +122,17 @@ public sealed class FeaturedInstrument : MonoBehaviour
         int index=lo-1;light=0;if(index<0)return null;
         var n=notes[index];var sample=new Sample{Impact=Mathf.Exp(-(float)Math.Max(0,time-n.Start)*22),From=n.Pitch,To=n.Pitch,Progress=1,Stamp=Time.unscaledTime};
         light=Mathf.Exp(-(float)Math.Max(0,time-n.End)*8);
-        if(index+1<notes.Length){var next=notes[index+1];double depart=Departure(n.Start,next.Start,Length(Route(n.Pitch,next.Pitch)));
+        if(index+1<notes.Length){var next=notes[index+1];double depart=Departure(n.Start,next.Start,Route(n.Pitch,next.Pitch).Length);
             if(time>=depart&&next.Start>depart){sample.To=next.Pitch;sample.Progress=(float)((time-depart)/(next.Start-depart));light=1;}}
         return sample;
     }
     void LateUpdate()
     {
+        using var perf=Perf.Featured.Auto();
         if(midi==null||source==null)return;
-        if(routeRotation!=main.VisualRotation||routeTwist!=main.VisualTwist||routeUncoil!=main.UncoilAmount||routeTransform!=transform.localToWorldMatrix){routes.Clear();routeRotation=main.VisualRotation;routeTwist=main.VisualTwist;routeUncoil=main.UncoilAmount;routeTransform=transform.localToWorldMatrix;}
+        if(routeRotation!=main.VisualRotation||routeTwist!=main.VisualTwist||routeUncoil!=main.UncoilAmount||routeTransform!=transform.localToWorldMatrix)
+        {poseVersion++;routeRotation=main.VisualRotation;routeTwist=main.VisualTwist;routeUncoil=main.UncoilAmount;routeTransform=transform.localToWorldMatrix;}
+        refreshBudget=6;
         double now=midi.VisualScorePosition;
         bool accepted=(midi.TrackFilter<0||midi.TrackFilter==Track)&&(midi.ChannelFilter==0||midi.ChannelFilter==Channel);
         TrailLength=0;
@@ -139,7 +155,7 @@ public sealed class FeaturedInstrument : MonoBehaviour
             float idle=voice.Samples.Count==0?0:Time.unscaledTime-voice.Samples[voice.Samples.Count-1].Stamp;
             float budget=main.HistoryCircumference*Mathf.Clamp01(1-Mathf.Max(0,idle-1)/3);
             var points=new List<Vector3>();var stamps=new List<float>();float length=0;
-            for(int i=voice.Samples.Count-1;i>=0;i--){var point=Point(voice.Samples[i]);float d=points.Count>0?Vector3.Distance(points[points.Count-1],point):0;
+            for(int i=voice.Samples.Count-1;i>=0;i--){var point=Point(voice.Samples[i],Time.unscaledTime-voice.Samples[i].Stamp<1.2f);float d=points.Count>0?Vector3.Distance(points[points.Count-1],point):0;
                 if(length+d>budget)break;length+=d;points.Add(point);stamps.Add(voice.Samples[i].Stamp);}
             TrailLength=Mathf.Max(TrailLength,length);
             int retained=points.Count;

@@ -21,6 +21,7 @@ public sealed class VisualizationViews : MonoBehaviour
     Camera camera,clear;CameraControl orbit;DrumPatternDeck drums;
     Vector3 overviewPosition;Quaternion overviewRotation;Vector3 overviewAngles;
     float panelOpen=1,timelineOpacity=1,timelineFocus,overviewSplit=1,lyricDock;
+    float shownTorus=-1,shownDrums=-1,nextWalk;int shownCount=-1;bool wasUncoiling;
     bool cameraMoving;
     void Awake(){block=new MaterialPropertyBlock();}
     public void Bind(VisualElement ui,VisualElement controls,PatternWheelDeck wheels)
@@ -69,6 +70,7 @@ public sealed class VisualizationViews : MonoBehaviour
     }
     void LateUpdate()
     {
+        using var perf=Perf.Views.Auto();
         if(root==null||camera==null)return;
         uncoil?.SetValueWithoutNotify(GetComponent<Main>().Uncoiled);
         float blend=Main.ReducedMotion?1:1-Mathf.Exp(-Time.unscaledDeltaTime*8);
@@ -131,8 +133,13 @@ public sealed class VisualizationViews : MonoBehaviour
             orbit?.MovementUpdater?.Invoke();
             if((Current==View.Overview||Current==View.Torus)&&Vector3.Distance(camera.transform.position,position)<.005f&&Quaternion.Angle(camera.transform.rotation,rotation)<.1f){cameraMoving=GetComponent<Main>().UncoilMoving;if(orbit!=null&&!cameraMoving){if(Current==View.Torus)orbit.AdoptView(transform.position,true);orbit.enabled=true;}}
         }
-        renderers.Clear();GetComponentsInChildren(true,renderers);
         TorusOpacity=Snap(TorusOpacity);DrumOpacity=Snap(DrumOpacity);
+        // Opacity only needs reapplying when it changes, when renderers come and go, or while
+        // the uncoil hides labels; otherwise the walk over every renderer is skipped.
+        bool uncoiling=GetComponent<Main>().UncoilMoving;int count=transform.hierarchyCount;
+        if(TorusOpacity==shownTorus&&DrumOpacity==shownDrums&&count==shownCount&&!uncoiling&&!wasUncoiling&&Time.unscaledTime<nextWalk)return;
+        shownTorus=TorusOpacity;shownDrums=DrumOpacity;shownCount=count;wasUncoiling=uncoiling;nextWalk=Time.unscaledTime+1;
+        renderers.Clear();GetComponentsInChildren(true,renderers);
         if(appliedOpacity.Count>2048)appliedOpacity.Clear();
         var drumRoot=drums?.WheelTransform;
         foreach(var renderer in renderers){

@@ -184,7 +184,7 @@ public sealed class DrumPatternDeck : MonoBehaviour
         while(view.Counts.Count<counts){var text=TextBox.Create((view.Counts.Count+1).ToString(),TMPro.TextAlignmentOptions.Center);Behind(text);text.transform.SetParent(view.Root,false);text.Size=1.2f;text.Color=Count;view.Counts.Add(text);}
         for(int i=0;i<view.Counts.Count;i++){view.Counts[i].gameObject.SetActive(i<counts);if(i<counts)view.Counts[i].transform.localPosition=At(1.29f,i/(double)counts,.025f);}
     }
-    void Update(){
+    void Update(){using var perf=Perf.Drums.Auto();
         if(deck==null)return;
         float unfold=main!=null?main.UncoilAmount:0;
         deck.localPosition=Vector3.Lerp(new Vector3(0,-DeckDepth,0),new Vector3(0,0,.08f),unfold);

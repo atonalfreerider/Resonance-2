@@ -185,6 +185,7 @@ public class MidiPlayer : MonoBehaviour
     }
     void Update()
     {
+        using var perf=Perf.Midi.Auto();
         if (Keyboard.current!=null && Keyboard.current.spaceKey.wasPressedThisFrame && ExplorerInputFocus.ViewportOwnsKeyboard)
         { if (IsPlaying) Pause(); else Play(); }
         if (!IsAudible) return;

@@ -18,6 +18,7 @@ public sealed class TonalDominance : MonoBehaviour
     void Awake(){main=GetComponent<Main>();midi=GetComponent<MidiPlayer>();}
     void Update()
     {
+        using var perf=Perf.Dominance.Auto();
         System.Array.Clear(weights,0,12);float total=0;int bass=int.MaxValue;
         foreach(var n in main.ActiveNotes){weights[HarmonyModel.Mod(n.Item1)]+=n.Item2;total+=n.Item2;bass=Mathf.Min(bass,n.Item1);}
         float best=-1;int root=main.currentKey;bool minor=main.MinorMode;

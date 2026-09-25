@@ -18,6 +18,15 @@ public class UmbilicField : MonoBehaviour
     int maskKey=-1;
     bool maskMinor;
     readonly Vector2[] tonalCoverage=new Vector2[(Along+1)*(Across+1)];
+    readonly Vector3[] deformed=new Vector3[(Along+1)*(Across+1)];readonly Color[] localColors=new Color[(Along+1)*(Across+1)];
+    // Coverage follows the surface's parameters, so while the pose moves it is refreshed at most
+    // every 150 ms and once more when the pose settles.
+    // Computed in slices over a few frames into scratch buffers, then applied at once, so a key
+    // change never spends a whole frame on it.
+    float poseMoved=-1,lastCoverage=-1;bool coverageStale;int coverageCursor=-1,sliceKey;bool sliceMinor;
+    readonly Vector2[] coverageScratch=new Vector2[(Along+1)*(Across+1)];readonly Color[] colorScratch=new Color[(Along+1)*(Across+1)];
+    readonly System.Collections.Generic.List<Vector3[]> regions=new();readonly System.Collections.Generic.List<float> strengths=new();readonly System.Collections.Generic.List<Color> regionColors=new();
+    Vector3[] centres=new Vector3[0];float[] reach=new float[0];
     public Mesh SurfaceMesh => mesh;
     public float[] Energy => target;
     public float[] ResidualEnergy => memory.Energy;
@@ -52,6 +61,7 @@ public class UmbilicField : MonoBehaviour
     void UpdateGeometry()
     {
         if(phase==main.VisualRotation && twist==main.VisualTwist&&unfold==main.UncoilAmount&&geometryKey==main.currentKey)return;
+        if(geometryKey==main.currentKey&&unfold==main.UncoilAmount){poseMoved=Time.unscaledTime;coverageStale=true;}
         unfold=main.UncoilAmount;geometryKey=main.currentKey;
         phase=main.VisualRotation;twist=main.VisualTwist;
         for(int i=0;i<=Along;i++)
@@ -60,45 +70,55 @@ public class UmbilicField : MonoBehaviour
             Vector3 a=main.UmbilicPoint(t),b=main.UmbilicPoint(t+1f/3f);
             for(int j=0;j<=Across;j++)vertices[i*(Across+1)+j]=Vector3.Lerp(a,b,j/(float)Across);
         }
-        var deformed=new Vector3[vertices.Length];
-        for(int i=0;i<=Along;i++)for(int j=0;j<=Across;j++){
+        // Coiled and still (no uncoil, no transition widening) the surface is the umbilic itself.
+        bool coiled=main.UncoilAmount<=0&&main.TransitionWiden<=0&&main.OctaveSpread<=0;
+        if(coiled)System.Array.Copy(vertices,deformed,vertices.Length);
+        else for(int i=0;i<=Along;i++)for(int j=0;j<=Across;j++){
             float slot=i/(float)Along-.5f;
             int index=i*(Across+1)+j;deformed[index]=main.MorphUncoil(vertices[index],main.UncoiledPoint(slot,.3f+.7f*j/Across));
             float t=HarmonyModel.Mod(main.currentKey*5)/12f+phase+slot;
             deformed[index]+=(vertices[index]-main.UmbilicPoint(t))*(.3f*main.TransitionWiden*(1-main.OctaveSpread));
         }
-        mesh.vertices=deformed;mesh.SetUVs(2,new System.Collections.Generic.List<Vector3>(vertices));mesh.RecalculateBounds();
+        mesh.SetVertices(deformed);mesh.SetUVs(2,vertices);mesh.RecalculateBounds();
         for(int pc=0;pc<12;pc++)anchors[pc]=main.UmbilicPoint(HarmonyModel.Mod(pc*5)/12f+phase);
         material.SetVectorArray("_Anchors",anchors);
-        maskKey=-1;
+        if(!coverageStale&&coverageCursor<0)maskKey=-1;
     }
     // Defined chord regions have soft spatial support; unclaimed surface emits no light.
     void UpdateCoverage()
     {
-        if(maskKey==main.currentKey && maskMinor==main.MinorMode)return;
-        maskKey=main.currentKey;maskMinor=main.MinorMode;
-        var regions=new System.Collections.Generic.List<Vector3[]>();
-        var strengths=new System.Collections.Generic.List<float>();
-        var regionColors=new System.Collections.Generic.List<Color>();
-        void Triad(int root,int third,float strength)
+        // While the pose moves the coverage is kept (it follows the surface's parameters); it is
+        // refreshed once the pose has settled, or at once for a new key or mode.
+        bool settled=Time.unscaledTime-poseMoved>.25f;
+        if(coverageStale&&settled){coverageStale=false;maskKey=-1;}
+        if(coverageCursor<0)
         {
-            regions.Add(new[]{(Vector3)anchors[HarmonyModel.Mod(root)],
-                (Vector3)anchors[HarmonyModel.Mod(root+third)],(Vector3)anchors[HarmonyModel.Mod(root+7)]});
-            strengths.Add(strength);
-            regionColors.Add(TonalColorField.Chord(root,main.currentKey,third==3));
+            if(maskKey==main.currentKey&&maskMinor==main.MinorMode)return;
+            maskKey=main.currentKey;maskMinor=main.MinorMode;sliceKey=maskKey;sliceMinor=maskMinor;
+            regions.Clear();strengths.Clear();regionColors.Clear();
+            void Triad(int root,int third,float strength)
+            {
+                regions.Add(new[]{(Vector3)anchors[HarmonyModel.Mod(root)],(Vector3)anchors[HarmonyModel.Mod(root+third)],(Vector3)anchors[HarmonyModel.Mod(root+7)]});
+                strengths.Add(strength);regionColors.Add(TonalColorField.Chord(root,main.currentKey,third==3));
+            }
+            int collection=main.CollectionRoot;
+            foreach(int offset in new[]{0,5,7})Triad(collection+offset,4,1);
+            foreach(int offset in new[]{2,4,9})Triad(collection+offset,3,.28f);
+            Triad(main.currentKey+1,4,.18f); // Neapolitan bII.
+            Triad(main.currentKey+7,4,main.MinorMode?.35f:1); // Major dominant in minor.
+            foreach(int offset in new[]{2,4,9,11})Triad(collection+offset,4,.18f); // Secondary dominants.
+            // Each region's bounding sphere: a vertex beyond it (plus the fade distance) is untouched.
+            centres=new Vector3[regions.Count];reach=new float[regions.Count];
+            for(int r=0;r<regions.Count;r++){var q=regions[r];centres[r]=(q[0]+q[1]+q[2])/3;reach[r]=Mathf.Max(Vector3.Distance(centres[r],q[0]),Mathf.Max(Vector3.Distance(centres[r],q[1]),Vector3.Distance(centres[r],q[2])))+.26f;reach[r]*=reach[r];}
+            coverageCursor=0;
         }
-        int collection=main.CollectionRoot;
-        foreach(int offset in new[]{0,5,7})Triad(collection+offset,4,1);
-        foreach(int offset in new[]{2,4,9})Triad(collection+offset,3,.28f);
-        Triad(main.currentKey+1,4,.18f); // Neapolitan bII.
-        Triad(main.currentKey+7,4,main.MinorMode?.35f:1); // Major dominant in minor.
-        foreach(int offset in new[]{2,4,9,11})Triad(collection+offset,4,.18f); // Secondary dominants.
-        var localColors=new Color[vertices.Length];
-        for(int i=0;i<vertices.Length;i++)
+        int end=Mathf.Min(vertices.Length,coverageCursor+vertices.Length/4+1);
+        for(int i=coverageCursor;i<end;i++)
         {
             float coverage=0,major=0,weight=0;Color local=Color.black;
             for(int r=0;r<regions.Count;r++)
             {
+                if((vertices[i]-centres[r]).sqrMagnitude>reach[r])continue;
                 var region=regions[r];
                 float distance=TriangleDistance(vertices[i],region[0],region[1],region[2]);
                 float fade=1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(.025f,.26f,distance));
@@ -106,9 +126,14 @@ public class UmbilicField : MonoBehaviour
                 float w=Mathf.Pow(fade,8)*strengths[r];local+=regionColors[r]*w;weight+=w;
                 if(r<3)major=Mathf.Max(major,Mathf.Pow(fade,6));
             }
-            tonalCoverage[i]=new Vector2(coverage,major);
-            localColors[i]=weight>.00001f?local/weight:Color.black;
+            coverageScratch[i]=new Vector2(coverage,major);
+            colorScratch[i]=weight>.00001f?local/weight:Color.black;
         }
+        coverageCursor=end;
+        if(coverageCursor<vertices.Length)return;
+        coverageCursor=-1;lastCoverage=Time.unscaledTime;
+        if(sliceKey!=main.currentKey||sliceMinor!=main.MinorMode){maskKey=-1;return;}   // the key moved on while slicing
+        System.Array.Copy(coverageScratch,tonalCoverage,tonalCoverage.Length);System.Array.Copy(colorScratch,localColors,localColors.Length);
         mesh.uv2=tonalCoverage;mesh.colors=localColors;
     }
     static float SegmentDistance(Vector3 p,Vector3 a,Vector3 b)
@@ -131,6 +156,7 @@ public class UmbilicField : MonoBehaviour
     }
     void LateUpdate()
     {
+        using var perf=Perf.Field.Auto();
         if(main==null)return;
         
         UpdateGeometry();UpdateCoverage();rendererComponent.enabled=main.ShowSurfaces;if(occluder!=null)occluder.enabled=main.ShowSurfaces;

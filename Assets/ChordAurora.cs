@@ -26,7 +26,7 @@ public sealed class ChordAurora : MonoBehaviour
     sealed class Volume
     {
         public int Root=-1,Third,Fifth,Note=-1;public float Energy,Height,Age,PulseAge,LastShock;public bool Dying;
-        public Color Hue;public GameObject Object;public Mesh Mesh;public Material Material;public MeshRenderer Renderer;
+        public Color Hue;public GameObject Object;public Mesh Mesh;public Material Material;public MeshRenderer Renderer;public bool Placed;
         public void Die(){if(!Dying){Dying=true;Age=0;}}
     }
     static float Seed(int i,float multiplier)
@@ -36,6 +36,8 @@ public sealed class ChordAurora : MonoBehaviour
     void OnEnable()
     {
         if(!Application.isPlaying)return;main=GetComponent<Main>();region=GetComponent<DominantChordOutline>();current=-1;
+        // Both particle shapes up front, so the first chord of a song does not build one.
+        Shape(false);Shape(true);
         for(int n=0;n<volumes.Length;n++){
             var v=new Volume();volumes[n]=v;v.Object=new GameObject("Aurora volume "+n);v.Object.transform.SetParent(transform,false);
             v.Object.AddComponent<MeshFilter>();
@@ -43,44 +45,96 @@ public sealed class ChordAurora : MonoBehaviour
 
         }
     }
+    // Chord volumes share one particle mesh per shape (major, minor), built once: a particle's
+    // place in the chord's triangle (x, u) and its seeds never change. The vertex shader lays
+    // the particles on the emitting surface from a 17 by 17 grid of surface points and normals,
+    // so a new chord or a moving torus pose (a key change, a tension's lean) only uploads the
+    // grid. Single-note volumes, a small disc of particles, are baked on the CPU.
+    const int Grid=16,Nodes=(Grid+1)*(Grid+1);
+    readonly Mesh[] shapes=new Mesh[2];
+    readonly Vector4[] gridPoint=new Vector4[Nodes],gridNormal=new Vector4[Nodes];readonly Vector3[] gridScratch=new Vector3[Nodes];
+    static readonly int GridPointId=Shader.PropertyToID("_GridPoint"),GridNormalId=Shader.PropertyToID("_GridNormal"),UseGridId=Shader.PropertyToID("_UseGrid");
+    Mesh Shape(bool minor)
+    {
+        int k=minor?1:0;if(shapes[k]!=null)return shapes[k];
+        var mesh=new Mesh{name=minor?"Aurora particles, minor modes":"Aurora particles, major modes",indexFormat=UnityEngine.Rendering.IndexFormat.UInt32};
+        int n=Particles*4;var vertices=new Vector3[n];var normals=new Vector3[n];var uv0=new Vector2[n];var modes=new Vector4[n];var field=new Vector4[n];var triangles=new int[Particles*6];
+        float mode=minor?2:1;
+        for(int i=0;i<Particles;i++){
+            float x=Mathf.Sqrt(Seed(i,.754877666f)),u=Seed(i,.569840296f),h=Seed(i,.438579f);
+            float edge=Mathf.SmoothStep(0,1,Mathf.Clamp01(Mathf.Min(1-x,Mathf.Min(x*u,x*(1-u)))*12));
+            var bakedMode=new Vector4(h,Mathf.Sin(mode*Mathf.PI*u),Mathf.Sin(3*mode*Mathf.PI*u),1.9f);
+            var bakedField=new Vector4(x,u,Seed(i,.211f),Mathf.Pow(1-h,1.5f)*Mathf.SmoothStep(0,1,(h+.025f)/.09f)*edge);
+            for(int j=0;j<4;j++){int q=i*4+j;normals[q]=Vector3.up;uv0[q]=new Vector2(j%2,j/2);modes[q]=bakedMode;field[q]=bakedField;}
+            int t=i*6,v=i*4;triangles[t]=v;triangles[t+1]=v+2;triangles[t+2]=v+1;triangles[t+3]=v+1;triangles[t+4]=v+2;triangles[t+5]=v+3;
+        }
+        mesh.SetVertices(vertices);mesh.SetNormals(normals);mesh.SetUVs(0,uv0);mesh.SetUVs(1,modes);mesh.SetUVs(2,field);mesh.SetTriangles(triangles,0);
+        mesh.bounds=new Bounds(Vector3.zero,Vector3.one*24);mesh.UploadMeshData(true);MeshBakeCount++;
+        return shapes[k]=mesh;
+    }
+    // The chord's emitting surface as grid nodes: one surface point each, normals from the
+    // grid's own tangents, turned to face the surface normal at the region's middle.
+    void Place(Volume v)
+    {
+        var a=main.ChordRegionCoordinate(v.Root,v.Root);var b=main.ChordRegionCoordinate(v.Root,v.Root+v.Third);var c=main.ChordRegionCoordinate(v.Root,v.Root+v.Fifth);
+        for(int gx=0;gx<=Grid;gx++)for(int gu=0;gu<=Grid;gu++)
+        {
+            float x=gx/(float)Grid,u=gu/(float)Grid;var uv=a*(1-x)+b*x*(1-u)+c*x*u;
+            gridScratch[gx*(Grid+1)+gu]=transform.InverseTransformPoint(main.ChordRegionPoint(uv,true));
+        }
+        var reference=transform.InverseTransformVector(main.ChordRegionNormal(a*(1-.66f)+b*.33f+c*.33f,true));
+        for(int gx=0;gx<=Grid;gx++)for(int gu=0;gu<=Grid;gu++)
+        {
+            int rx=Mathf.Max(1,gx);   // the apex row collapses to a point: borrow the next row's frame
+            var along=gridScratch[Mathf.Min(Grid,rx+1)*(Grid+1)+gu]-gridScratch[(rx-1)*(Grid+1)+gu];
+            var sideways=gridScratch[rx*(Grid+1)+Mathf.Min(Grid,gu+1)]-gridScratch[rx*(Grid+1)+Mathf.Max(0,gu-1)];
+            var normal=Vector3.Cross(along,sideways);normal=normal.sqrMagnitude>1e-12f?normal.normalized:reference;
+            if(Vector3.Dot(normal,reference)<0)normal=-normal;
+            int g=gx*(Grid+1)+gu;gridPoint[g]=gridScratch[g];gridNormal[g]=normal;
+        }
+        v.Material.SetVectorArray(GridPointId,gridPoint);v.Material.SetVectorArray(GridNormalId,gridNormal);v.Placed=true;
+    }
     void Map(Volume v)
     {
+        if(v.Note<0)
+        {
+            v.Material.SetFloat(UseGridId,1);v.Object.GetComponent<MeshFilter>().sharedMesh=v.Mesh=Shape(v.Third==3);Place(v);return;
+        }
+        v.Material.SetFloat(UseGridId,0);v.Placed=true;
         var key=(v.Root,v.Third,v.Fifth,v.Note);
         if(bakedMeshes.TryGetValue(key,out var cached)){v.Mesh=cached;v.Object.GetComponent<MeshFilter>().sharedMesh=cached;return;}
-        v.Mesh=new Mesh{name="Baked aurora spatial modes"};bakedMeshes.Add(key,v.Mesh);v.Object.GetComponent<MeshFilter>().sharedMesh=v.Mesh;
-        int particles=v.Note>=0?1000:Particles;
-        var a=main.ChordRegionCoordinate(v.Root,v.Root);var b=main.ChordRegionCoordinate(v.Root,v.Root+v.Third);var c=main.ChordRegionCoordinate(v.Root,v.Root+v.Fifth);
-        // Spatial modes and envelopes are baked only when the emitting surface changes.
-        var vertices=new Vector3[particles*4];var normals=new Vector3[particles*4];var uv0=new Vector2[particles*4];
-        var modes=new System.Collections.Generic.List<Vector4>(particles*4);var field=new System.Collections.Generic.List<Vector4>(particles*4);
-        var triangles=new int[particles*6];
-        Vector3 soloPoint=v.Note>=0?transform.InverseTransformPoint(main.CoiledNoteEmissionPoint(v.Note)):Vector3.zero;
-        Vector3 soloNormal=v.Note>=0?transform.InverseTransformDirection(main.ChordRegionNormal(main.ChordRegionCoordinate(HarmonyModel.Mod(v.Note),HarmonyModel.Mod(v.Note)),true)):Vector3.up;
+        v.Mesh=new Mesh{name="Baked note aurora"};bakedMeshes.Add(key,v.Mesh);v.Object.GetComponent<MeshFilter>().sharedMesh=v.Mesh;
+        const int particles=1000;
+        var vertices=new Vector3[particles*4];var normals=new Vector3[particles*4];var uv0=new Vector2[particles*4];var modes=new Vector4[particles*4];var field=new Vector4[particles*4];var triangles=new int[particles*6];
+        Vector3 soloPoint=transform.InverseTransformPoint(main.CoiledNoteEmissionPoint(v.Note));
+        Vector3 soloNormal=transform.InverseTransformDirection(main.ChordRegionNormal(main.ChordRegionCoordinate(HarmonyModel.Mod(v.Note),HarmonyModel.Mod(v.Note)),true));
         Vector3 side=Vector3.Cross(soloNormal,Mathf.Abs(soloNormal.y)<.9f?Vector3.up:Vector3.right).normalized;
         Vector3 across=Vector3.Cross(soloNormal,side);
         for(int i=0;i<particles;i++){
             float x=Mathf.Sqrt(Seed(i,.754877666f)),u=Seed(i,.569840296f),h=Seed(i,.438579f);
-            var uv=a*(1-x)+b*x*(1-u)+c*x*u;
-            var anchor=transform.InverseTransformPoint(main.ChordRegionPoint(uv,true));var normal=transform.InverseTransformVector(main.ChordRegionNormal(uv,true));
-            if(v.Note>=0){float angle=u*Mathf.PI*2;anchor=soloPoint+(side*Mathf.Cos(angle)+across*Mathf.Sin(angle))*(x*.07f);normal=soloNormal;}
-            float mode=v.Third==3?2:1;
-            float edge=Mathf.SmoothStep(0,1,Mathf.Clamp01(Mathf.Min(1-x,Mathf.Min(x*u,x*(1-u)))*12));
-            if(v.Note>=0)edge=Mathf.Pow(1-x*x,2);
+            float angle=u*Mathf.PI*2;var anchor=soloPoint+(side*Mathf.Cos(angle)+across*Mathf.Sin(angle))*(x*.07f);
+            float edge=Mathf.Pow(1-x*x,2);float mode=v.Third==3?2:1;
             var bakedMode=new Vector4(h,Mathf.Sin(mode*Mathf.PI*u),Mathf.Sin(3*mode*Mathf.PI*u),1.9f);
             var bakedField=new Vector4(x,u,Seed(i,.211f),Mathf.Pow(1-h,1.5f)*Mathf.SmoothStep(0,1,(h+.025f)/.09f)*edge);
-            for(int j=0;j<4;j++){int k=i*4+j;vertices[k]=anchor;normals[k]=normal;uv0[k]=new Vector2(j%2,j/2);modes.Add(bakedMode);field.Add(bakedField);}
+            for(int j=0;j<4;j++){int k=i*4+j;vertices[k]=anchor;normals[k]=soloNormal;uv0[k]=new Vector2(j%2,j/2);modes[k]=bakedMode;field[k]=bakedField;}
             int t=i*6,n=i*4;triangles[t]=n;triangles[t+1]=n+2;triangles[t+2]=n+1;triangles[t+3]=n+1;triangles[t+4]=n+2;triangles[t+5]=n+3;
         }
-        v.Mesh.Clear();v.Mesh.vertices=vertices;v.Mesh.normals=normals;v.Mesh.uv=uv0;v.Mesh.SetUVs(1,modes);v.Mesh.SetUVs(2,field);v.Mesh.triangles=triangles;
+        v.Mesh.SetVertices(vertices);v.Mesh.SetNormals(normals);v.Mesh.SetUVs(0,uv0);v.Mesh.SetUVs(1,modes);v.Mesh.SetUVs(2,field);v.Mesh.SetTriangles(triangles,0);
         v.Mesh.RecalculateBounds();var bounds=v.Mesh.bounds;bounds.Expand(12f);v.Mesh.bounds=bounds;v.Mesh.UploadMeshData(true);MeshBakeCount++;
-
     }
     void LateUpdate()
     {
+        using var perf=Perf.Aurora.Auto();
         if(main==null||region==null||volumes[0]==null)return;
 
         if(midi==null)midi=GetComponent<MidiPlayer>();if(recording==null)recording=GetComponent<SongAudio>();
-        if(rotation!=main.VisualRotation||twist!=main.VisualTwist){rotation=main.VisualRotation;twist=main.VisualTwist;foreach(var mesh in bakedMeshes.Values)Destroy(mesh);bakedMeshes.Clear();foreach(var v in volumes)if(v.Root>=0)Map(v);}
+        if(rotation!=main.VisualRotation||twist!=main.VisualTwist)
+        {
+            rotation=main.VisualRotation;twist=main.VisualTwist;
+            // Note discs are rebaked; chord volumes only re-place their grid (hidden ones when they show).
+            foreach(var mesh in bakedMeshes.Values)Destroy(mesh);bakedMeshes.Clear();
+            foreach(var v in volumes){v.Placed=false;if(v.Root>=0&&(v.Renderer.enabled||v==(current>=0?volumes[current]:null)))Map(v);}
+        }
         int count=0,strongest=-1;float strongestEnergy=0;
         var levels=new Vector3();float total=0,register=0,shock=0;Vector3 wind=Vector3.zero;
         foreach(var note in main.ActiveNotes)if(note.Item2>.001f){count++;if(note.Item2>strongestEnergy){strongestEnergy=note.Item2;strongest=note.Item1;}}
@@ -115,6 +169,7 @@ public sealed class ChordAurora : MonoBehaviour
             if(drive>.003f){v.Hue=color;v.Dying=false;v.Age=0;v.Energy=Release(v.Energy,drive,Time.unscaledDeltaTime);v.Height=1;}
             else {v.Die();v.Age+=Time.unscaledDeltaTime;v.Energy=Release(v.Energy,0,Time.unscaledDeltaTime);}
             v.Renderer.enabled=v.Energy>.0005f&&main.CoiledVisibility>.001f;if(!v.Renderer.enabled)continue;
+            if(!v.Placed)Map(v);
             Color hue=v.Dying?Chord.ReleaseHue(v.Hue,v.Age):v.Hue;
             v.Material.SetColor("_Hue",hue);
             if(layer==current&&drive>.003f){if(Shock>v.LastShock+.025f)v.PulseAge=0;v.LastShock=Shock;v.Material.SetVector("_Drive",new Vector4(levels.x,levels.y,levels.z,Shock*loudness));v.Material.SetVector("_Wind",new Vector4(wind.x,wind.y,wind.z,solo>=0?1:0));}
@@ -123,5 +178,5 @@ public sealed class ChordAurora : MonoBehaviour
 
         }
     }
-    void OnDisable(){foreach(var v in volumes)if(v!=null){if(v.Object!=null){v.Object.SetActive(false);Destroy(v.Object);}if(v.Material!=null)Destroy(v.Material);}foreach(var mesh in bakedMeshes.Values)Destroy(mesh);bakedMeshes.Clear();current=-1;}
+    void OnDisable(){foreach(var v in volumes)if(v!=null){if(v.Object!=null){v.Object.SetActive(false);Destroy(v.Object);}if(v.Material!=null)Destroy(v.Material);}foreach(var mesh in bakedMeshes.Values)Destroy(mesh);bakedMeshes.Clear();for(int k=0;k<2;k++)if(shapes[k]!=null){Destroy(shapes[k]);shapes[k]=null;}current=-1;}
 }

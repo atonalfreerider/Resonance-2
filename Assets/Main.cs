@@ -225,35 +225,27 @@ public class Main : MonoBehaviour
         }
     }
 
+    // Reused by every refresh: a key change or a tension's lean refreshes the view each frame.
+    readonly Vector3[][] fifthsPoints=new Vector3[Tones][];
     void SetUmbilic()
     {
-        List<Vector3> chromaticList = new();
+        using var perf=Perf.Umbilic.Auto();
         const float resolution = 0.001f;
-        const int ratio = Sides * 2 - 1;
-        for (float t = 0; t < 1; t += resolution)
-        {
-            chromaticList.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t, currentVisualTwist, ratio));
-        }
-
         for (int i = 0; i < Tones; i++)
         {
             LineRenderer fifthsSegment = fifthsLineRenderer[i];
-            List<Vector3> subSection = new();
-            for (float t = (float)i / Tones; t < (float)(i + 1) / Tones; t += resolution)
-            {
-                subSection.Add(UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t+currentVisualRotation, currentVisualTwist));
-            }
-
-            fifthsSegment.positionCount = subSection.Count;
-            fifthsSegment.SetPositions(subSection.ToArray());
+            if (fifthsPoints[i] == null) { int n = 0; for (float t = (float)i / Tones; t < (float)(i + 1) / Tones; t += resolution) n++; fifthsPoints[i] = new Vector3[n]; }
+            var points = fifthsPoints[i]; int count = 0;
+            for (float t = (float)i / Tones; t < (float)(i + 1) / Tones && count < points.Length; t += resolution)
+                points[count++] = UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, t+currentVisualRotation, currentVisualTwist);
+            fifthsSegment.positionCount = points.Length;
+            fifthsSegment.SetPositions(points);
 
             fifthsSegment.startColor=TonalColorField.Pitch(HarmonyModel.Mod(i*5),currentKey)*.45f;
             fifthsSegment.endColor=TonalColorField.Pitch(HarmonyModel.Mod((i+1)*5),currentKey)*.45f;
         }
-
-        chromaticLineRenderer.positionCount = chromaticList.Count;
-        chromaticLineRenderer.SetPositions(chromaticList.ToArray());
-        chromaticLineRenderer.gameObject.SetActive(false);
+        // The chromatic line is kept hidden; it is not recomputed.
+        if (chromaticLineRenderer.gameObject.activeSelf) chromaticLineRenderer.gameObject.SetActive(false);
 
         UpdateTorusPoints(currentVisualRotation, visualKeyForRendering);
         foreach(var line in fifthsLineRenderer)line.enabled=ShowStructure&&!UncoilActive;
@@ -353,6 +345,7 @@ public class Main : MonoBehaviour
     }
     public void RefreshView()
     {
+        using var perf=Perf.RefreshView.Auto();
         SetUmbilic(); UpdateText();
         foreach (var line in fifthsLineRenderer) line.enabled = ShowStructure&&!UncoilActive;
         RenderKeys();
@@ -484,6 +477,7 @@ public class Main : MonoBehaviour
     }
     void Update()
     {
+        using var perf=Perf.MainUpdate.Auto();
         if(Mathf.Abs(tensionAmount-tensionTarget)>.0005f)
         {
             // Leaning in follows the music; relaxing back is a little slower, like a release.

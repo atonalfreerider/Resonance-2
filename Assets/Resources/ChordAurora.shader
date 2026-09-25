@@ -14,6 +14,8 @@ Shader "Resonance/ChordAurora"
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             float _ViewOpacity,_ShapeOpacity;float4 _Hue,_Wave,_Drive,_Wind;float _Pulse;
+            // Chord volumes: the emitting surface as a 17 by 17 grid over the chord's triangle.
+            float _UseGrid;float4 _GridPoint[289];float4 _GridNormal[289];
             struct A { float4 positionOS:POSITION;float3 normalOS:NORMAL;float2 uv:TEXCOORD0;float4 mode:TEXCOORD1;float4 field:TEXCOORD2; };
             struct V { float4 positionCS:SV_POSITION;float4 color:COLOR;float2 uv:TEXCOORD0; };
             V Vert(A i)
@@ -25,7 +27,14 @@ Shader "Resonance/ChordAurora"
                 float x=i.field.x,u=i.field.y,seed=i.field.z;
                 // A cloud of air parcels fills a widening volume around each curved
                 // emitter. Circular grains reveal moving nodal interference surfaces.
-                float3 normal=normalize(i.normalOS);
+                float3 anchor=i.positionOS.xyz,normalIn=i.normalOS;
+                if(_UseGrid>.5)
+                {
+                    float fx=x*16,fu=u*16;int ix=min(15,(int)fx),iu=min(15,(int)fu);float tx=fx-ix,tu=fu-iu;int g00=ix*17+iu,g10=g00+17;
+                    anchor=lerp(lerp(_GridPoint[g00].xyz,_GridPoint[g00+1].xyz,tu),lerp(_GridPoint[g10].xyz,_GridPoint[g10+1].xyz,tu),tx);
+                    normalIn=lerp(lerp(_GridNormal[g00].xyz,_GridNormal[g00+1].xyz,tu),lerp(_GridNormal[g10].xyz,_GridNormal[g10+1].xyz,tu),tx);
+                }
+                float3 normal=normalize(normalIn);
                 float3 tangent=normalize(cross(abs(normal.y)<.9?float3(0,1,0):float3(1,0,0),normal));
                 float3 bitangent=cross(normal,tangent);
                 float angle=seed*6.283185;
@@ -39,7 +48,7 @@ Shader "Resonance/ChordAurora"
                 float shock=exp(-pow((distance-_Pulse*16)*3,2))*_Drive.w;
                 float displacement=(.13*harmonic+.1*pressure+.18*shock)*localEnergy;
                 float rise=_Wave.w*_Wave.z*.35*h;
-                float3 local=i.positionOS.xyz+normal*(.018+distance+displacement+rise)
+                float3 local=anchor+normal*(.018+distance+displacement+rise)
                     +(tangent*cos(angle+t*.45)+bitangent*sin(angle+t*.45))*spread
                     +_Wind.xyz*h*h*(.55+.45*sin(t*3-distance*2));
                 // Changing interference lobes, rather than rows of stretched rays.

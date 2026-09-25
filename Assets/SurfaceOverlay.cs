@@ -25,6 +25,7 @@ public class SurfaceOverlay : MonoBehaviour
     }
     void LateUpdate()
     {
+        using var perf=Perf.Overlay.Auto();
         if(main==null)main=GetComponent<Main>();
         if(main==null)return;
         int root=main.SelectedSurface;

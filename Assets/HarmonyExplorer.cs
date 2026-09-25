@@ -199,6 +199,7 @@ public class HarmonyExplorer : MonoBehaviour
     }
     void Update()
     {
+        using var perf=Perf.Explorer.Auto();
         if(main==null)return;
         orrery?.Tick();
         if(focusHint!=null)focusHint.text=ExplorerInputFocus.ViewportOwnsKeyboard?"TORUS CONTROLS · click panel to edit":"UI CONTROLS · click torus to play / orbit";
