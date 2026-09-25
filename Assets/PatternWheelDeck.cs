@@ -41,6 +41,9 @@ public sealed class PatternWheelDeck : VisualElement
     public Vector2 FeaturedCenter=>canvas.featuredCenter;
     public int LeadVocalTrack=>canvas.LeadTrack;
     public float FeaturedRadius=>canvas.FeaturedRadius;
+    public InstrumentChangers Changers=>canvas.Changers;
+    public LyricWheel Lyrics=>canvas.Lyrics;
+    public bool LyricLayout=>canvas.LyricLayout;
     public static Color NoteColor(PreparedPatternSong.Section section,double onset,int key,bool lead)
     {
         if(lead)return Color.white;
@@ -66,6 +69,7 @@ public sealed class PatternWheelDeck : VisualElement
         canvas=new WheelCanvas(main,midi){name="pattern-wheel-overlay",pickingMode=PickingMode.Ignore};
         var toggle=new Toggle("Show rack and pattern wheels"){value=true};toggle.RegisterValueChangedCallback(e=>canvas.style.display=e.newValue?DisplayStyle.Flex:DisplayStyle.None);Add(toggle);
         if(owner.GetComponent<DrumPatternDeck>()==null)owner.gameObject.AddComponent<DrumPatternDeck>();
+        if(owner.GetComponent<DrumLyricRack>()==null)owner.gameObject.AddComponent<DrumLyricRack>();
     }
     public void AttachOverlay(VisualElement root)
     {
@@ -128,6 +132,7 @@ public sealed class PatternWheelDeck : VisualElement
         readonly VisualElement rackInput;readonly Button transport;int dragPointer=-1;float dragY;double dragTime;
         public int ActiveNode=-1,ActiveGroup=-1,LeadTrack=-1,LeadChannel=-1;public double Turns;public float RackScroll;
         public Vector2 metaCenter,featuredCenter;public float FeaturedRadius;
+        public readonly InstrumentChangers Changers;public readonly LyricWheel Lyrics;public bool LyricLayout;float lyricFocus,spokenFocus;
         float pixelsPerSong=1000;
         // Cached per bundle: where every bar and section sits on the song ring (0..1).
         double[] barU=Array.Empty<double>(),sectionStartU=Array.Empty<double>(),sectionEndU=Array.Empty<double>(),keyU=Array.Empty<double>();double cachedDuration=-1;
@@ -142,6 +147,7 @@ public sealed class PatternWheelDeck : VisualElement
         public WheelCanvas(Main main,MidiPlayer midi)
         {
             this.main=main;this.midi=midi;generateVisualContent+=Draw;
+            Changers=new InstrumentChangers(main,midi);Lyrics=new LyricWheel(main,midi,Changers,this);
             transport=new Button(()=>{ExplorerInputFocus.ClaimUI();if(midi.IsPlaying)midi.Pause();else midi.Play();}){name="rack-play-pause",text="Play",pickingMode=PickingMode.Position};
             transport.style.position=Position.Absolute;transport.style.left=0;transport.style.top=0;transport.style.width=76;Add(transport);
             rackInput=new VisualElement{name="time-rack-seek",pickingMode=PickingMode.Position,tooltip="Drag upward to seek forward; drag downward to rewind."};
@@ -155,11 +161,17 @@ public sealed class PatternWheelDeck : VisualElement
             RegisterCallback<DetachFromPanelEvent>(_=>{bloom?.Dispose();bloom=null;});
             schedule.Execute(()=>bloom?.Place(this)).Every(50);
         }
-        public void TickControls(){transport.text=midi.IsPlaying?"Pause":"Play";transport.SetEnabled(midi.Loaded);}
+        public void TickControls()
+        {
+            transport.text=midi.IsPlaying?"Pause":"Play";transport.SetEnabled(midi.Loaded);
+            // Sung letters are labels, turned along the melody: placed here, outside the draw pass.
+            if(!LyricLayout)Lyrics.HideVocal();
+            Lyrics.PlaceLetters(midi.Cycles!=null&&source!=null?midi.Cycles.BeatAt(midi.ScorePosition):0);
+        }
         public void Load(PreparedPatternSong data)
         {
             source=data;cachedDuration=-1;leadKey=int.MinValue;
-            orbits.Clear();
+            orbits.Clear();Changers.Load(data);Lyrics.Load(data);
             if(source?.Sections==null){familyIndex=visitNumber=orbitOf=memberOf=Array.Empty<int>();hatch=Array.Empty<FormHatch.Pattern>();return;}
             familyIndex=source.Sections.Select(s=>Array.FindIndex(source.Patterns,p=>p.Family==s.Family)).ToArray();
             visitNumber=source.Sections.Select((s,i)=>source.Sections.Take(i+1).Count(x=>x.Family==s.Family)).ToArray();
@@ -239,10 +251,18 @@ public sealed class PatternWheelDeck : VisualElement
             bloom.Begin(w,h,resolvedStyle.display!=DisplayStyle.None);
             if(source?.Sections==null||source.Sections.Length==0||source.Patterns.Length==0||midi.Cycles==null){ctx.DrawText("PREPARE PATTERN WHEELS OFFLINE",new Vector2(20,45),12,Color.gray);bloom.End();return;}
             Cache();CacheLead();
+            // Lyric mode: the vocal wheel and the rhyme board take the panel (the spoken lines
+            // ride the drum wheel in the scene).
+            bool lyricView=main.GetComponent<VisualizationViews>()?.Current==VisualizationViews.View.Lyrics;
+            lyricFocus=Main.ReducedMotion?(lyricView?1:0):Mathf.MoveTowards(lyricFocus,lyricView?1:0,Time.unscaledDeltaTime*2.5f);
+            LyricLayout=lyricView;rackInput.style.display=lyricView?DisplayStyle.None:DisplayStyle.Flex;
+            if(lyricView){DrawLyricMode(ctx,p,w,h);bloom.End();return;}
             // Geometry: the ring meshes with the rack at nine o'clock. The caption goes below the
             // ring in a tall panel and beside it in a wide one, whichever leaves the larger ring.
+            // The instrument changers take a bay along the bottom.
             float top=44,rackWidth=92;
-            float below=Mathf.Min((w-rackWidth-10)/2,(h-top-124)/2),aside=Mathf.Min((w-rackWidth-240)/2,(h-top-14)/2);
+            float bay=Changers.LaneCount>0?Mathf.Clamp(h*.24f,130,230):0;
+            float below=Mathf.Min((w-rackWidth-10)/2,(h-top-124-bay)/2),aside=Mathf.Min((w-rackWidth-240)/2,(h-top-14-bay)/2);
             bool beside=aside>below+6;float ring=Mathf.Max(60,beside?aside:below);
             var center=new Vector2(rackWidth+4+ring,top+ring+2);metaCenter=center;
             pixelsPerSong=2*Mathf.PI*ring;
@@ -258,7 +278,34 @@ public sealed class PatternWheelDeck : VisualElement
             DrawOrbits(ctx,p,center,ring,planet,si,fi,progress);
             DrawPlanet(ctx,p,center,planet,section,si,pattern,fi,beat);
             DrawCaption(ctx,p,center,ring,section,si,pattern,fi,beat,beside);
+            if(bay>0)
+            {
+                float bayTop=beside?center.y+ring+16:center.y+ring+128;
+                Changers.Draw(ctx,p,bloom,new Rect(rackWidth+8,bayTop,w-rackWidth-12,h-bayTop-6),beat);
+            }
             bloom.End();
+        }
+        void DrawLyricMode(MeshGenerationContext ctx,Painter2D p,float w,float h)
+        {
+            double beat=midi.Cycles.BeatAt(midi.ScorePosition);
+            var area=new Rect(4,40,w-8,h-44);
+            if(!Lyrics.HasLyrics)
+            {
+                ctx.DrawText("LYRIC MODE",new Vector2(90,12),12,Label(.8f));
+                ctx.DrawText("No lyric sheet in this bundle. Put a lyrics.txt beside the MIDI\n([Verse 1], [Rap | spoken] stanzas, hy-phen-at-ed syllables)\nand regenerate it with Tools/PatternPrep.",new Vector2(area.x+6,area.y+10),11,Label(.7f));
+                Changers.Draw(ctx,p,bloom,new Rect(area.x,area.y+90,area.width,Mathf.Min(260,area.height-90)),beat);
+                return;
+            }
+            Lyrics.Tilt=Mathf.Lerp(.42f,1,Mathf.SmoothStep(0,1,lyricFocus));
+            bool wide=area.width>area.height*1.15f;Rect wheel,board;
+            // While a spoken stanza is heard the resting vocal wheel steps back and the board widens.
+            var lyricsData=source.Lyrics;var heard=lyricsData.Lines.FirstOrDefault(l=>l.Count>0&&l.Start<=beat+2&&beat<l.End+1)??lyricsData.Lines.FirstOrDefault(l=>l.Count>0&&l.Start>beat);
+            spokenFocus=Main.ReducedMotion?(heard!=null&&heard.Spoken?1:0):Mathf.MoveTowards(spokenFocus,heard!=null&&heard.Spoken?1:0,Time.unscaledDeltaTime*1.5f);
+            if(wide){float side=Mathf.Min(area.height,area.width*.5f)*Mathf.Lerp(1,.55f,Mathf.SmoothStep(0,1,spokenFocus));wheel=new Rect(area.x,area.y,side,side);board=new Rect(area.x+side+10,area.y+6,area.width-side-12,area.height-8);}
+            else{float side=Mathf.Min(area.width,area.height*.56f);wheel=new Rect(area.x+(area.width-side)/2,area.y,side,side);board=new Rect(area.x,area.y+side+8,area.width,area.height-side-10);}
+            ctx.DrawText("LYRIC MODE · sung lines ride the vocal wheel, spoken lines the drum rack",new Vector2(90,12),11,Label(.7f));
+            Lyrics.DrawVocal(ctx,p,bloom,wheel,beat);
+            Lyrics.DrawRhymes(ctx,p,bloom,board,beat);
         }
         float Level(int j,int si)=>j==si?.8f:familyIndex[j]==familyIndex[si]?.5f:.22f;
 

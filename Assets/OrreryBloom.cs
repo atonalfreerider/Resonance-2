@@ -86,6 +86,13 @@ public sealed class OrreryBloom : System.IDisposable
         Vector2 P(double phase,float r){float angle=(float)phase*Mathf.PI*2;return center+new Vector2(Mathf.Sin(angle),-Mathf.Cos(angle))*r;}
         for(int i=0;i<steps;i++){double a=start+(end-start)*i/steps,b=start+(end-start)*(i+1)/steps;var p=P(a,radius-thickness);var q=P(a,radius+thickness);var r=P(b,radius+thickness);var s=P(b,radius-thickness);Triangle(p,q,r,color);Triangle(p,r,s,color);}
     }
+    // A glowing stroke from a to b (an underline under a word being sung).
+    public void Line(Vector2 a,Vector2 b,float thickness,Color color,float power)
+    {
+        if(power<.005f||(b-a).sqrMagnitude<1e-4f)return;color*=power*4;
+        var n=new Vector2(-(b-a).y,(b-a).x).normalized*thickness*.5f;
+        Triangle(a-n,a+n,b+n,color);Triangle(a-n,b+n,b-n,color);
+    }
     public void End(){mesh.Clear();mesh.SetVertices(vertices);mesh.SetColors(colors);mesh.SetTriangles(indices,0);mesh.RecalculateBounds();}
     void Composite(ScriptableRenderContext context,Camera rendered)
     {
