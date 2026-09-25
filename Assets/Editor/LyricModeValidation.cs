@@ -63,22 +63,29 @@ public static class LyricModeValidation
             var star=lyrics.Syllables.First(s=>s.Line==0&&s.Text=="star");
             await At(star.VibratoStart+.3,500,true);
             Check(deck.Lyrics.Sung==star&&star.Vibrato>.2f,$"The vocal wheel lights the sung syllable \"{deck.Lyrics.Sung?.Text}\" (vibrato {star.Vibrato:0.00} st at {star.VibratoRate:0.0} Hz)");
-            Check(deck.Lyrics.LettersShown>=12,$"{deck.Lyrics.LettersShown} letters ride the melody curve");
-            Check(deck.Lyrics.BoardLine==0&&deck.Lyrics.BoardRows==6,"The rhyme board shows Verse 1, its first line current");
+            Check(deck.Lyrics.SyllablesShown>=6,$"{deck.Lyrics.SyllablesShown} upright syllables sit on the melody curve");
+            Check(deck.Lyrics.BoardLine==0&&deck.Lyrics.BoardRows==6,"The word graph shows Verse 1, its first line current");
             await Shot("lyric-sung");
 
-            // Spoken trochees: a stressed downbeat drops into its well, the upbeat after it is bumped over the saw.
+            // Spoken trochees: a stressed downbeat lands hard in its well on the beat and stays low;
+            // the upbeat after it is bumped over the saw. The saw's cliffs are the drum hits.
             var stood=lyrics.Syllables.First(s=>s.Text=="Stood");var the=lyrics.Syllables.First(s=>s.Spoken&&s.Start>stood.Start);
-            await At(stood.Start-.25,50,true);
+            var drumBeats=data.Notes.Where(n=>n.Channel==10).Select(n=>n.Beat).ToArray();
+            await At(stood.Start-.5,60,true);
             var waiting=rack.Placed.FirstOrDefault(p=>p.syllable==stood);
-            Check(waiting.syllable!=null&&waiting.state=="waiting"&&waiting.lift>DrumLyricRack.Crest,"Before its beat, \"Stood\" waits on the crest");
-            await Task.Delay(Mathf.RoundToInt((float)(midi.Cycles.SecondsAt(the.Start)-midi.Cycles.SecondsAt(stood.Start-.25))*1000)+60);
+            Check(waiting.syllable!=null&&waiting.state=="waiting"&&waiting.lift>DrumLyricRack.Crest*.5f,"Before its beat, \"Stood\" waits on the crest");
+            Check(rack.VisibleTeeth.Count>4&&rack.VisibleTeeth.All(t=>drumBeats.Any(b=>Math.Abs(b-t)<1e-3))&&rack.VisibleTeeth.Any(t=>Math.Abs(t-stood.Start)<1e-3),$"Every cliff of the saw is a drum hit, one under \"Stood\" ({rack.VisibleTeeth.Count} on the rack)");
+            double onsetMs=(midi.Cycles.SecondsAt(stood.Start)-midi.ScorePosition)*1000;
+            await Task.Delay(Mathf.Max(0,Mathf.RoundToInt((float)onsetMs))+25);
+            var landed=rack.Placed.First(p=>p.syllable==stood);
+            Check(landed.state=="in well"&&Mathf.Abs(landed.lift-DrumLyricRack.TextLift)<.01f,$"Just after its beat \"Stood\" has already landed low in its well (lift {landed.lift:0.00})");
+            await Task.Delay(Mathf.RoundToInt((float)(midi.Cycles.SecondsAt(the.Start)-midi.ScorePosition)*1000)+60);
             var dropped=rack.Placed.First(p=>p.syllable==stood);var bumped=rack.Placed.First(p=>p.syllable==the);
-            Check(dropped.state=="in well"&&dropped.lift<.14f,$"On the downbeat \"Stood\" dropped into its well (lift {dropped.lift:0.00})");
+            Check(dropped.state=="in well"&&Mathf.Abs(dropped.lift-DrumLyricRack.TextLift)<.01f,$"\"Stood\" stays low, no bounce (lift {dropped.lift:0.00})");
             Check(bumped.state=="bumped"&&bumped.lift>dropped.lift+.05f,$"The upbeat \"the\" is bumped up over the saw (lift {bumped.lift:0.00})");
             Check(rack.Caption.Contains("Stood")&&rack.Caption.Contains("wig"),"The spoken line is written above the rack");
             var rap1=lyrics.Stanzas.First(s=>s.Name=="Rap 1");
-            Check(deck.Lyrics.BoardRows==8&&lyrics.Lines[deck.Lyrics.BoardLine].Stanza==Array.IndexOf(lyrics.Stanzas,rap1),"The rhyme board follows into Rap 1 (8 trochaic lines)");
+            Check(deck.Lyrics.BoardRows==8&&lyrics.Lines[deck.Lyrics.BoardLine].Stanza==Array.IndexOf(lyrics.Stanzas,rap1),"The word graph follows into Rap 1 (8 trochaic lines)");
             await Task.Delay(700);await Shot("lyric-rap");
 
             // Pentameter: the held line-end "day" floats in an arc over the teeth, at the comb, then dives.

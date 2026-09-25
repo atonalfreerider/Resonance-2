@@ -27,6 +27,9 @@ public sealed class InstrumentChangers
     {
         public PreparedPatternSong.InstrumentPart Part;public MidiCycleAnalysis.Hit[] Notes=Array.Empty<MidiCycleAnalysis.Hit>();
         public List<string> Tokens=new();public int[] TokenOf=Array.Empty<int>();public float[] Shown=Array.Empty<float>();public int Low=48,High=84;
+        // Per note, the chord sounding at its onset (its dimple's colour); the stack order,
+        // recomputed only when the lane moves to another play.
+        public SongFormAnalysis.ChordStep[] NoteChord=Array.Empty<SongFormAnalysis.ChordStep>();public int[] Order=Array.Empty<int>();public int OrderedPlay=-2;
     }
     readonly List<Lane> lanes=new();
     public int LaneCount=>lanes.Count;
@@ -51,6 +54,8 @@ public sealed class InstrumentChangers
             if(part.Patterns==null||part.Patterns.Length==0)continue;
             var lane=new Lane{Part=part,Notes=(data.Notes??Array.Empty<MidiCycleAnalysis.Hit>()).Where(n=>n.Track==part.Track&&n.Channel==part.Channel).OrderBy(n=>n.Beat).ToArray(),Shown=Enumerable.Range(0,part.Patterns.Length).Select(i=>(float)i+1).ToArray()};
             if(lane.Notes.Length>0){lane.Low=lane.Notes.Min(n=>n.Pitch);lane.High=Math.Max(lane.Low+7,lane.Notes.Max(n=>n.Pitch));}
+            var chords=data.Chords??Array.Empty<SongFormAnalysis.ChordStep>();lane.NoteChord=new SongFormAnalysis.ChordStep[lane.Notes.Length];
+            for(int i=0,c=0;i<lane.Notes.Length;i++){while(c+1<chords.Length&&chords[c+1].Start<=lane.Notes[i].Beat+1e-6)c++;lane.NoteChord[i]=c<chords.Length&&chords[c].Start<=lane.Notes[i].Beat+1e-6&&lane.Notes[i].Beat<chords[c].End?chords[c]:null;}
             // The grammar, folded as PatternPrep writes it, with each play's token index.
             var raw=part.Plays.Select(p=>Token(part,p)).ToList();lane.TokenOf=new int[raw.Count];
             for(int i=0;i<raw.Count;)
@@ -118,7 +123,9 @@ public sealed class InstrumentChangers
 
     // The top disc's face: chord band, variation outline, note dimples. Returns the contact
     // at the comb (for the spark) and whether a changed chord is passing it.
-    public (Vector2 comb,bool varied) Face(MeshGenerationContext ctx,Painter2D p,OrreryBloom bloom,Disc d,PreparedPatternSong.InstrumentPart part,MidiCycleAnalysis.Hit[] notes,int low,int high,PreparedPatternSong.LanePlay play,double beat,float alpha,bool melody)
+    readonly List<(Vector2 at,double onset,MidiCycleAnalysis.Hit note,SongFormAnalysis.ChordStep chord)> points=new(256);
+    readonly List<(int key,Color color,Vector2 at,float size)> dimples=new(256);
+    public (Vector2 comb,bool varied) Face(MeshGenerationContext ctx,Painter2D p,OrreryBloom bloom,Disc d,PreparedPatternSong.InstrumentPart part,MidiCycleAnalysis.Hit[] notes,SongFormAnalysis.ChordStep[] noteChord,int low,int high,PreparedPatternSong.LanePlay play,double beat,float alpha,bool melody)
     {
         var pattern=part.Patterns[play.Pattern];double loop=Math.Max(.25,pattern.LoopBeats);
         double phase=LoopPhase(part,play,beat),spin=-phase;
@@ -138,13 +145,13 @@ public sealed class InstrumentChangers
         }
         // Note dimples between the hub and the band: radius is pitch. Only this play's notes.
         float hub=d.Radius*.22f,span=inner-3-hub;
-        int from=Array.FindIndex(notes,n=>n.Beat>=play.Start-1e-6);if(from<0)from=notes.Length;
-        var points=new List<(Vector2 at,double onset,MidiCycleAnalysis.Hit note)>();
+        int from=0,hi=notes.Length;while(from<hi){int mid=(from+hi)/2;if(notes[mid].Beat<play.Start-1e-6)from=mid+1;else hi=mid;}
+        points.Clear();
         for(int i=from;i<notes.Length&&notes[i].Beat<play.End-1e-6;i++)
         {
             var n=notes[i];double at=(play.Offset+n.Beat-play.Start)/loop;
             float r=hub+span*Mathf.InverseLerp(low,high,n.Pitch);
-            points.Add((d.At(spin+at,r),n.Beat,n));
+            points.Add((d.At(spin+at,r),n.Beat,n,noteChord.Length>i?noteChord[i]:null));
         }
         if(melody&&points.Count>1)
         {
@@ -153,16 +160,24 @@ public sealed class InstrumentChangers
             for(int i=1;i<points.Count;i++){var a=points[i-1].at;var b=points[i].at;var m=(a+b)/2;p.BezierCurveTo(new Vector2(m.x,a.y),new Vector2(m.x,b.y),b);}
             p.Stroke();
         }
-        foreach(var (at,onset,n) in points)
+        // Dimples of one colour share one path: a handful of fills instead of one per note.
+        dimples.Clear();
+        foreach(var (at,onset,n,chord) in points)
         {
             double elapsed=beat-onset;bool played=elapsed>=0;bool sounding=played&&beat<onset+n.Length;
             float size=Mathf.Clamp(d.Radius*.035f,1.2f,3.2f)*(sounding?1.5f:1);
-            var chord=source.Chords?.LastOrDefault(c=>c.Start<=onset+1e-6&&onset<c.End);
             var hue=CyclicOrrery.ChordColor(chord,main.currentKey);
-            p.fillColor=played?Alpha(Color.Lerp(hue,Color.white,sounding?.6f:.15f),alpha):Alpha(FormHatch.Ink(.4f),alpha);
-            p.BeginPath();p.Arc(at,size,Angle.Degrees(0),Angle.Degrees(360));p.Fill();
+            var color=played?Alpha(Color.Lerp(hue,Color.white,sounding?.6f:.15f),alpha):Alpha(FormHatch.Ink(.4f),alpha);
+            Color32 key=color;dimples.Add((key.r|key.g<<8|key.b<<16|key.a<<24,color,at,size));
             float energy=midi.IsPlaying&&played?Mathf.Exp(-(float)elapsed*5):0;
             if(energy>.04f)bloom.Disk(at,size*1.2f,hue,energy*.8f*alpha);
+        }
+        dimples.Sort((a,b)=>a.key.CompareTo(b.key));
+        for(int i=0;i<dimples.Count;)
+        {
+            int j=i;p.fillColor=dimples[i].color;p.BeginPath();
+            while(j<dimples.Count&&dimples[j].key==dimples[i].key){var (_,_,at,size)=dimples[j];p.MoveTo(at+new Vector2(size,0));p.Arc(at,size,Angle.Degrees(0),Angle.Degrees(360));j++;}
+            p.Fill();i=j;
         }
         return (d.At(0,(inner+outer)/2),varied);
     }
@@ -170,6 +185,7 @@ public sealed class InstrumentChangers
     // The changers in a row inside the area (the vocal first).
     public void Draw(MeshGenerationContext ctx,Painter2D p,OrreryBloom bloom,Rect area,double beat,bool skipVocal=false)
     {
+        using var perf=Perf.Changers.Auto();
         Showing.Clear();
         var shown=lanes.Where(l=>!(skipVocal&&l.Part.Vocal)).Take(6).ToList();
         if(shown.Count==0||area.width<40||area.height<60)return;
@@ -183,8 +199,12 @@ public sealed class InstrumentChangers
             int pi=PlayAt(part,beat);var play=pi>=0?part.Plays[pi]:null;
             int top=play!=null&&play.Pattern>=0?play.Pattern:-1;
             // Target stack: the playing pattern on top, the rest in order of their last play.
-            var order=Enumerable.Range(0,part.Patterns.Length).OrderBy(i=>i==top?0:1).ThenByDescending(i=>Array.FindLastIndex(part.Plays,x=>x.Pattern==i&&x.Start<=beat)).ToList();
-            for(int i=0;i<part.Patterns.Length;i++){float target=order.IndexOf(i)+(top<0?1:0);lane.Shown[i]=Mathf.Lerp(lane.Shown[i],target,blend);}
+            if(lane.OrderedPlay!=pi)
+            {
+                lane.OrderedPlay=pi;var order=Enumerable.Range(0,part.Patterns.Length).OrderBy(i=>i==top?0:1).ThenByDescending(i=>Array.FindLastIndex(part.Plays,x=>x.Pattern==i&&x.Start<=beat)).ToList();
+                lane.Order=new int[part.Patterns.Length];for(int i=0;i<part.Patterns.Length;i++)lane.Order[i]=order.IndexOf(i)+(top<0?1:0);
+            }
+            for(int i=0;i<part.Patterns.Length;i++)lane.Shown[i]=Mathf.Lerp(lane.Shown[i],lane.Order[i],blend);
             float gap=Mathf.Clamp(radius*.12f,3,8),thickness=Mathf.Clamp(radius*.06f,2,4);
             var center=new Vector2(area.x+cell*(k+.5f),area.y+radius*tilt+12);
             // Bottom of the stack first; only the first few discs are drawn.
@@ -203,7 +223,7 @@ public sealed class InstrumentChangers
                 float alpha=Mathf.Clamp01(1-rank*2);
                 if(play!=null&&play.Pattern==i)
                 {
-                    var (comb,varied)=Face(ctx,p,bloom,d,part,lane.Notes,lane.Low,lane.High,play,beat,alpha,part.Vocal);
+                    var (comb,varied)=Face(ctx,p,bloom,d,part,lane.Notes,lane.NoteChord,lane.Low,lane.High,play,beat,alpha,part.Vocal);
                     Dot(p,comb,varied?3.2f:2,varied?Color.white:FormHatch.Label(.8f));
                     if(varied){bloom.Disk(comb,3,Color.white,midi.IsPlaying?.9f:.3f);}
                     string letter=Token(part,play);
