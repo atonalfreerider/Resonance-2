@@ -216,7 +216,8 @@ def align_onsets(stanzas, vocal: np.ndarray, beats: list[float], semis: np.ndarr
     back = np.full((n, m, 2), -1, dtype=np.int32)             # (previous matched syllable, its onset)
     fits = np.array([[fit(i, j) for j in range(m)] for i in range(n)])
     for j in range(m):
-        cost[0, j] = prefix[j] + fits[0, j]
+        # Onsets before the first syllable (an intro, or instruments bleeding into the stem) are cheap to leave.
+        cost[0, j] = .25 * prefix[j] + fits[0, j]
     for i in range(1, n):
         # The previous matched syllable: i-1, or further back across optional syllables left without onsets.
         sources, missed = [], 0.0
@@ -244,7 +245,7 @@ def align_onsets(stanzas, vocal: np.ndarray, beats: list[float], semis: np.ndarr
             cost[i, j] = best + fits[i, j]
             back[i, j] = arg
     # The last syllable, then every onset after it unused.
-    final = cost[n - 1] + (prefix[m] - prefix[1:m + 1])
+    final = cost[n - 1] + .25 * (prefix[m] - prefix[1:m + 1])
     j = int(np.argmin(final))
     matched = [None] * n
     i = n - 1
@@ -374,19 +375,19 @@ def sync(folder: Path, audio: Path | None = None, vocals: Path | None = None, ly
     beats, downbeats, beat_method = beats_and_downbeats(audio)
     voice = load(vocals)
     semis = pitch(voice)
-    words, method = None, ''
+    words, method, unavailable = None, '', ''
     if aligner in ('mms', 'auto'):
         try:
             words, method = align_mms(stanzas, vocals, download)
         except Exception as error:  # noqa: BLE001 - fall back to onsets, and say why
             if aligner == 'mms':
                 raise
-            method = f'(MMS unavailable: {error}) '
+            unavailable = str(error)
     if words is None:
         found, how = align_onsets(stanzas, voice, beats, semis, vibrato(semis))
-        words, method = found, method + how
+        words, method = found, how
     result = {'method': method, 'words': words, 'vibrato': vibrato(semis), 'beats': beats, 'downbeats': downbeats,
-              'beatMethod': beat_method, 'audio': audio.name, 'vocals': vocals.name}
+              'beatMethod': beat_method, 'audio': audio.name, 'vocals': vocals.name, 'forcedAlignerUnavailable': unavailable}
     out = lyrics.parent / 'lyrics.timing.json'
     out.write_text(json.dumps(result, indent=1), encoding='utf-8')
     return out

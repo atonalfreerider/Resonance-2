@@ -39,16 +39,19 @@ Timing comes from the best evidence available, in this order:
 
 1. **MIDI lyric events** (karaoke `Lyric` meta events, or `@K` text events). Each event times
    one syllable; events and sheet syllables are aligned by their letters.
-2. **Audio alignment**, from `lyrics.timing.json` (written by `Tools/SongLibrary/lyric_sync.py`).
-   The aligner's per-syllable times are used. Where the vocal also has MIDI notes, a sung
-   syllable snaps to a note onset within a third of a beat.
-3. **The vocal's notes.** Sung syllables are laid on the notes in order by dynamic programming:
+2. **The vocal's notes.** Sung syllables are laid on the notes in order by dynamic programming:
    - one syllable per note, a held syllable taking several (cheapest on a stressed or `_`
      syllable);
    - a note may go unsung;
    - lines end where the melody breathes.
 
-   The vocal lane is the lead vocal, else the lane the lyric events sit on.
+   The vocal lane is the lead vocal, else the lane the lyric events sit on. MIDI vocal notes
+   aligned to the recording are an exact clock. Laying syllables on them by phrase and breath
+   proved more reliable than syllable onsets heard in a stem. In Fireflies, the stem's onsets put
+   the first line 24 beats before the vocal enters.
+3. **Audio alignment**, from `lyrics.timing.json` (written by `Tools/SongLibrary/lyric_sync.py`),
+   for what remains: spoken lines, and sung lines when the vocal has no notes. The aligner's
+   per-syllable times are used.
 4. **Estimated placement.** Spoken lines with no timing are laid on the untaken bars: stresses on
    beats, the other syllables on upbeats. The bundle says so.
 
@@ -96,23 +99,61 @@ The score weights beat alignment 0.6 and stress alignment 0.4. The note names wh
 
 | Part | Where | Shows |
 |---|---|---|
-| Vocal wheel | panel, left | The vocal changer's top disc facing the viewer, turning once per loop under the comb. The melody is a curve through the notes (radius is pitch): an arc per held note, then a cubic bend to the next. Sung syllables ride it letter by letter, turned with the curve. The one being sung is lit, with a glowing stroke along its stretch of curve that grows with its emphasis. Under vibrato its letters shiver at the vibrato's rate and depth. |
-| Rhyme board | panel, right | The stanza being heard, a row per line on its beat grid. A bar over each stressed syllable and a cup over each unstressed one; a dot under each syllable on a beat (larger on a downbeat). A line over held syllables. End-rhyme letters circled and bracketed on the right; front-rhyme brackets and labels on the left; meters under the lines. The matching line of the other stanza is ghosted beneath on the same beats, with its score and note. |
-| Drum rack | scene, a strip above the panel | The drum disc becomes a ratchet, one tooth per beat. A sawtooth rack meshes with it at twelve o'clock and slides at the rim's speed, so each syllable reaches the comb when it is spoken. Each tooth ramps up through its beat (the upbeat halfway) to a crest, then drops into the next downbeat's well. The line and its meter are written above the rack. |
+| Vocal wheel | panel, left | The vocal changer's top disc facing the viewer, turning once per loop under the comb. The melody is a curve through the notes (radius is pitch): an arc per held note, then a bend to the next. Only the stretch around the comb is drawn: the line just sung and the next to come. Sung syllables sit on the curve at their notes, always upright. The one being sung is lit, with a glow that grows with its emphasis. Under vibrato its letters bob at the vibrato's rate and depth, staying upright. |
+| Word graph | panel, right | The song's stanzas as tabs, the one being heard lit. Below them, that stanza's lines as small graphs of their words. Each word is a node on the line's beat grid, raised by its pitch (sung) or its stress (spoken). The word being heard is lit, and the end-rhyme letter sits at each line's end. |
+| Drum rack | scene, a strip above the panel | A sawtooth rack meshes with the drum disc at twelve o'clock and slides at the rim's speed, so each syllable reaches the comb when it is spoken. The saw is cut by the drum hits themselves. Every hit, or group struck together, is a cliff whose height is its weight (kick tallest, then snare, toms, cymbals, hats) and velocity, with a ramp rising to it over at most the beat before. The disc's rim is a ratchet cut by the same hits in its bar. The line and its meter are written above the rack. |
 
 On the rack:
 
-- A **downbeat** syllable waits on the crest, then drops into its well with a bounce.
-- An **upbeat** syllable rides the ramp and is bumped up over the saw.
-- A **held** syllable floats in a bezier arc above the teeth while it lasts. It stays at the
-  comb as the rack runs under it, then dives into the well where it ends.
+- A syllable **on a beat** waits on the crest, then drops with gravity. It lands in its well
+  exactly on its beat and stays low: an impact flash and a short squash, no bounce.
+- A syllable **off the beat** rides the saw and is bumped up over it as it is spoken.
+- A **held** syllable (three or more eighths) lands the same way, then floats in a bezier arc
+  above the teeth while it lasts. It stays at the comb as the rack runs under it, then dives
+  into the well where it ends.
 - Emphasis blooms as each syllable lands; stressed syllables are brighter at rest.
 
 Trochees read as well, ramp, well, ramp; iambs as ramp, well.
 
+The rhyme, front-rhyme and meter analysis above stays in the bundle, as does the matchup of
+lines between stanzas. The display keeps only the rhyme letters and each stanza's scheme and
+meter.
+
 **Layout.** Lyric mode stacks the screen: the drum strip above, running as wide as the window,
 and the panel below. While a spoken stanza is heard the resting vocal wheel steps back and the
-board widens. The torus steps back throughout.
+word graph widens. The torus steps back throughout.
+
+## Performance
+
+Lyric mode and the instrument changers run inside the same frame budget as the torus. That
+budget is measured by **Tools > Resonance > Measure frame time**. The benchmark covers the
+overview, lyric mode sung and rapped, a key change and a V/V lean, plus the first library song
+with a lyric sheet. It reports frame times, every `Resonance.*` profiler marker, and what the
+worst frame spent its time on.
+
+The key-change and tension frames were the slow ones: the torus pose moves every frame there.
+- **Chord aurora.** Its particles are laid on the surface by the vertex shader from a 17 by 17
+  grid of surface points, so a moving pose uploads the grid instead of rebuilding
+  40,000-vertex meshes.
+- **Field and outline.** The field's coverage follows the pose's parameters and is refreshed,
+  in slices over four frames, once the pose settles. The chord outline is rebuilt only when the
+  chord, pose or camera changes.
+- **Trail.** The melody trail keeps its routes per pose. Only its last second is recomputed
+  while the pose moves.
+- **Lyric displays.** They prepare everything per song at load. The sung syllables are
+  painter text instead of per-letter UI labels. The rack's text meshes are rebuilt only when a
+  slot's syllable changes.
+
+Measured in the editor at 2560 by 1256:
+
+| State | Before | After |
+|---|---|---|
+| Bridge V/V tension | 8 fps, 300+ ms frames | 44 to 48 fps, p95 25 to 32 ms |
+| Lyric mode, sung | 15 fps | 61 to 67 fps |
+| Lyric mode, rap | 58 fps | 93 to 97 fps |
+
+A single long frame just after a song loads remains; none of the profiled systems accounts
+for it.
 
 ## Audio sync (`Tools/SongLibrary/lyric_sync.py`)
 
@@ -135,6 +176,8 @@ Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/lyric_sync.py Prepa
     - sung syllables on onsets without a steady pitch after them;
     - onsets off the eighth-note grid (strict for rap);
     - rapped gaps that do not fit one syllable per eighth.
+- **Intro and outro.** Onsets before the first syllable and after the last are cheap to leave
+  unused, since stems carry intro and outro bleed.
 - **Forced alignment.** `--aligner mms` uses torchaudio's MMS forced aligner instead. Its weights
   (about 1.2 GB) are fetched only with `--download-aligner`.
 - **Vibrato.** pYIN pitch. A voiced stretch oscillating at 4–8.5 Hz, at least a tenth of a
@@ -142,6 +185,16 @@ Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/lyric_sync.py Prepa
 
 The Song Workshop runs this automatically before PatternPrep when a bundle has a `lyrics.txt`,
 a `recording.wav` and no MIDI lyric events. Stems carry the master's lyrics.
+
+After editing a sheet, or when the sync improves, re-derive a bundle's lyrics:
+
+```powershell
+Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/relyric.py PreparedSongs/Library/my-song [--resync-audio]
+```
+
+It backs up what it replaces to `SongLibraryData/backups`, then recompiles the patterns. It
+copies the master's lyrics, harmony and form into each stem, refreshes the stem hashes in the
+manifest, and validates the bundle.
 
 ## Verification
 

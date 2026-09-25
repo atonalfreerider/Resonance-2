@@ -10,9 +10,10 @@ using NAudio.Midi;
 //
 // Sync, best evidence first:
 //   1. MIDI lyric events (karaoke): each event times one syllable.
-//   2. Audio alignment (lyrics.timing.json from Tools/SongLibrary/lyric_sync.py): word times.
-//   3. The vocal lane's notes: sung syllables are laid on notes in order, one per note, a
+//   2. The vocal lane's notes: sung syllables are laid on notes in order, one per note, a
 //      held syllable taking several, lines ending where the melody breathes.
+//   3. Audio alignment (lyrics.timing.json from Tools/SongLibrary/lyric_sync.py): word times,
+//      for spoken lines and for sung lines when the vocal has no notes.
 //   4. Spoken lines with no timing are placed on the beat grid, stresses on downbeats.
 //
 // Reading: every syllable's lexical stress, where it falls in the bar, how long it is held
@@ -148,29 +149,17 @@ public static class Lyrics
 
         // 1. Lyric events.
         if (events.Count > 0 && SyncEvents(flat, events)) syncs.Add("MIDI lyric events");
-        // 2. Audio alignment.
+        // 2. The vocal's notes for sung syllables still untimed: MIDI vocal notes aligned to the
+        //    recording are exact, and laying the syllables on them by phrase and breath is more
+        //    reliable than syllable onsets heard in a stem.
+        if (flat.Any(f => !f.Spoken && double.IsNaN(f.Start)) && notes.Length > 0 && SyncNotes(flat.Where(f => !f.Spoken && double.IsNaN(f.Start)).ToList(), notes)) syncs.Add("vocal notes");
+        // 3. Audio alignment for what remains: spoken lines, or sung lines with no vocal notes.
         Timing timing = null;
         if (timingPath != null && File.Exists(timingPath))
         {
             timing = JsonSerializer.Deserialize<Timing>(File.ReadAllText(timingPath));
-            var untimed = flat.Where(f => double.IsNaN(f.Start)).ToHashSet();
-            if (timing != null && untimed.Count > 0 && SyncWords(flat, timing, cycles))
-            {
-                syncs.Add("audio alignment" + (timing.method.Length > 0 ? $" ({timing.method})" : ""));
-                // Where the vocal has notes they are the better clock: a sung syllable the audio
-                // placed within a third of a beat of a note onset takes that onset (and its note).
-                var onsets = notes.Select(n => n.Beat).Distinct().OrderBy(b => b).ToArray();
-                foreach (var f in flat.Where(f => untimed.Contains(f) && !f.Spoken && !double.IsNaN(f.Start)))
-                {
-                    int k = Array.BinarySearch(onsets, f.Start); if (k < 0) k = ~k;
-                    double best = double.NaN;
-                    foreach (int c in new[] { k - 1, k }) if (c >= 0 && c < onsets.Length && Math.Abs(onsets[c] - f.Start) <= 1 / 3.0 && (double.IsNaN(best) || Math.Abs(onsets[c] - f.Start) < Math.Abs(best - f.Start))) best = onsets[c];
-                    if (!double.IsNaN(best)) { f.Start = best; f.End = double.NaN; }
-                }
-            }
+            if (timing != null && flat.Any(f => double.IsNaN(f.Start)) && SyncWords(flat, timing, cycles)) syncs.Add("audio alignment" + (timing.method.Length > 0 ? $" ({timing.method})" : ""));
         }
-        // 3. Vocal notes for sung syllables still untimed.
-        if (flat.Any(f => !f.Spoken && double.IsNaN(f.Start)) && notes.Length > 0 && SyncNotes(flat.Where(f => !f.Spoken && double.IsNaN(f.Start)).ToList(), notes)) syncs.Add("vocal notes");
         // Every sung syllable takes its note's pitch, length and loudness; a held syllable runs
         // through the notes that follow it until the next syllable.
         var timed = flat.Where(f => !double.IsNaN(f.Start)).OrderBy(f => f.Start).ToList();
@@ -312,8 +301,8 @@ public static class Lyrics
                 double best = cost[i, j - 1] + 2.5; int from = -1;
                 for (int k = 1; k <= Most && k <= j; k++)
                 {
-                    double prior = cost[i - 1, j - k]; if (double.IsInfinity(prior)) continue;
-                    double c = prior + (k - 1) * (f.Hold ? .1 : stressed ? .7 : 1.3);
+                    double before = cost[i - 1, j - k]; if (double.IsInfinity(before)) continue;
+                    double c = before + (k - 1) * (f.Hold ? .1 : stressed ? .7 : 1.3);
                     for (int x = j - k; x < j - 1; x++) if (Breath(x)) c += 2;
                     if (lineEnd && !Breath(j - 1)) c += 1.2;
                     if (!lineEnd && Breath(j - 1)) c += 1.6;
