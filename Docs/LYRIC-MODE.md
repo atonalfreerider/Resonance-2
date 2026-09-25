@@ -180,3 +180,11 @@ The fixture is an original arrangement of public-domain texts and tunes:
 
 The rendered audio uses a formant voice and the offline Windows speech synthesizer. No
 proprietary recordings or lyrics are used in tests.
+
+To try lyric mode, build the fixture into the prepared library:
+
+```powershell
+Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/add_lyric_fixture.py
+```
+
+Then select **lyric-fixture-public-domain · recording** in Unity's Prepared library, load it, and choose **View → Lyrics**.
