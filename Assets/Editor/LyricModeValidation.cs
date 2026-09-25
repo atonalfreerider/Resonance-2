@@ -82,23 +82,32 @@ public static class LyricModeValidation
             // Paused at exact moments: the song position is the reader's clock.
             async Task HoldAt(double seconds){midi.Seek(midi.AudioTime(seconds));midi.Pause();await Task.Delay(150);}
             double SecondsOf(double beat)=>midi.Cycles.SecondsAt(beat);
-            // The bloom: white on landing, died away into the chord's colour 0.35 s later.
+            // The syllable is in the chord's colour; the strike across it is a white bloom that fades fast.
             await HoldAt(SecondsOf(star.Start)+.02);
-            var flash=rack.ReaderColor;
-            await HoldAt(SecondsOf(star.Start)+.35);
-            var settled=rack.ReaderColor;var chord=rack.ChordColor;
+            float strikeOn=rack.Strike;var landing=rack.ReaderColor;
+            await HoldAt(SecondsOf(star.Start)+.3);
+            float strikeOff=rack.Strike;var sung=rack.ReaderColor;var chord=rack.ChordColor;
             Vector3 Hue(Color c){var v=new Vector3(c.r,c.g,c.b);return v/Mathf.Max(1e-4f,Mathf.Max(v.x,Mathf.Max(v.y,v.z)));}
-            Check(flash.maxColorComponent>chord.maxColorComponent*1.5f&&Vector3.Distance(Hue(settled),Hue(chord))<.08f&&settled.maxColorComponent<chord.maxColorComponent*1.15f,$"The syllable lands in a white bloom ({flash.maxColorComponent:0.0}x) that has died into the chord's colour 0.35 s later ({settled.maxColorComponent:0.00} vs {chord.maxColorComponent:0.00})");
+            Check(Vector3.Distance(Hue(sung),Hue(chord))<.05f&&strikeOn>.3f&&strikeOff<.03f&&landing.maxColorComponent>sung.maxColorComponent*1.2f,$"\"star\" lands with a small bloom ({landing.maxColorComponent:0.00} → {sung.maxColorComponent:0.00}) into the chord's colour; its strike flares white ({strikeOn:0.00}) and is gone 0.3 s later ({strikeOff:0.00})");
 
-            // Spoken trochees: the stressed downbeat "Stood" drops in diagonally from the upper left,
-            // the upbeat "the" slides up from the lower right, each landing on the line on its onset.
+            // Spoken trochees: the stressed downbeat "Stood" is struck down, the upbeat "the" up.
             var stood=lyrics.Syllables.First(s=>s.Text=="Stood");var the=lyrics.Syllables.First(s=>s.Spoken&&s.Start>stood.Start);
-            await HoldAt(SecondsOf(stood.Start)-.06);
+            await HoldAt(SecondsOf(stood.Start)-.08);
             var drop=rack.ReaderShift;
-            Check(rack.ReaderSyllable==stood&&rack.ReaderFrom==1&&drop.x<-.1f&&drop.y>.07f,$"60 ms before its beat \"Stood\" is dropping in diagonally from the upper left ({drop.x:0.00}, {drop.y:0.00} from its place)");
-            await HoldAt(SecondsOf(the.Start)-.06);
+            Check(rack.ReaderSyllable==stood&&drop.x<-.1f&&drop.y>.07f,$"80 ms before its beat \"Stood\" slides in from the upper left ({drop.x:0.00}, {drop.y:0.00})");
+            await HoldAt(SecondsOf(the.Start)-.08);
             var rise=rack.ReaderShift;
-            Check(rack.ReaderSyllable==the&&rack.ReaderFrom==-1&&rise.x>.1f&&rise.y<-.07f,$"60 ms before it, the off-beat \"the\" is sliding up from the lower right ({rise.x:0.00}, {rise.y:0.00})");
+            Check(rack.ReaderSyllable==the&&rise.x>.1f&&rise.y<-.07f,$"80 ms before it the off-beat \"the\" slides in from the lower right ({rise.x:0.00}, {rise.y:0.00})");
+            await HoldAt(SecondsOf(stood.Start)+.02);
+            Check(rack.ReaderSyllable==stood&&rack.ReaderFrom==1&&rack.Strike>.3f&&Mathf.Abs(rack.ReaderOrpX)<.01f,$"\"Stood\" lands centred on the stem (x {rack.ReaderOrpX:0.000}) with a down strike ({rack.Strike:0.00})");
+            await HoldAt(SecondsOf(the.Start)+.02);
+            Check(rack.ReaderSyllable==the&&rack.ReaderFrom==-1&&rack.Strike>.3f&&Mathf.Abs(rack.ReaderOrpX)<.01f,$"The off-beat \"the\" lands centred with an up strike ({rack.Strike:0.00})");
+            Check(rack.TrailCount>=1&&rack.TrailNearestRight<rack.ReaderLeft&&rack.TrailNearestAlpha<1.01f&&rack.TrailNearestAlpha>.3f,$"\"Stood\" has joined the trail building to the left ({rack.TrailCount} syllables, nearest ending at {rack.TrailNearestRight:0.00}, left of {rack.ReaderLeft:0.00})");
+            // The next drum hit comes in from the right and reaches the stem as it is struck.
+            double toothBeat=rack.NextToothBeat;float toothX=rack.NextToothX;
+            await HoldAt(SecondsOf(toothBeat)-.05);
+            float closer=rack.NextToothX;
+            Check(!double.IsNaN(toothBeat)&&toothX>0&&closer<toothX&&closer>=0&&closer<.25f,$"The next drum hit comes in from the right as a tooth ({toothX:0.00} → {closer:0.00} just before it is struck)");
             // The stem joining the comb to the line flashes with a drum hit and fades before the next.
             var hits=data.Notes.Where(n=>n.Channel==10).Select(n=>n.Beat).Distinct().OrderBy(x=>x).ToArray();
             var rapStart=lyrics.Lines[lyrics.Stanzas.First(z=>z.Name=="Rap 1").FirstLine].Start;int hit=Array.FindIndex(hits,x=>x>=rapStart);
@@ -106,21 +115,20 @@ public static class LyricModeValidation
             await HoldAt(SecondsOf(hits[hit])+.015);float struck=rack.Pulse;
             await HoldAt(SecondsOf(hits[hit])+.28);float faded=rack.Pulse;
             Check(struck>.15f&&faded<struck*.1f,$"The stem from the drum wheel's comb to the syllable line flashes on a drum hit ({struck:0.00}) and fades before the next ({faded:0.00})");
-            // Played in real time: each lands on its onset with no overshoot.
+            // Played in real time: each is centred on its onset.
             await At(stood.Start-1,60,true);
             double onsetMs=(SecondsOf(stood.Start)-midi.ScorePosition)*1000;
             await Task.Delay(Mathf.Max(0,Mathf.RoundToInt((float)onsetMs))+25);
-            Check(rack.ReaderSyllable==stood&&rack.ReaderFrom==1&&rack.ReaderOffset<.005f&&Mathf.Abs(rack.ReaderOrpX)<.01f,$"Played, just after its beat \"Stood\" has landed on the line, no overshoot (offset {rack.ReaderOffset:0.000}), its recognition letter on the stem (x {rack.ReaderOrpX:0.000})");
+            Check(rack.ReaderSyllable==stood&&Mathf.Abs(rack.ReaderOrpX)<.01f,$"Played, just after its beat \"Stood\" is centred on the stem (x {rack.ReaderOrpX:0.000})");
             await Task.Delay(Mathf.RoundToInt((float)(SecondsOf(the.Start)-midi.ScorePosition)*1000)+40);
-            Check(rack.ReaderSyllable==the&&rack.ReaderFrom==-1&&rack.ReaderOffset<.005f,$"Played, the upbeat \"the\" has landed on the line (offset {rack.ReaderOffset:0.000})");
-            Check(rack.Caption.Contains("Stood")&&rack.Caption.Contains("wig"),"The spoken line is written above the reader");
+            Check(rack.ReaderSyllable==the&&Mathf.Abs(rack.ReaderOrpX)<.01f,"Played, the upbeat \"the\" is centred on its onset");
             Check(deck.Graph.Stanza=="RAP 1"&&deck.Graph.LitWord.Length>0,$"The lyric graph follows into Rap 1, lighting \"{deck.Graph.LitWord}\"");
             await Task.Delay(700);await Shot("lyric-rap");
 
             // Pentameter: the held line-end "day" stays on the line with its hold bar.
             var day=lyrics.Syllables.First(s=>s.Text=="day");
             await At(day.Start+1.2,200,true);
-            Check(rack.ReaderSyllable==day&&rack.Holding&&Mathf.Abs(rack.ReaderOffset)<.03f,$"\"day\", held over {day.Teeth} teeth, stays on the line with its hold bar");
+            Check(rack.ReaderSyllable==day&&rack.Holding&&Mathf.Abs(rack.ReaderOrpX)<.03f,$"\"day\", held over {day.Teeth} teeth, stays on the line with its hold bar");
             await Shot("lyric-sonnet");
             views.SetView(VisualizationViews.View.Overview);await Task.Delay(1500);
             Check(!rack.Shown&&!deck.LyricLayout,"Leaving lyric mode hides the lyrics");

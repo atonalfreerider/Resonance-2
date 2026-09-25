@@ -1,10 +1,9 @@
 # Lyric mode
 
 Lyric mode (**View → Lyrics**) focuses on the words. A fast reader on the drum wheel takes most
-of the screen. Every syllable, sung or spoken, is shoved onto a syllable line joined to the drum
-wheel on its onset: a beat drops in diagonally from the upper left, an off-beat slides up from
-the lower right. Below it, a
-lyric graph shows the words' own structure (stanzas, rhymes, refrains) and lights each word as
+of the screen: one lyric line joined to the drum wheel. The syllable being heard is centred, the
+ones before build to the left as a fading trail, and each lands with a slanted white strike, down
+on a beat and up off one. Below it, a lyric graph shows the words' own structure (stanzas, rhymes, refrains) and lights each word as
 it is heard, beside a small vocal wheel carrying the melody. Lyrics are shown only in lyric
 mode.
 
@@ -116,7 +115,7 @@ The score weights beat alignment 0.6 and stress alignment 0.4. The note names wh
 
 | Part | Where | Shows |
 |---|---|---|
-| Reader | scene, on the drum wheel, most of the screen | A syllable line runs across the strip just above the drum disc. A stem joins it to the disc's comb at twelve o'clock (where the dimples are struck) and flashes with every drum hit, brightest for the kick. Each syllable is shoved onto the line exactly on its onset. A beat drops in diagonally from the upper left; an off-beat slides up from the lower right. The shove eases hard onto the line in the last 30 to 80 ms before the onset and never overshoots, and it pushes the syllable before on along the same path while it fades. Syllables are set bold and upper case. Each is placed so its optimal recognition point (the letter a fast reader fixes on: the second of 2 to 5 letters, the third of 6 to 9, and so on) sits on the stem. It lands in a white flash, brighter with emphasis but never bright enough to blow the letters out, which dies away within about a third of a second into the colour of the chord of the moment. A held syllable trails a bar that runs out with it and trembles under vibrato. The line being heard is written above. |
+| Reader | scene, on the drum wheel, most of the screen | One lyric line runs across the top of the strip, just above the drum disc. A stem joins it to the disc's comb at twelve o'clock (where the dimples are struck) and flashes with every drum hit, brightest for the kick. The syllable being heard is always centred, with its optimal recognition point (the letter a fast reader fixes on: the second of 2 to 5 letters, the third of 6 to 9, and so on) on the stem. It is set bold, upper case, in the colour of the chord of the moment. The syllables before it build to the left as a trail that dims and fades with distance, and each new syllable slides the trail over in the last 30 to 80 ms before its onset, landing exactly on it. As it lands, a slanted strike cuts across it: down (\\) on a beat, up (/) off one. The strike is drawn in 40 ms as a white bloom and is gone within about a quarter of a second, brighter and wider when a drum hit lands with it. The next drum hit comes in from the right at the rim's speed as a translucent steep sawtooth tooth, taller for a heavier hit, whose cliff reaches the stem as it is struck. A held syllable trails a bar that runs out with it and trembles under vibrato. |
 | Lyric graph | panel, right | The words' structure, not the music's: no chord colours, no pitch. Each stanza is a column headed by its name and rhyme scheme, and each line a row of its words in reading order. End rhymes are arcs on the right from line end to line end, with the rhyme letter beyond. Front rhymes are arcs on the left, internal rhymes dip under the two words, and a line heard before is marked ↺ with how many times. The word being heard is lit and underlined, and the links of the line being heard glow. The columns slide to keep the stanza being heard second from the left. |
 | Vocal wheel | panel, left, small | The vocal changer's top disc facing the viewer, turning once per loop under the comb. The melody is a curve through the notes (radius is pitch). Sung syllables sit on the curve at their notes, always upright. The one being sung is lit, and under vibrato its letters bob at the vibrato's rate. |
 
@@ -124,7 +123,7 @@ The rhyme, front-rhyme and meter analysis stays in the bundle, as does the match
 between stanzas. The graph shows the rhymes as links and each stanza's scheme.
 
 **Layout.** Lyric mode stacks the screen. The reader and the drum wheel (framed whole, with the
-line and the caption above it) take a strip of about 62% of the height, running as wide as the window; the lyric graph and the vocal wheel take the
+lyric line above it) take a strip of about 62% of the height, running as wide as the window; the lyric graph and the vocal wheel take the
 panel below. The torus steps back throughout.
 
 **Highlighting an instrument.** Click an instrument changer in the pattern-wheel panel to make
@@ -243,11 +242,11 @@ manifest, and validates the bundle.
   - the lyric graph lays out every stanza and its links, and lights the word being heard with
     its line's links glowing, following from Verse 1 into Rap 1;
   - the vocal wheel lights the sung syllable, with vibrato; the reader holds it with its bar;
-  - a syllable lands in a white bloom that has died into the chord's colour 0.35 s later;
-  - 60 ms before its beat, the downbeat "Stood" is dropping in from the upper left, and the
-    off-beat "the" sliding up from the lower right;
-  - played in real time, each lands on the line on its onset, with no overshoot and its
-    recognition letter on the stem;
+  - a syllable is set in the chord's colour, and its white strike is gone 0.3 s after it lands;
+  - the downbeat "Stood" lands centred on the stem with a down strike, the off-beat "the" with
+    an up strike, and "Stood" joins the trail to its left;
+  - the next drum hit's tooth comes in from the right and reaches the stem as it is struck;
+  - played in real time, each syllable is centred on its onset;
   - the stem from the comb flashes on a drum hit and fades before the next;
   - the held sonnet "day" stays on the line with its hold bar.
 
