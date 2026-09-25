@@ -60,3 +60,11 @@ RegionPhases is a separate, continuous display timeline prepared per section. Si
 
 
 Tonal context: reviewed song keys remain locked; several authored MIDI key signatures are preserved; a single opening signature, or none, is only a starting point. Key changes are then detected from the chord timeline (`KeyAnalysis`): a Viterbi pass over 24 keys where secondary dominants, leading-tone chords, the Neapolitan and borrowed chords are cheap tonicizations and a new key must hold four bars. The bundle saves `KeyChanges` (with evidence) and `Tensions` (V/V, ♭II…, their target key and whether a key change completes them): the torus leans toward a tension's key and relaxes, or completes the twist when the key change follows. Set `InferKeyChanges: false` to hold a configured key. Short (<0.75 beat) passing chords remain in note/chord data but do not interrupt the contextual region. Existing bundles are not automatically regenerated. Run `dotnet run --project Tools/PatternPrep -- --test-harmony` for synthetic checks.
+
+## Instrument patterns and lyrics (bundle version 5)
+
+`Parts` breaks the song down instrument by instrument. Each pitched lane is read as the chords it plays. The song's loop passes cut it into windows, shortened where the lane repeats sooner. Windows with the same chords are one pattern; one or more changed chords make a variation. Runs fold into a lane grammar such as `A B C×2 B C×2 C′ B′ D×2`. Unity shows each lane as a CD changer.
+
+`Lyrics` is present when a `lyrics.txt` sits beside the MIDI (or `Lyrics` is set in `song.json`). It is synced by MIDI lyric events, then `lyrics.timing.json` from `Tools/SongLibrary/lyric_sync.py`, then the vocal lane's notes. Every syllable carries stress, metrical position, held teeth, emphasis and vibrato. Every line carries its meter, end rhyme and front rhyme. Stanzas sung to one pattern are matched line by line. `PitchBendRange` in `song.json` sets the vocal's bend range (default 2) for reading vibrato. See [Docs/LYRIC-MODE.md](../../Docs/LYRIC-MODE.md) for the sheet format.
+
+`--write-fixture lyrics out.mid` writes a generated song on public-domain words and tunes (Twinkle, Hiawatha, Sonnet 18) with its `lyrics.txt` and `song.json`. `--syllables word…` prints how words are split, stressed and rhymed.

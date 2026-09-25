@@ -87,6 +87,57 @@ key changes off the key frames and have no tensions until regenerated.
 - **Through-composition.** Families that return are drawn with solid outlines. Material
   heard once is dashed. When a group plays, every occurrence's bracket lights up.
 
+## Instrument patterns and changers
+
+The section families describe the song as a whole. The instrument patterns break it down
+lane by lane (`InstrumentPatterns`, bundle version 5 `Parts`).
+
+**Offline**
+
+1. **Chords per lane.**
+   - A lane's own pitch classes are read on the notated beat grid, with the song's harmony as
+     context.
+   - A single line (one or two pitch classes in a step) plays the song's chord, so its passing
+     tones do not make chords of their own.
+   - Chordal steps are decoded like the song timeline. A pad holding C through C–Am–F–G stays C.
+2. **Windows.**
+   - The song's loop passes cut each lane into windows, so its patterns turn with the song's
+     loops.
+   - A window whose chords repeat inside it is cut shorter: a one-chord vamp over a four-bar
+     pass is a one-bar loop played four times.
+3. **Patterns.**
+   - By definition, a window that repeats the same chords is the same pattern. A transposed copy
+     is too, when it moves between chords.
+   - A window that changes one or more chords but keeps at least half is a variation (′, ″).
+     Each distinct set of changed chords is its own variation.
+   - The fundamental is the per-step consensus of the pattern's plays.
+4. **Runs and grammar.**
+   - Consecutive plays of one pattern are a run (repeat n of m).
+   - Each lane is written as a grammar, for example keys `A B C×2 B C×2 C′ B′ D×2` and vocal
+     `· A · A · A′ ·`, where `·` is a rest.
+   - The bundle records each lane's bars against the bars of its fundamentals.
+
+**Display: CD changers**
+
+- **The stack.** Every pitched lane is a changer in the pattern-wheel panel, in the drum wheel's
+  design. Its patterns are discs in a stack seen in perspective.
+- **The top disc.** The pattern playing rises to the top and turns once per loop under a comb at
+  twelve o'clock. It shows:
+  - its chord band (colour is tonality);
+  - changed chords outlined, with a white spark at the comb as they pass;
+  - the lane's notes as dimples: radius is pitch, played dimples lit, the sounding one flashing.
+    The vocal's disc also draws its melody as a curve.
+- **The hub** carries the pattern with its primes (A, B′, C+2) and the repeat count (2/4): cyclic
+  repetition.
+- **Waiting discs** show their letters on the edge. When the lane moves to another pattern, its
+  disc slides up and the old one sinks. When the lane rests, no disc is on top.
+- **Below the stack**: the lane's name, its compression (`60 bars → 19`) and its grammar around
+  the current token, which is lit and underlined.
+
+The changers take a bay along the bottom of the panel. The ring shrinks to make room.
+[Lyric mode](LYRIC-MODE.md) turns the vocal changer to face the viewer and lays the sung
+syllables on its melody.
+
 ## Keys: changes and tensions
 
 The pipeline (`KeyAnalysis`) detects key changes from the chord timeline:
@@ -144,6 +195,8 @@ any current tension (`C major · V/V → G major`).
   first bar is its fundamental.
 - One generator (`FormHatch`) draws the ring sectors, rack strips, planet edges and the
   side-panel swatches. The hatch sits in a thin band at the edge of each disc.
+- **The instrument changers and lyrics share it too.** Chord bands carry colour; stacks,
+  stress marks, brackets and the drum rack are teal; the syllable being sung is white.
 
 ## Verification
 
@@ -153,7 +206,10 @@ any current tension (`C major · V/V → G major`).
   - repetition-first structure on pop, varied verse–chorus and A A B B A C C strain fixtures;
   - the A B A B C A B C alternating pair;
   - key analysis: V/V and Neapolitan tensions relax, a dominant pivot completes a
-    modulation, and a lifted chorus changes key.
+    modulation, and a lifted chorus changes key;
+  - instrument patterns and lyrics on the public-domain lyric fixture: each lane's grammar,
+    runs and changed spans, and the lyric sync, meter and rhyme (see
+    [LYRIC-MODE.md](LYRIC-MODE.md)).
 - `dotnet run --project Tools/PatternPrep -- --sweep "<midi>|Tools/PatternPrep/reference-forms/maple-leaf-rag.json"`
   compares boundaries with reviewed forms. The Maple Leaf Rag MIDI is exported from the
   music21 corpus, public domain.

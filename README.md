@@ -17,7 +17,10 @@ claiming an automatically established tonal key.
 See [implementation and usage notes](IMPLEMENTATION-NOTES.md), the
 [improvement plan](UMBILIC-IMPROVEMENT-PLAN.md) and the
 [pattern wheel design](Docs/PATTERN-WHEELS.md): songs compressed to fundamental loops
-and their variations, shown as a rack, pinion, planets and moons.
+and their variations, shown as a rack, pinion, planets and moons, with a CD changer per
+instrument. [Lyric mode](Docs/LYRIC-MODE.md) (View → Lyrics) syncs a lyric sheet to the
+music: sung lines ride the vocal wheel's melody, spoken lines a sawtooth rack on the drum
+wheel, and a rhyme board shows end rhyme, front rhyme and meter matchups.
 
 Validation: `dotnet run --project Tests/ModelChecks/ModelChecks.csproj`.
 For scene checks, use **Tools → Resonance → Run runtime regression checks** in Play Mode.

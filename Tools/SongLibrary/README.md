@@ -92,10 +92,27 @@ Setup uses two isolated environments; inference dependencies do not replace the 
 
 CSV is useful for alignment inspection, but JSON is the authoritative analysis format because the section/template/variant hierarchy is nested.
 
+## Lyrics
+
+Put a `lyrics.txt` in a bundle to see its words in lyric mode (View → Lyrics). Use `[Verse 1]`, `[Rap | spoken]` stanzas and hy-phen-at-ed syllables; [Docs/LYRIC-MODE.md](../../Docs/LYRIC-MODE.md) has the format. A MIDI with karaoke lyric events is synced from those events. Otherwise the sheet is synced to the recording before PatternPrep runs:
+
+```powershell
+Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/lyric_sync.py PreparedSongs/Library/my-song
+```
+
+- **Beats and downbeats.** [beat_this](https://github.com/CPJKU/beat_this), installed in this environment; its 77 MB `final0` checkpoint is cached under `SongLibraryData/models/torch`.
+- **Words.** The syllables are aligned to the vocal stem's syllable onsets. Nothing is downloaded.
+- **Forced alignment.** `--aligner mms --download-aligner` uses torchaudio's MMS forced aligner instead, fetching about 1.2 GB of weights once.
+- **Vibrato.** Read from pYIN pitch.
+
+The result, `lyrics.timing.json`, is evidence to review, not a certified transcription. The pipeline runs this step automatically when a bundle has `lyrics.txt`, `recording.wav` and no MIDI lyric events. Stems carry the master's lyrics.
+
 ## Verification
 
 ```powershell
 Tools/SongPrep/.venv/Scripts/python.exe -m unittest discover -s Tools/SongLibrary -p 'test_*.py' -v
+# Audio lyric sync on the rendered public-domain fixture (about two minutes; needs this environment):
+Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/test_lyric_sync.py
 ```
 
 Tests cover timing/payload preservation, drums, meter, bundle hashes and continuous regions, catalog identity, provider link mapping, wrong-harmony rejection, and path containment. PatternPrep independently verifies lossless reconstruction on every build.

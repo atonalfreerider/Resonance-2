@@ -9,6 +9,7 @@ sync the bundle from lyrics.timing.json instead.
 Slow (about two minutes: beat_this, pYIN and the fixture render). Run:
   Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/test_lyric_sync.py
 """
+import importlib.util
 import json
 import subprocess
 import sys
@@ -30,6 +31,8 @@ def prep(*args):
     subprocess.run(['dotnet', 'run', '--project', str(ROOT / 'Tools' / 'PatternPrep'), '--', *map(str, args)], check=True, capture_output=True, cwd=ROOT)
 
 
+@unittest.skipUnless(importlib.util.find_spec('beat_this') and sys.platform == 'win32',
+                     'needs the Song Workshop environment (Tools/SongLibrary/.venv, with beat_this) on Windows for offline speech')
 class LyricSyncTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

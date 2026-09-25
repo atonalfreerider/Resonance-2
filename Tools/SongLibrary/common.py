@@ -58,13 +58,33 @@ def run(command, log=None, timeout=7200, env=None):
 # Isolated stems show the master's harmony and form: the same chords, fundamentals,
 # section groups and per-visit passes, so a stem's pattern wheels match the full mix.
 MASTER_FIELDS = ('Chords', 'RegionPhases', 'Key', 'Minor', 'KeySource', 'Duration', 'EndBeat',
-                 'Style', 'FormName', 'FormGrammar', 'SongBars', 'FundamentalBars', 'Patterns', 'Groups')
+                 'Style', 'FormName', 'FormGrammar', 'SongBars', 'FundamentalBars', 'Patterns', 'Groups', 'Lyrics')
 MASTER_SECTION_FIELDS = ('Chords', 'ProgressionBeats', 'Family', 'Label', 'Role', 'Letter', 'Short',
                          'Passes', 'Variation', 'Group', 'GroupVisit', 'CycleBeats', 'Loops')
 
 
 def compile_patterns(midi, log=None):
+    sync_lyrics(Path(midi), log)
     run(['dotnet', 'run', '--project', ROOT/'Tools/PatternPrep/PatternPrep.csproj', '--', midi], log)
+
+
+# A lyric sheet beside the MIDI (lyrics.txt) is synced to the recording first when the MIDI
+# carries no lyric events of its own; PatternPrep then reads lyrics.timing.json.
+def sync_lyrics(midi, log=None):
+    folder = Path(midi).parent
+    sheet, timing, audio = folder/'lyrics.txt', folder/'lyrics.timing.json', folder/'recording.wav'
+    if not sheet.exists() or not audio.exists():
+        return
+    if timing.exists() and timing.stat().st_mtime >= max(sheet.stat().st_mtime, audio.stat().st_mtime):
+        return
+    import mido
+    if any(message.type == 'lyrics' for track in mido.MidiFile(midi).tracks for message in track):
+        return
+    from lyric_sync import sync
+    out = sync(folder)
+    if log:
+        with open(log, 'a', encoding='utf-8') as stream:
+            stream.write(f'\nlyrics synced to the recording: {out}\n')
 
 
 def validate_bundle(directory):
