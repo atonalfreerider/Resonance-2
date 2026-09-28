@@ -94,15 +94,26 @@ public static class LyricModeValidation
             var stood=lyrics.Syllables.First(s=>s.Text=="Stood");var the=lyrics.Syllables.First(s=>s.Spoken&&s.Start>stood.Start);
             await HoldAt(SecondsOf(stood.Start)-.08);
             var drop=rack.ReaderShift;
-            Check(rack.ReaderSyllable==stood&&drop.x<-.1f&&drop.y>.07f,$"80 ms before its beat \"Stood\" slides in from the upper left ({drop.x:0.00}, {drop.y:0.00})");
+            Check(rack.ReaderSyllable==stood&&rack.ReaderFrom==1&&Mathf.Abs(drop.x)<.01f&&drop.y>.1f,$"80 ms before its beat \"Stood\" is hammering straight down toward its well ({drop.y:0.00} above)");
             await HoldAt(SecondsOf(the.Start)-.08);
             var rise=rack.ReaderShift;
-            Check(rack.ReaderSyllable==the&&rise.x>.1f&&rise.y<-.07f,$"80 ms before it the off-beat \"the\" slides in from the lower right ({rise.x:0.00}, {rise.y:0.00})");
-            await HoldAt(SecondsOf(stood.Start)+.02);
-            Check(rack.ReaderSyllable==stood&&rack.ReaderFrom==1&&rack.Strike>.3f&&Mathf.Abs(rack.ReaderOrpX)<.01f,$"\"Stood\" lands centred on the stem (x {rack.ReaderOrpX:0.000}) with a down strike ({rack.Strike:0.00})");
-            await HoldAt(SecondsOf(the.Start)+.02);
-            Check(rack.ReaderSyllable==the&&rack.ReaderFrom==-1&&rack.Strike>.3f&&Mathf.Abs(rack.ReaderOrpX)<.01f,$"The off-beat \"the\" lands centred with an up strike ({rack.Strike:0.00})");
-            Check(rack.TrailCount>=1&&rack.TrailNearestRight<rack.ReaderLeft&&rack.TrailNearestAlpha<1.01f&&rack.TrailNearestAlpha>.3f,$"\"Stood\" has joined the trail building to the left ({rack.TrailCount} syllables, nearest ending at {rack.TrailNearestRight:0.00}, left of {rack.ReaderLeft:0.00})");
+            Check(rack.ReaderSyllable==the&&rack.ReaderFrom==-1&&Mathf.Abs(rise.x)<.01f&&rise.y<-.1f,$"80 ms before it the off-beat \"the\" is kicked straight up toward its crest ({rise.y:0.00} below)");
+            await HoldAt(SecondsOf(stood.Start)+.01);
+            Check(rack.ReaderSyllable==stood&&rack.ReaderShift==Vector2.zero&&rack.ReaderY<-.05f&&rack.ReaderSquash.y<.92f&&rack.ReaderSquash.x>1.05f&&rack.Strike>.3f&&Mathf.Abs(rack.ReaderOrpX)<.01f,$"\"Stood\" lands centred on the stem (x {rack.ReaderOrpX:0.000}), low in the well (y {rack.ReaderY:0.00}), squashed by the impact ({rack.ReaderSquash.x:0.00}×{rack.ReaderSquash.y:0.00}) with a down strike ({rack.Strike:0.00})");
+            await HoldAt(SecondsOf(the.Start)+.01);
+            Check(rack.ReaderSyllable==the&&rack.ReaderY>.05f&&rack.ReaderSquash.y>1.05f&&rack.Strike>.3f&&Mathf.Abs(rack.ReaderOrpX)<.01f,$"The off-beat \"the\" lands centred, high on the crest (y {rack.ReaderY:0.00}), stretched ({rack.ReaderSquash.y:0.00}) with an up strike ({rack.Strike:0.00})");
+            await HoldAt(SecondsOf(the.Start)+.14);
+            Check(rack.ReaderSyllable==the&&Mathf.Abs(rack.ReaderSquash.x-1)<.01f&&Mathf.Abs(rack.ReaderSquash.y-1)<.01f,"140 ms later the impact has settled: no bounce");
+            Check(rack.TrailCount>=1&&rack.TrailNearestRight<rack.ReaderLeft&&rack.TrailNearestY<-.05f&&rack.TrailNearestAlpha<1.01f&&rack.TrailNearestAlpha>.3f,$"\"Stood\" has joined the trail building to the left, still in its well (y {rack.TrailNearestY:0.00}; {rack.TrailCount} syllables, nearest ending at {rack.TrailNearestRight:0.00}, left of {rack.ReaderLeft:0.00})");
+            // A drawn-out syllable is set wide; a short one is not.
+            var dayHeld=lyrics.Syllables.First(s=>s.Text=="day");
+            await HoldAt(SecondsOf(dayHeld.Start)+.05);
+            Check(rack.ReaderSyllable==dayHeld&&rack.ReaderSpacing>=12,$"\"day\", held over {dayHeld.Teeth} teeth, is set wide (letter spacing {rack.ReaderSpacing:0})");
+            await HoldAt(SecondsOf(the.Start)+.05);
+            Check(rack.ReaderSpacing==0,"\"the\", an eighth, is set tight");
+            // Vibrato: the letters shimmer while the held star is sung with vibrato.
+            await HoldAt(SecondsOf(star.VibratoStart)+.3);
+            Check(rack.ReaderSyllable==star&&rack.Shimmer>.5f,$"Under vibrato the letters of \"star\" shimmer at {star.VibratoRate:0.0} Hz (depth {rack.Shimmer:0.00})");
             // The next drum hit comes in from the right and reaches the stem as it is struck.
             double toothBeat=rack.NextToothBeat;float toothX=rack.NextToothX;
             await HoldAt(SecondsOf(toothBeat)-.05);
