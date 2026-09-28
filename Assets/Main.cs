@@ -46,26 +46,34 @@ public class Main : MonoBehaviour
     public bool KeyChanging=>keyBlend<1;
     public float KeyBlend=>keyBlend;
     public bool UncoilMoving=>Mathf.Abs(unfoldProgress-(Uncoiled?1:0))>.00001f;
-    public float CoiledVisibility=>1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.38f,unfoldProgress));
+    // The uncoil, in about 2.4 s: the register offsets collapse onto the umbilic, its three
+    // windings release into one arc, and the octaves fan out, the three overlapping so the band
+    // is always travelling somewhere rather than waiting for the next stage.
+    public const float UncoilSeconds=2.4f;
+    public float CoiledVisibility=>1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.34f,unfoldProgress));
     public float TransitionWiden=>Mathf.Sin(Mathf.PI*unfoldProgress);
-    public float OctaveSpread=>Mathf.SmoothStep(0,1,Mathf.InverseLerp(.78f,1,unfoldProgress));
+    public float OctaveSpread=>Mathf.SmoothStep(0,1,Mathf.InverseLerp(.6f,1,unfoldProgress));
+    public struct UncoilStage { public float Collapse,Unwind,Spread; }
+    public UncoilStage Stage=>new UncoilStage{Collapse=Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.3f,unfoldProgress)),Unwind=Mathf.SmoothStep(0,1,Mathf.InverseLerp(.08f,.86f,unfoldProgress)),Spread=OctaveSpread};
+    // The moving part of the morph depends only on where a point sits along the band (its slot),
+    // so the surface and the rings compute it once per slot and blend each point from it.
+    public Vector3 UncoilPrimary(float slot,in UncoilStage stage)
+    {
+        float t=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation+slot;
+        // Keep signed winding negative throughout; rotate the plane instead of reversing the arc.
+        float angle=Mathf.Lerp(-6*Mathf.PI*t,-Mathf.PI*.5f-slot*320*Mathf.Deg2Rad,stage.Unwind);
+        float vertex=2*Mathf.PI*t+currentVisualTwist;
+        float tube=EdgeLength/(2*Mathf.Sin(Mathf.PI/3))*(1-stage.Unwind);
+        float radius=Mathf.Lerp(Rad,1.55f,stage.Unwind)+tube*Mathf.Cos(vertex);
+        Vector3 primary=new Vector3(radius*Mathf.Cos(angle),tube*Mathf.Sin(vertex),radius*Mathf.Sin(angle));
+        return Quaternion.AngleAxis(90*stage.Unwind,Vector3.right)*primary;
+    }
+    public static Vector3 UncoilBlend(Vector3 primary,Vector3 coiled,Vector3 start,Vector3 flat,in UncoilStage stage)=>
+        Vector3.Lerp(primary+(coiled-start)*(1-stage.Collapse),flat,stage.Spread);
     public Vector3 MorphUncoil(Vector3 coiled,Vector3 flat)
     {
-        // The primary umbilical curve winds three times around the major circle.
-        // Collapse register offsets, release those windings, then fan out octaves.
-        float slot=Mathf.Atan2(-flat.x,flat.y)/(320*Mathf.Deg2Rad);
-        float t=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation+slot;
-        float collapse=Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.22f,unfoldProgress));
-        float unwind=Mathf.SmoothStep(0,1,Mathf.InverseLerp(.16f,.78f,unfoldProgress));
-        // Keep signed winding negative throughout; rotate the plane instead of reversing the arc.
-        float angle=Mathf.Lerp(-6*Mathf.PI*t,-Mathf.PI*.5f-slot*320*Mathf.Deg2Rad,unwind);
-        float vertex=2*Mathf.PI*t+currentVisualTwist;
-        float tube=EdgeLength/(2*Mathf.Sin(Mathf.PI/3))*(1-unwind);
-        float radius=Mathf.Lerp(Rad,1.55f,unwind)+tube*Mathf.Cos(vertex);
-        Vector3 primary=new Vector3(radius*Mathf.Cos(angle),tube*Mathf.Sin(vertex),radius*Mathf.Sin(angle));
-        primary=Quaternion.AngleAxis(90*unwind,Vector3.right)*primary;
-        Vector3 start=UmbilicPoint(t);
-        return Vector3.Lerp(primary+(coiled-start)*(1-collapse),flat,OctaveSpread);
+        float slot=Mathf.Atan2(-flat.x,flat.y)/(320*Mathf.Deg2Rad);var stage=Stage;
+        return UncoilBlend(UncoilPrimary(slot,stage),coiled,UmbilicPoint(HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation+slot),flat,stage);
     }
     public bool UncoilActive=>Uncoiled||UncoilAmount>.001f;
     public void SetUncoiled(bool value){Uncoiled=value;EnsureUncoiledAurora();GetComponent<FeaturedInstrument>()?.ResetPosition();GetComponent<VisualizationViews>()?.ReframeTorus();}
@@ -268,8 +276,12 @@ public class Main : MonoBehaviour
                 var keys=new GradientColorKey[8];for(int k=0;k<8;k++){float u=k/7f;int pitch=currentKey+Mathf.RoundToInt((u-.5f)*12)*7;keys[k]=new GradientColorKey(TonalColorField.Pitch(pitch,currentKey)*Mathf.Lerp(3f,1.1f,OctaveSpread),u);}
                 var gradient=new Gradient();gradient.SetKeys(keys,new[]{new GradientAlphaKey(1,0),new GradientAlphaKey(1,1)});line.colorGradient=gradient;
             }
-            float register=(octave+1)/(float)Octaves,keyT=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation;
-            for(int point=0;point<161;point++){float slot=point/160f-.5f;line.SetPosition(point,MorphUncoil(CoiledPointAt(keyT+slot,register),UncoiledPoint(slot,register)));}
+            float register=(octave+1)/(float)Octaves;
+            if(ringFrame!=Time.frameCount)PrepareRingSlots();
+            for(int point=0;point<RingPoints;point++){float slot=point/(RingPoints-1f)-.5f;
+                var coiled=Vector3.Lerp(ringCentroid[point],ringStart[point],register);
+                ringBuffer[point]=UncoilBlend(ringPrimary[point],coiled,ringStart[point],new Vector3(ringSin[point]*(.45f+1.8f*register),ringCos[point]*(.45f+1.8f*register),0),ringStage);}
+            line.positionCount=RingPoints;line.SetPositions(ringBuffer);
         }
         UpdateLabelStyles();
     }
@@ -308,6 +320,22 @@ public class Main : MonoBehaviour
     {
         float slot=AnimatedUncoilSlot(Mathf.Repeat(t-currentVisualRotation,1));
         return MorphUncoil(CoiledPointAt(t,factor),UncoiledPoint(slot,factor));
+    }
+    // The uncoiled rings share their slots: the umbilic, the centroid, the flat arc's direction
+    // and the moving primary curve are worked out once a frame for all eight rings.
+    const int RingPoints=161;
+    readonly Vector3[] ringBuffer=new Vector3[RingPoints],ringStart=new Vector3[RingPoints],ringCentroid=new Vector3[RingPoints],ringPrimary=new Vector3[RingPoints];
+    readonly float[] ringSin=new float[RingPoints],ringCos=new float[RingPoints];
+    int ringFrame=-1;UncoilStage ringStage;
+    void PrepareRingSlots()
+    {
+        ringFrame=Time.frameCount;ringStage=Stage;float keyT=HarmonyModel.Mod(currentKey*5)/12f+currentVisualRotation;
+        for(int point=0;point<RingPoints;point++)
+        {
+            float slot=point/(RingPoints-1f)-.5f,wt=Mathf.Repeat(keyT+slot,1),angle=-slot*Mathf.Deg2Rad*320;
+            ringStart[point]=UmbilicTorus.PointAlongUmbilical(Sides,EdgeLength,Rad,wt,currentVisualTwist);ringCentroid[point]=CentroidAt(wt);
+            ringSin[point]=Mathf.Sin(angle);ringCos[point]=Mathf.Cos(angle);ringPrimary[point]=UncoilPrimary(slot,ringStage);
+        }
     }
     Vector3 CoiledPointAt(float t,float factor)
     {
@@ -498,7 +526,7 @@ public class Main : MonoBehaviour
             ApplyPose();if(keyChangeCoroutine==null)RefreshView();
         }
         float target=Uncoiled?1:0;
-        if(unfoldProgress!=target){unfoldProgress=Mathf.MoveTowards(unfoldProgress,target,ReducedMotion?1:Time.unscaledDeltaTime/5.85f);UncoilAmount=unfoldProgress*unfoldProgress*unfoldProgress*(unfoldProgress*(unfoldProgress*6-15)+10);RefreshView();}
+        if(unfoldProgress!=target){unfoldProgress=Mathf.MoveTowards(unfoldProgress,target,ReducedMotion?1:Time.unscaledDeltaTime/UncoilSeconds);UncoilAmount=unfoldProgress*unfoldProgress*unfoldProgress*(unfoldProgress*(unfoldProgress*6-15)+10);RefreshView();}
         foreach(var id in chordLineRenderers.Keys.Where(id=>chordLineRenderers[id].TailComplete).ToArray())
         {
             var chord=chordLineRenderers[id];chord.gameObject.SetActive(false);chordPool.Push(chord);chordLineRenderers.Remove(id);
@@ -571,17 +599,46 @@ public class Main : MonoBehaviour
             else { noteTextLabels[i].Color = Color.white; noteTextLabels[i].Size = LabelBase; labelEnergy[i] = -1; }
         }
     }
-    // The other degrees take their tonal colour and grow while their note sounds.
+    // The other degrees take their tonal colour and grow only while they belong to a real chord:
+    // the analysed chord of the moment, held at least a beat. Passing tones and quick transients
+    // leave the label as it is. The glow eases in and out rather than following each note.
+    const double MinChordBeats = 1;
+    readonly float[] labelTarget = new float[Tones], labelGlow = new float[Tones];
+    MidiPlayer labelClock;
+    public static int[] ChordTones(int root, string quality)
+    {
+        int[] steps = quality switch
+        {
+            "m" => new[] { 0, 3, 7 }, "7" => new[] { 0, 4, 7, 10 }, "maj7" => new[] { 0, 4, 7, 11 }, "m7" => new[] { 0, 3, 7, 10 },
+            "dim" => new[] { 0, 3, 6 }, "dim7" => new[] { 0, 3, 6, 9 }, "m7b5" => new[] { 0, 3, 6, 10 }, "aug" => new[] { 0, 4, 8 },
+            "sus2" => new[] { 0, 2, 7 }, "sus4" => new[] { 0, 5, 7 }, "6" => new[] { 0, 4, 7, 9 }, "m6" => new[] { 0, 3, 7, 9 },
+            _ => quality.StartsWith("m", StringComparison.Ordinal) && !quality.StartsWith("maj", StringComparison.Ordinal) ? new[] { 0, 3, 7 } : new[] { 0, 4, 7 }
+        };
+        var tones = new int[steps.Length]; for (int i = 0; i < steps.Length; i++) tones[i] = (root + steps[i]) % Tones; return tones;
+    }
+    SongFormAnalysis.ChordStep HeldChord()
+    {
+        labelClock ??= GetComponent<MidiPlayer>();
+        var prepared = labelClock != null ? labelClock.HarmonicPrepared : null;
+        if (prepared?.Chords == null || labelClock.HarmonicCycles == null || !labelClock.Loaded) return null;
+        double beat = labelClock.HarmonicCycles.BeatAt(labelClock.VisualScorePosition);
+        foreach (var c in prepared.Chords)
+            if (c.Start <= beat && beat < c.End) return c.Rest || c.End - c.Start < MinChordBeats ? null : c;
+        return null;
+    }
     void UpdateLabelEnergy()
     {
+        System.Array.Clear(labelTarget, 0, Tones);
+        var chord = HeldChord();
+        if (chord != null) foreach (int pc in ChordTones(chord.Root, chord.Quality)) labelTarget[pc] = 1;
+        float blend = 1 - Mathf.Exp(-Time.unscaledDeltaTime * 7);
         for (int i = 0; i < noteTextLabels.Count && i < Tones; i++)
         {
             int rel = (i - visualKeyForRendering + Tones) % Tones;
             if (rel is 0 or 5 or 7) continue;
-            float amp = 0;
-            for (int j = 0; j < Octaves; j++) { int k = j * Tones + i; if (k < notes.Count) amp = Mathf.Max(amp, notes[k].VisualAmplitude); }
-            amp = Mathf.Clamp01(amp);
-            if (Mathf.Abs(amp - labelEnergy[i]) < .06f) continue;
+            float amp = labelGlow[i] = Mathf.Abs(labelGlow[i] - labelTarget[i]) < .01f ? labelTarget[i] : Mathf.Lerp(labelGlow[i], labelTarget[i], blend);
+            // Styles are written only when the glow has visibly moved, or has arrived.
+            if (amp == labelEnergy[i] || (Mathf.Abs(amp - labelEnergy[i]) < .03f && amp != labelTarget[i])) continue;
             labelEnergy[i] = amp;
             noteTextLabels[i].Color = Color.Lerp(Color.white, TonalColorField.Pitch(i, currentKey), Mathf.Clamp01(amp * 1.6f));
             noteTextLabels[i].Size = LabelBase * (1 + 2.2f * amp);

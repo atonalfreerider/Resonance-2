@@ -141,9 +141,11 @@ public static class SectionCompression
             var t=song.Templates[play.Template];var v=t.Variants[play.Variant];
             for(int i=0;i<t.Slots.Length;i++){var h=t.Slots[i];recovered.Add((lane.Track,lane.Channel,play.Start+h.Beat+v.BeatOffsets[i],h.Length+v.LengthOffsets[i],h.Pitch+v.Transpose+(v.PitchDelta.Length==0?0:v.PitchDelta[i]),v.Velocities[i]));}
         }
-        var expected=originals.Select(h=>(track:h.Track,channel:h.Channel,beat:h.Beat,length:h.Length,pitch:h.Pitch,velocity:h.Velocity)).OrderBy(h=>h.track).ThenBy(h=>h.channel).ThenBy(h=>h.beat).ThenBy(h=>h.pitch).ThenBy(h=>h.length).ToArray();
-        var actual=recovered.OrderBy(h=>h.track).ThenBy(h=>h.channel).ThenBy(h=>h.beat).ThenBy(h=>h.pitch).ThenBy(h=>h.length).ToArray();
+        // Residual reconstruction can move simultaneous attacks by a few floating-point
+        // ulps. Sort at verification precision so chord tones still pair by pitch.
+        var expected=originals.Select(h=>(track:h.Track,channel:h.Channel,beat:h.Beat,length:h.Length,pitch:h.Pitch,velocity:h.Velocity)).OrderBy(h=>h.track).ThenBy(h=>h.channel).ThenBy(h=>Math.Round(h.beat,8)).ThenBy(h=>h.pitch).ThenBy(h=>Math.Round(h.length,8)).ThenBy(h=>h.velocity).ToArray();
+        var actual=recovered.OrderBy(h=>h.track).ThenBy(h=>h.channel).ThenBy(h=>Math.Round(h.beat,8)).ThenBy(h=>h.pitch).ThenBy(h=>Math.Round(h.length,8)).ThenBy(h=>h.velocity).ToArray();
         if(expected.Length!=actual.Length)throw new InvalidDataException("Pattern compression lost note events.");
-        for(int i=0;i<actual.Length;i++){var a=actual[i];var e=expected[i];if(a.track!=e.track||a.channel!=e.channel||a.pitch!=e.pitch||Math.Abs(a.beat-e.beat)>1e-8||Math.Abs(a.length-e.length)>1e-8||Math.Abs(a.velocity-e.velocity)>1e-6)throw new InvalidDataException("Pattern reconstruction changed a note.");}
+        for(int i=0;i<actual.Length;i++){var a=actual[i];var e=expected[i];if(a.track!=e.track||a.channel!=e.channel||a.pitch!=e.pitch||Math.Abs(a.beat-e.beat)>1e-8||Math.Abs(a.length-e.length)>1e-8||Math.Abs(a.velocity-e.velocity)>1e-6)throw new InvalidDataException($"Pattern reconstruction changed note {i}: expected {e}, recovered {a}.");}
     }
 }

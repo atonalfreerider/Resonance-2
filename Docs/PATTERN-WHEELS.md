@@ -212,6 +212,15 @@ every tone named by its relation, why the colours are what they are (I blue, IV 
 the rest blended by position), what position means (fifths along the edge, thirds across the
 band), a key change as a twist measured on its scale, the circle of fifths compared, and the
 shape's provenance (Zeeman's umbilic bracelet, 1976; the model credited to Dimitrios Cholidis).
+The caption shows the sentence being spoken at three times the old size, the word being said
+lit with a bloom (its times from `Tools/SongLibrary/tutorial_timing.py`, which force-aligns each
+step's WAV with the MMS aligner lyric sync uses); the caption is semi-transparent. The diagram's
+points and triangles flare in with glow halos, and lit tones are struck so the torus's bloom
+catches them. During the band's rotation the edge the triangle's corners sweep is traced as a
+shimmering trail, gold arcs circle the band's cross-section the way it turns, and coloured
+sparks flash on the torus. In a portrait window (or with Vertical on) the diagram stands above
+the torus, which fills the top two thirds at 1.6 times its usual size, and the caption keeps the
+last third; the torus's frame depends only on the window, never on the caption's height.
 The script (`Assets/StreamingAssets/Tutorial/script.json`) drives a diagram overlay, the torus
 (lit degrees and chords, a key change up a fifth and back) and a slow orbit; the narration
 beside it (one WAV per step, `manifest.json` with durations) is made by

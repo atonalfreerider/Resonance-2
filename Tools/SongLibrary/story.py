@@ -13,7 +13,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 from common import atomic_json, read_json, sha, validate_bundle
 
-VIEWS = ('Overview', 'Torus', 'Timeline', 'Drums')
+VIEWS = ('Overview', 'Torus', 'Timeline', 'Drums', 'Lyrics')
+PLACEMENTS = ('right', 'left', 'center')
+IMAGE_TYPES = ('.jpg', '.jpeg', '.png')
 
 
 def load_context(bundle):
@@ -82,7 +84,7 @@ def summarize(data, manifest):
                 stems=[dict(id=s['id'], name=s['name']) for s in manifest.get('stems', [])], sections=sections)
 
 
-def validate_cues(cues, duration, stems, source_ids=()):
+def validate_cues(cues, duration, stems, source_ids=(), bundle=None):
     if not isinstance(cues, list) or not 1 <= len(cues) <= 100:
         raise ValueError('Story must contain 1–100 cues')
     last = 0
@@ -104,8 +106,30 @@ def validate_cues(cues, duration, stems, source_ids=()):
             raise ValueError('Invalid story annotation')
         if not isinstance(refs,list) or any(s not in source_ids for s in refs):
             raise ValueError('Unknown story source reference')
+        if 'speech' in cue and (not isinstance(cue['speech'],str) or not 1 <= len(cue['speech']) <= 500):
+            raise ValueError('Invalid spoken text')
+        validate_picture(cue, bundle)
+        if 'soloGain' in cue and not (isinstance(cue['soloGain'], (int, float)) and 0 < cue['soloGain'] <= 4 and cue['stem']):
+            raise ValueError('soloGain needs a soloed stem and a value up to 4')
         last = end
     return cues
+
+
+def validate_picture(cue, bundle):
+    """A history picture: a JPEG/PNG inside the bundle, with a caption and its licence credit."""
+    image = cue.get('image', '')
+    if not image:
+        return
+    if not isinstance(image, str) or Path(image).is_absolute() or '..' in Path(image).parts or Path(image).suffix.lower() not in IMAGE_TYPES:
+        raise ValueError('Story pictures must be JPEG/PNG paths inside the bundle')
+    if bundle is not None and not (Path(bundle)/image).is_file():
+        raise ValueError(f'Missing story picture {image}')
+    if not isinstance(cue.get('imageCaption',''), str) or len(cue.get('imageCaption','')) > 90:
+        raise ValueError('Invalid picture caption')
+    if not isinstance(cue.get('imageCredit'), str) or not 1 <= len(cue['imageCredit']) <= 140:
+        raise ValueError('Story pictures need a licence credit')
+    if cue.get('imagePlacement', 'right') not in PLACEMENTS:
+        raise ValueError('Invalid picture placement')
 
 
 def settle_transitions(cues):

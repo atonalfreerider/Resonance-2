@@ -338,11 +338,17 @@ public sealed class PatternWheelDeck : VisualElement
                 return;
             }
             Lyrics.Tilt=Mathf.Lerp(.42f,1,Mathf.SmoothStep(0,1,lyricFocus));
-            // The graph takes the width; the vocal wheel keeps a small square at the left (above
-            // the graph in a narrow panel).
+            // The graph takes the height, so its words can be large; the vocal wheel keeps a small
+            // square at the left (smaller still in a narrow panel, where the graph needs the width).
             bool wide=area.width>area.height*1.6f;Rect wheel,graph;
-            if(wide){float side=Mathf.Min(area.height,area.width*.24f);wheel=new Rect(area.x,area.y,side,side);graph=new Rect(area.x+side+12,area.y,area.width-side-14,area.height-4);}
-            else{float side=Mathf.Min(area.width*.6f,area.height*.4f);wheel=new Rect(area.x+(area.width-side)/2,area.y,side,side);graph=new Rect(area.x,area.y+side+8,area.width,area.height-side-10);}
+            float side=wide?Mathf.Min(area.height*.5f,area.width*.2f):Mathf.Min(area.width*.24f,area.height*.34f);
+            // The graph spans the panel; it keeps the vocal wheel's square at its top left and puts
+            // its vowel wheel beneath it.
+            wheel=new Rect(area.x,area.y,side,side);graph=new Rect(area.x,area.y,area.width,area.height-4);
+            // The left column holds the vocal wheel above and the vowel colour wheel below it, beside
+            // the rhyming lines (the views place the vowel wheel from these fractions of the panel).
+            float column=Mathf.Max(side,area.width*.34f);Graph.LeftColumn=column;
+            Graph.WheelArea=new Rect((area.x)/w,(area.y+side+6)/h,column/w,Mathf.Max(0,area.height-side-10)/h);
             ctx.DrawText("LYRIC MODE · the words' rhymes and refrains; the reader above",new Vector2(90,12),11,Label(.7f));
             Lyrics.DrawVocal(ctx,p,bloom,wheel,beat);
             Graph.Draw(bloom,graph);

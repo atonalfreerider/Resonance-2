@@ -75,6 +75,8 @@ public sealed class StemPlayback : MonoBehaviour
         if(!full.StartsWith(Path.GetFullPath(directory)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)||Hash(full)!=hash)throw new InvalidDataException("Stem file is missing, outside its bundle, or changed.");
         return full;
     }
+    // Extra gain on the soloed stem (a story cue can lift a quiet part); 1 otherwise.
+    public float SoloGain=1;
     public void Select(string id)
     {
         if(!ReadyToSolo||recording.Busy||id==SelectedId)return;
@@ -95,7 +97,7 @@ public sealed class StemPlayback : MonoBehaviour
         volume*=GetComponent<SongNarration>()?.MusicGain??1;
         MasterGain=Mathf.MoveTowards(MasterGain,SelectedId==""?1:0,step);
         recording.Source.volume=MasterGain*volume;
-        foreach(var entry in cache){entry.Value.Gain=Mathf.MoveTowards(entry.Value.Gain,entry.Key==SelectedId?1:0,step);entry.Value.Source.volume=entry.Value.Gain*volume;}
+        foreach(var entry in cache){entry.Value.Gain=Mathf.MoveTowards(entry.Value.Gain,entry.Key==SelectedId?1:0,step);entry.Value.Source.volume=entry.Value.Gain*volume*(entry.Key==SelectedId?Mathf.Clamp(SoloGain,.25f,4):1);}
     }
     public VisualElement BuildUI()
     {

@@ -28,7 +28,7 @@ def main():
         result=repair(a.bundle)
     elif a.command=='narrate':
         from narration import generate
-        result=generate(a.bundle,a.key_file,a.voice,provider=a.provider)
+        result=generate(a.bundle,a.key_file,provider=a.provider,override_voice=a.voice)
     elif a.command=='story':
         from story import generate
         result=generate(a.bundle,a.key_file,a.model)

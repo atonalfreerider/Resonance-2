@@ -8,7 +8,8 @@ using UnityEngine.UIElements;
 [DefaultExecutionOrder(90)]
 public sealed class SongNarration : MonoBehaviour
 {
-    [Serializable] public sealed class Segment { public int cue;public double start,end; }
+    // duck: the music gain under this line, measured offline so the voice stands clear of it (0 in older manifests).
+    [Serializable] public sealed class Segment { public int cue;public double start,end;public float duck; }
     [Serializable] public sealed class Manifest { public int version,sampleRate,samples;public string storySha256,audioSha256,audioPath,sha256;public double duration;public Segment[] segments; }
     sealed class Decoded { public Manifest Meta;public float[] Data;public int Channels,Rate; }
     MidiPlayer midi;SongDirector director;AudioSource voice;Toggle toggle;Label status;
@@ -16,6 +17,11 @@ public sealed class SongNarration : MonoBehaviour
     public bool Enabled {get;private set;}=true;
     public bool Ready=>manifest!=null&&voice!=null&&voice.clip!=null;
     public float MusicGain {get;private set;}=1;
+    // The music gain while a line is spoken when a manifest predates measured ducking.
+    public const float DefaultDuck=.42f;
+    public bool Speaking {get;private set;}
+    // Still reading this song's voice track (a tour waits for it before it starts).
+    public bool Pending=>director!=null&&(pending!=null||revision!=director.Revision);
     public AudioSource Source=>voice;
     public bool CueFinished(int index,double position)=>!Enabled||!Ready||!manifest.segments.Any(s=>s.cue==index&&position<s.end);
     public void Bind(VisualElement page)
@@ -78,10 +84,13 @@ public sealed class SongNarration : MonoBehaviour
         else if(!shouldPlay&&running)Stop();
         double now=midi.Position;
         bool released=director.CurrentCue?.releaseSoloAfterNarration==true&&CueFinished(director.CueIndex,now);
-        bool speaking=shouldPlay&&!released&&manifest.segments.Any(s=>now>=s.start-.08&&now<s.end+.1);
-        MusicGain=Mathf.Lerp(MusicGain,speaking?.42f:1,1-Mathf.Exp(-Time.unscaledDeltaTime*(speaking?14:released?50:5)));
+        float duck=1;
+        if(shouldPlay&&!released)foreach(var s in manifest.segments)if(now>=s.start-.12&&now<s.end+.15){duck=Mathf.Min(duck,s.duck>0?s.duck:DefaultDuck);}
+        Speaking=duck<1;
+        // Duck quickly ahead of the voice, recover gently after it.
+        MusicGain=Mathf.Lerp(MusicGain,duck,1-Mathf.Exp(-Time.unscaledDeltaTime*(Speaking?16:released?50:4)));
         voice.volume=(GetComponent<Main>().Synth?.Volume??0)*.95f;
     }
-    void OnDisable(){Stop();MusicGain=1;}
+    void OnDisable(){Stop();MusicGain=1;Speaking=false;}
     void OnDestroy(){if(voice!=null&&voice.clip!=null)Destroy(voice.clip);}
 }

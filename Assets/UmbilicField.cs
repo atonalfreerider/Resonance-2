@@ -73,11 +73,21 @@ public class UmbilicField : MonoBehaviour
         // Coiled and still (no uncoil, no transition widening) the surface is the umbilic itself.
         bool coiled=main.UncoilAmount<=0&&main.TransitionWiden<=0&&main.OctaveSpread<=0;
         if(coiled)System.Array.Copy(vertices,deformed,vertices.Length);
-        else for(int i=0;i<=Along;i++)for(int j=0;j<=Across;j++){
-            float slot=i/(float)Along-.5f;
-            int index=i*(Across+1)+j;deformed[index]=main.MorphUncoil(vertices[index],main.UncoiledPoint(slot,.3f+.7f*j/Across));
-            float t=HarmonyModel.Mod(main.currentKey*5)/12f+phase+slot;
-            deformed[index]+=(vertices[index]-main.UmbilicPoint(t))*(.3f*main.TransitionWiden*(1-main.OctaveSpread));
+        else
+        {
+            // The moving curve, the umbilic point and the flat arc's direction are shared by a
+            // column's vertices: once per column, then a blend per vertex.
+            var stage=main.Stage;float widen=.3f*main.TransitionWiden*(1-main.OctaveSpread);
+            for(int i=0;i<=Along;i++)
+            {
+                float slot=i/(float)Along-.5f,angle=-slot*Mathf.Deg2Rad*320,sin=Mathf.Sin(angle),cos=Mathf.Cos(angle);
+                Vector3 primary=main.UncoilPrimary(slot,stage),start=vertices[i*(Across+1)];
+                for(int j=0;j<=Across;j++)
+                {
+                    int index=i*(Across+1)+j;float radius=.45f+1.8f*(.3f+.7f*j/Across);
+                    deformed[index]=Main.UncoilBlend(primary,vertices[index],start,new Vector3(sin*radius,cos*radius,0),stage)+(vertices[index]-start)*widen;
+                }
+            }
         }
         mesh.SetVertices(deformed);mesh.SetUVs(2,vertices);mesh.RecalculateBounds();
         for(int pc=0;pc<12;pc++)anchors[pc]=main.UmbilicPoint(HarmonyModel.Mod(pc*5)/12f+phase);

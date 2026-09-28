@@ -215,6 +215,57 @@ Optional cue fields `annotationTarget` (`none`, `melody`, `drums`, `patterns`) a
 receive separate pointers. Labels stay at a fixed upper-left reading anchor; only the pointer tips follow moving notes. Arrows hide during coil transitions and can be disabled
 with **Story guide arrows**. No visual-tree changes occur inside paint callbacks.
 
+## Directed tours: hand-written stories, narrators, pictures and ducking
+
+Every song in `PreparedSongs/Library` can carry a hand-directed tour instead of a generated
+story. Its source is `story.draft.json` in the bundle: the narrator, the sources, the history
+pictures and the timed cues (the same cue fields as above, plus `speech` for a spoken wording
+that differs from the caption, e.g. a pronunciation). Publish and narrate it:
+
+```powershell
+Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/publish_story.py PreparedSongs/Library/<song>
+Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/narration.py PreparedSongs/Library/<song>
+```
+
+- **Narrator.** The draft's `narrator` (`name`, Cartesia `voice` ID, `language`) is written
+  into `story.json` and wins over the workshop's default voice; `--voice` on the command line
+  overrides it. A narrator may name its `provider` (`cartesia`, `elevenlabs`, `openai`); the key
+  comes from `<provider>KeyFile` in `SongLibraryData/settings.json`. Songs from the Black American
+  tradition use Joshua, an ElevenLabs library voice (`5f49vYETqZvJYfUP28fO`, `eleven_multilingual_v2`);
+  the rest use Archie (Cartesia, British male, `en-GB`), the tutorial's voice.
+- **History pictures.** A cue names a picture by key. The picture (freely licensed, from
+  Wikimedia Commons) is copied to `story/pictures/<key>.jpg`, at most 720 px on its long edge,
+  and the cue gets `image`, `imageCaption` and `imageCredit`; `story.json` lists every picture
+  with its licence and Commons page. Unity (`StoryPictures`) shows it as a captioned card with
+  its credit while the cue plays: above the lyric strip in the overview and lyric views, at
+  the top right beside the torus, drum wheel or pattern wheels, or where `imagePlacement`
+  (`right`, `left`, `center`) says. Pictures are read when the story loads and decoded one a
+  frame; playback only fades the card.
+- **Ducking.** For every spoken line the renderer measures the speech band (300 Hz – 4 kHz)
+  of the voice and of what plays under it (the recording, or the soloed stem) and stores the
+  music gain that puts the voice 10 dB clear, between 0.14 and 0.8, as the segment's `duck`.
+  `SongNarration` ducks to it from 0.12 s before the line (16/s) and releases after it (4/s);
+  older manifests without `duck` use 0.42. `preview.mp3` beside the narration is the mix
+  Director mode plays, for checking the balance by ear.
+- **Tours in the song list.** A song with a story and narration shows a **▶ Tour** button on
+  its card: it loads the song, waits for the story, stems and voice, and plays the tour from
+  the top in Director mode, the camera slowly orbiting the torus in the Torus and overview
+  views (paused while it uncoils). The card shows the story's title.
+- **Spoken forms.** A draft's `speech` wording is what Cartesia reads: JAY-Z as "Jay Z", R&B as
+  "R and B", pronunciations of names.
+
+The tutorial's word timings (for the lit word in its caption) come from
+`Tools/SongLibrary/tutorial_timing.py`, run after `tutorial_narration.py`.
+
+## Recovering a quiet part a stem transcription missed
+
+`register_notes.py <bundle> [--stem other-high] [--name ...]` detects the onsets in a register
+stem's audio, takes each one's pitch from a constant-Q spectrum in that register, adds them to the
+stem's notes as their own track and rebuilds only that stem's pattern wheels and manifest entry
+(the original notes stay beside it as `<stem>-notes.orig.mid`). Used for Rollout's synth
+arpeggiator. A story cue can lift a quiet solo with `soloGain` (up to 4; Unity caps a source's
+volume at 1, so the lift is bounded by the master volume).
+
 ## Recovering a missed bass stem
 
 If separation leaves bass in accompaniment, review the bass MIDI assignment first,

@@ -26,6 +26,11 @@ public sealed class VisualizationViews : MonoBehaviour
     // Where the lyric strip sits (pixels, from the top left), for validation.
     public Rect LyricStrip {get;private set;}
     public Rect SceneRect {get;private set;}
+    // Screen space kept clear of the 3D scene above and below (panel pixels): the tutorial's
+    // diagram and caption in a portrait window, so the torus is framed between them.
+    public float SceneTopInset,SceneBottomInset;
+    // How much closer the Torus view's camera sits (the tutorial doubles the torus in a portrait window).
+    public float TorusZoom=1;
     VisualElement root,panel,overlay,toolbar;Button tuck;
     DropdownField viewChoice;
     Toggle uncoil;
@@ -37,11 +42,11 @@ public sealed class VisualizationViews : MonoBehaviour
     Vector3 overviewPosition;Quaternion overviewRotation;Vector3 overviewAngles;
     float panelOpen,timelineOpacity=1,timelineFocus,overviewSplit=1;
     float shownTorus=-1,shownDrums=-1,nextWalk;int shownCount=-1;bool wasUncoiling;
-    bool cameraMoving;
+    bool cameraMoving;VisualElement vowelWheel;PatternWheelDeck wheelsDeck;Rect placedWheel=new(0,0,-1,-1);
     void Awake(){block=new MaterialPropertyBlock();}
     public void Bind(VisualElement ui,VisualElement controls,PatternWheelDeck wheels)
     {
-        root=ui;panel=controls;overlay=wheels.Overlay;camera=Camera.main;orbit=camera.GetComponent<CameraControl>();drums=GetComponent<DrumPatternDeck>();lyrics=GetComponent<DrumLyricRack>();library=GetComponent<SongLibraryPanel>();
+        root=ui;panel=controls;overlay=wheels.Overlay;wheelsDeck=wheels;vowelWheel=wheels.Graph.WheelElement;root.Add(vowelWheel);camera=Camera.main;orbit=camera.GetComponent<CameraControl>();drums=GetComponent<DrumPatternDeck>();lyrics=GetComponent<DrumLyricRack>();library=GetComponent<SongLibraryPanel>();
         // The scene camera renders only its part of the screen and clears no colour; this one
         // clears the whole screen first, through the same post-processing, so the scene and the
         // wheels share one background with no edge between them.
@@ -136,6 +141,16 @@ public sealed class VisualizationViews : MonoBehaviour
             sideFrame=0;
         }
         LyricStrip=strip;
+        // The vowel wheel of the rhyme graph: in the lyric panel's left column under the vocal
+        // wheel, beside the rhyming lines, as large as that column allows (written only when it moves).
+        var wheelArea=wheelsDeck.Graph.WheelArea;var ov=overlay.worldBound;
+        if(Current==View.Lyrics&&wheelArea.width>0&&ov.width>1&&timelineOpacity>.5f)
+        {
+            var column=new Rect(ov.x+wheelArea.x*ov.width,ov.y+wheelArea.y*ov.height,wheelArea.width*ov.width,wheelArea.height*ov.height);
+            float wheelSize=Mathf.Min(column.width,column.height);var at=new Rect(column.x+(column.width-wheelSize)*.5f,column.y+(column.height-wheelSize)*.5f,wheelSize,wheelSize);
+            if(at!=placedWheel){placedWheel=at;vowelWheel.style.left=at.x;vowelWheel.style.top=at.y;vowelWheel.style.width=at.width;vowelWheel.style.height=at.height;vowelWheel.style.visibility=Visibility.Visible;vowelWheel.MarkDirtyRepaint();}
+        }
+        else if(placedWheel.width>=0){placedWheel=new Rect(0,0,-1,-1);vowelWheel.style.visibility=Visibility.Hidden;}
         float focusWidth=Mathf.Min(available-24,(height-70)*1.12f);
         var focus=new Rect(left+(available-focusWidth)*.5f,52,focusWidth,height-70);
         overlay.style.maxWidth=StyleKeyword.None;
@@ -144,7 +159,7 @@ public sealed class VisualizationViews : MonoBehaviour
         overlay.style.top=Mathf.Lerp(dock.y,focus.y,timelineFocus);overlay.style.opacity=timelineOpacity;
         // The scene camera: its part of the screen in the overview, all of it otherwise.
         float split=overviewSplit*(1-timelineFocus);
-        var full=new Rect(left,0,available,height);
+        var full=new Rect(left,SceneTopInset,available,Mathf.Max(80,height-SceneTopInset-SceneBottomInset));
         var shown=new Rect(Mathf.Lerp(full.x,scene.x,split),Mathf.Lerp(full.y,scene.y,split),Mathf.Lerp(full.width,scene.width,split),Mathf.Lerp(full.height,scene.height,split));
         SceneRect=shown;
         camera.rect=new Rect(shown.x/width,1-shown.yMax/height,shown.width/width,shown.height/height);
@@ -166,7 +181,7 @@ public sealed class VisualizationViews : MonoBehaviour
         DrumOpacity=showDrums?Mathf.Lerp(DrumOpacity,1,blend):0;
         if(Current==View.Drums||Current==View.Timeline||Current==View.Lyrics||cameraMoving){
             Vector3 position=overviewPosition;Quaternion rotation=overviewRotation;
-            if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);float unfold=GetComponent<Main>().UncoilAmount;position=Vector3.Slerp(position-target,-transform.forward*(6f/Mathf.Min(1,camera.aspect)),unfold)+target;position=target+(position-target)*(1+.55f*GetComponent<Main>().TransitionWiden);rotation=Quaternion.LookRotation(target-position,transform.up);}
+            if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect)/Mathf.Max(.25f,TorusZoom);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);float unfold=GetComponent<Main>().UncoilAmount;position=Vector3.Slerp(position-target,-transform.forward*(6f/Mathf.Min(1,camera.aspect)),unfold)+target;position=target+(position-target)*(1+.55f*GetComponent<Main>().TransitionWiden);rotation=Quaternion.LookRotation(target-position,transform.up);}
             if(Current==View.Drums||Current==View.Lyrics){Vector3 target=drums?.WheelTransform!=null?drums.WheelTransform.position:transform.position+Vector3.down*DrumPatternDeck.DeckDepth;position=target+Vector3.up*((Current==View.Lyrics?4.6f:3.6f)/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);}
             if(Current==View.Timeline){position=overviewPosition+Vector3.right*5;rotation=overviewRotation;}
             camera.transform.position=Vector3.Lerp(camera.transform.position,position,blend);camera.transform.rotation=Quaternion.Slerp(camera.transform.rotation,rotation,blend);

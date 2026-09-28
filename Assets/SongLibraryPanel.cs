@@ -13,7 +13,7 @@ using UnityEngine.UIElements;
 public sealed class SongLibraryPanel : MonoBehaviour
 {
     public static string LibraryRoot=>Path.GetFullPath(Path.Combine(Application.dataPath,"../PreparedSongs/Library"));
-    public sealed class Song {public string Folder,Title,Details,Score;public bool Lyrics,Stems;public Color[] Stripes;public VisualElement StripeRow;}
+    public sealed class Song {public string Folder,Title,Details,Score;public bool Lyrics,Stems,Tour;public Color[] Stripes;public VisualElement StripeRow;}
     // A song's chord progression as colour stripes, sampled evenly over its length, cached beside the bundle.
     [Serializable] sealed class ChordStripes {public int version=1;public int key;public Color[] stripes;}
     const int StripeCount=48;
@@ -72,7 +72,8 @@ public sealed class SongLibraryPanel : MonoBehaviour
             if(!File.Exists(score)||!File.Exists(score+".prepared.json")||!File.Exists(bundle))continue;
             if(!CurrentBundle(bundle))continue;
             string name=Path.GetFileName(folder);
-            songs.Add(new Song{Folder=folder,Score=score,Title=TitleOf(name),Lyrics=File.Exists(Path.Combine(folder,"lyrics.txt")),Stems=Directory.Exists(Path.Combine(folder,"stems"))});
+            songs.Add(new Song{Folder=folder,Score=score,Title=StoryTitle(folder)??TitleOf(name),Lyrics=File.Exists(Path.Combine(folder,"lyrics.txt")),Stems=Directory.Exists(Path.Combine(folder,"stems")),
+                Tour=File.Exists(Path.Combine(folder,"story.json"))&&File.Exists(Path.Combine(folder,"narration.json"))});
         }
         return songs;
     }
@@ -85,6 +86,18 @@ public sealed class SongLibraryPanel : MonoBehaviour
             return m.Success&&int.Parse(m.Groups[1].Value)>=PreparedPatternSong.CurrentVersion;
         }
         catch{return false;}
+    }
+    // A narrated song carries its proper title in story.json ("Ni**as in Paris", "Say So").
+    static string StoryTitle(string folder)
+    {
+        try
+        {
+            string path=Path.Combine(folder,"story.json");if(!File.Exists(path))return null;
+            using var reader=new StreamReader(path);var head=new char[4096];int read=reader.Read(head,0,head.Length);
+            var m=Regex.Match(new string(head,0,read),@"""title""\s*:\s*""((?:[^""\\]|\\.)*)""");
+            return m.Success?Regex.Unescape(m.Groups[1].Value):null;
+        }
+        catch{return null;}
     }
     // "Fireflies---Owl-City-f259424e-61b3f5" → "Fireflies — Owl City"; "SaySo-prepared-stems" → "SaySo".
     public static string TitleOf(string folder)
@@ -105,11 +118,24 @@ public sealed class SongLibraryPanel : MonoBehaviour
             card.style.borderLeftWidth=card.style.borderRightWidth=card.style.borderTopWidth=card.style.borderBottomWidth=1;card.style.borderLeftColor=card.style.borderRightColor=card.style.borderTopColor=card.style.borderBottomColor=new Color(.26f,.33f,.43f);
             card.RegisterCallback<PointerEnterEvent>(_=>card.style.backgroundColor=new Color(.21f,.29f,.4f));card.RegisterCallback<PointerLeaveEvent>(_=>card.style.backgroundColor=new Color(.13f,.19f,.27f));
             var name=new Label(s.Title);name.style.fontSize=15;name.style.color=Color.white;name.style.whiteSpace=WhiteSpace.Normal;card.Add(name);
-            var details=new Label((s.Lyrics?"lyrics · ":"")+(s.Stems?"stems · ":"")+"recording");details.style.fontSize=11;details.style.color=new Color(.6f,.72f,.8f);card.Add(details);
+            var details=new Label((s.Tour?"guided tour · ":"")+(s.Lyrics?"lyrics · ":"")+(s.Stems?"stems · ":"")+"recording");details.style.fontSize=11;details.style.color=new Color(.6f,.72f,.8f);card.Add(details);
             // The chord progression as a row of colour stripes along the card's foot.
             s.StripeRow=new VisualElement{pickingMode=PickingMode.Ignore};s.StripeRow.style.flexDirection=FlexDirection.Row;s.StripeRow.style.height=7;s.StripeRow.style.marginTop=7;s.StripeRow.style.width=new Length(100,LengthUnit.Percent);
             card.Add(s.StripeRow);if(s.Stripes!=null)ShowStripes(s);
-            list.Add(card);
+            // A narrated song carries a tour button beside its card.
+            var row=new VisualElement{name="song-row"};row.style.flexDirection=FlexDirection.Row;row.style.alignItems=Align.Stretch;
+            card.style.flexGrow=1;card.style.flexShrink=1;row.Add(card);
+            if(s.Tour)
+            {
+                var tour=new Button(()=>{ExplorerInputFocus.ClaimUI();GetComponent<SongDirector>()?.Tour(s);}){text="▶\nTour",name="song-tour",tooltip="Guided tour: the song's narrated story, its history and what each view shows"};
+                tour.style.width=54;tour.style.marginTop=3;tour.style.marginBottom=3;tour.style.marginLeft=5;tour.style.marginRight=0;tour.style.fontSize=11;tour.style.whiteSpace=WhiteSpace.Normal;
+                tour.style.backgroundColor=new Color(.16f,.3f,.42f);tour.style.color=new Color(.86f,.95f,1);
+                tour.style.borderLeftColor=tour.style.borderRightColor=tour.style.borderTopColor=tour.style.borderBottomColor=new Color(.35f,.55f,.72f);
+                tour.style.borderTopLeftRadius=tour.style.borderTopRightRadius=tour.style.borderBottomLeftRadius=tour.style.borderBottomRightRadius=7;
+                tour.RegisterCallback<PointerEnterEvent>(_=>tour.style.backgroundColor=new Color(.22f,.4f,.55f));tour.RegisterCallback<PointerLeaveEvent>(_=>tour.style.backgroundColor=new Color(.16f,.3f,.42f));
+                row.Add(tour);
+            }
+            list.Add(row);
         }
         StopAllCoroutines();StartCoroutine(FillStripes());
         status.text=Songs.Count==0?$"No fully prepared songs in {LibraryRoot}. Prepare one with the Song Workshop.":$"{Songs.Count} song{(Songs.Count==1?"":"s")} · {LibraryRoot}";
@@ -156,7 +182,7 @@ public sealed class SongLibraryPanel : MonoBehaviour
         }
         return stripes;
     }
-    void Choose(Song song)
+    public void Choose(Song song)
     {
         if(audio==null||audio.Busy)return;
         ExplorerInputFocus.ClaimUI();loadedScore=song.Score;audio.LoadPair("",song.Score);

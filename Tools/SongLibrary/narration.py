@@ -14,6 +14,9 @@ from common import DATA, atomic_json, read_json, sha, validate_bundle
 from story import validate_cues
 
 RATE=24000
+# Music under a spoken line is ducked until the voice stands this far above it.
+SPEECH_OVER_MUSIC_DB=10
+DUCK_RANGE=(.14,.8)
 DELIVERY='Deep masculine baritone, resonant lower register, warm and grounded music-documentary narration. Maintain the same low vocal placement throughout. No impersonation of any real person. Conversational and quietly engaged, never theatrical. Natural neutral English. Keep a flowing, fairly brisk pace with short pauses. Read only the supplied words. No singing, music, sound effects, introductions or added words.'
 
 
@@ -48,36 +51,108 @@ def speech_window(cue):
     return start,end
 
 
-def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai'):
-    if provider not in ('openai','cartesia'):raise ValueError('Unknown speech provider')
-    voice=voice or ('f114a467-c40a-4db8-964d-aaba89cd08fa' if provider=='cartesia' else 'onyx')
-    model=model or ('sonic-3.6' if provider=='cartesia' else 'gpt-4o-mini-tts')
+def band_rms(signal,rate,start,end):
+    """Loudness of the speech band (300 Hz – 4 kHz) where the music masks a voice: the 90th
+    percentile of 400 ms frames, so a loud moment inside the line counts."""
+    from scipy.signal import butter,sosfiltfilt
+    a,b=max(0,int(start*rate)),min(len(signal),int(end*rate))
+    if b-a<rate*.1:return 0.
+    segment=sosfiltfilt(butter(4,[300,4000],btype='band',fs=rate,output='sos'),signal[a:b])
+    frame=int(.4*rate);frames=[segment[i:i+frame] for i in range(0,max(1,len(segment)-frame+1),frame//2)]
+    return float(np.percentile([np.sqrt(np.mean(f*f)) for f in frames if len(f)],90))
+
+
+def duck_gain(speech,music):
+    """The music gain that puts the voice SPEECH_OVER_MUSIC_DB above the music (Unity plays the
+    voice at 0.95 of the music's master volume)."""
+    if music<=1e-6:return DUCK_RANGE[1]
+    return float(np.clip(.95*speech/(music*10**(SPEECH_OVER_MUSIC_DB/20)),*DUCK_RANGE))
+
+
+def duck_envelope(segments,duration,rate=100):
+    """The music gain SongNarration applies, sampled at `rate` Hz: each line's duck from 0.12 s
+    before it to 0.15 s after, approached at 16/s and released at 4/s."""
+    target=np.ones(math.ceil(duration*rate));gain=np.ones_like(target)
+    for s in segments:target[max(0,int((s['start']-.12)*rate)):int((s['end']+.15)*rate)]=np.minimum(target[max(0,int((s['start']-.12)*rate)):int((s['end']+.15)*rate)],s['duck'])
+    g=1.
+    for i,t in enumerate(target):g+=(t-g)*(1-math.exp(-(16 if t<1 else 4)/rate));gain[i]=g
+    return gain
+
+
+def preview_mix(bundle,manifest,cues,segments,timeline,path):
+    """What Director mode plays: the recording (or the cue's soloed stem) under the duck envelope,
+    plus the voice at 0.95 — for checking the balance by ear outside Unity."""
+    music,rate=mono(bundle/manifest.get('audioPath','recording.wav'))
+    stems={s['id']:s for s in manifest.get('stems',[])}
+    for i,c in enumerate(cues):
+        if c['stem'] and c['stem'] in stems:
+            solo,_=mono(bundle/stems[c['stem']]['audioPath'])
+            a=int(c['start']*rate);end=c['end']
+            if c.get('releaseSoloAfterNarration'):end=min(end,max([s['end'] for s in segments if s['cue']==i],default=end))
+            b=min(len(music),int(end*rate));music[a:b]=solo[a:b]*c.get('soloGain',1)
+    t=np.arange(len(music))/rate;env=duck_envelope(segments,len(music)/rate)
+    music=music*np.interp(t,np.arange(len(env))/100,env)
+    voice=np.interp(t,np.arange(len(timeline))/RATE,timeline)*.95
+    mix=music+voice;mix/=max(1,float(abs(mix).max())/.98)
+    wav=Path(path).with_suffix('.wav');sf.write(wav,mix.astype('float32'),rate)
+    subprocess.run(['ffmpeg','-v','error','-y','-i',str(wav),'-codec:a','libmp3lame','-b:a','128k',str(path)],check=True,capture_output=True)
+    wav.unlink()
+
+
+def mono(path):
+    signal,rate=sf.read(path,dtype='float32')
+    return (signal.mean(axis=1) if signal.ndim>1 else signal),rate
+
+
+PROVIDERS=('openai','cartesia','elevenlabs')
+MODELS=dict(openai='gpt-4o-mini-tts',cartesia='sonic-3.6',elevenlabs='eleven_multilingual_v2')
+
+
+def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai',override_voice=None):
     bundle=Path(bundle).resolve();validate_bundle(bundle)
     story=read_json(bundle/'story.json');manifest=read_json(bundle/'aligned.mid.prepared.json')
     if not story or story['midiSha256']!=manifest['midiSha256'] or story['audioSha256']!=manifest['audioSha256'] or story['patternsSha256']!=sha(bundle/'aligned.mid.patterns.json'):
         raise ValueError('Generate a current story first')
-    cues=validate_cues(story['cues'],story['duration'],[s['id'] for s in manifest.get('stems',[])],[s['id'] for s in story.get('sources',[])])
+    cues=validate_cues(story['cues'],story['duration'],[s['id'] for s in manifest.get('stems',[])],[s['id'] for s in story.get('sources',[])],bundle)
+    # The story names its narrator; a voice passed on the command line overrides it.
+    narrator=story.get('narrator') or {}
+    # A narrator from another provider brings its own key (settings: <provider>KeyFile).
+    if narrator.get('provider') and narrator['provider']!=provider:
+        provider=narrator['provider'];key_file=(read_json(DATA/'settings.json') or {}).get(provider+'KeyFile')
+        if not key_file:raise ValueError(f'Configure {provider}KeyFile in SongLibraryData/settings.json')
+    if provider not in PROVIDERS:raise ValueError('Unknown speech provider')
+    model=model or MODELS[provider]
+    voice=override_voice or narrator.get('voice') or voice or ('f114a467-c40a-4db8-964d-aaba89cd08fa' if provider=='cartesia' else 'onyx')
+    language=narrator.get('language','en-GB')
     key=Path(key_file).read_text(encoding='utf-8-sig').strip()
     if not key or '\n' in key or '\r' in key:raise ValueError('Key file must contain one API key')
     cache=DATA/'speech-cache';cache.mkdir(parents=True,exist_ok=True)
     def render(item):
         i,cue=item;window=speech_window(cue)
         if window is None:return i,None,1
-        if provider=='cartesia':
-            body=dict(model_id=model,voice=voice,transcript=cue['text'],language='en-GB',output_format=dict(container='wav',encoding='pcm_s16le',sample_rate=RATE),generation_config=dict(speed=1,volume=1))
-        else:body=dict(model=model,voice=voice,input=cue['text'],instructions=DELIVERY,response_format='wav',speed=1.0)
-        identity=hashlib.sha256(json.dumps(dict(provider=provider,body=body),sort_keys=True).encode()).hexdigest();raw=cache/(identity+'.wav')
+        if provider=='elevenlabs':
+            body=dict(text=cue.get('speech') or cue['text'],model_id=model,voice_settings=dict(stability=.5,similarity_boost=.75,style=.15,use_speaker_boost=True))
+        elif provider=='cartesia':
+            body=dict(model_id=model,voice=voice,transcript=cue.get('speech') or cue['text'],language=language,output_format=dict(container='wav',encoding='pcm_s16le',sample_rate=RATE),generation_config=dict(speed=1,volume=1))
+        else:body=dict(model=model,voice=voice,input=cue.get('speech') or cue['text'],instructions=DELIVERY,response_format='wav',speed=1.0)
+        identity=hashlib.sha256(json.dumps(dict(provider=provider,body=body,**({'voice':voice} if provider=='elevenlabs' else {})),sort_keys=True).encode()).hexdigest();raw=cache/(identity+'.wav')
         if not raw.exists():
-            headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'}
-            if provider=='cartesia':headers['Cartesia-Version']='2026-08-14'
-            request=urllib.request.Request('https://api.cartesia.ai/tts/bytes' if provider=='cartesia' else 'https://api.openai.com/v1/audio/speech',data=json.dumps(body).encode(),headers=headers,method='POST')
+            if provider=='elevenlabs':
+                headers={'xi-api-key':key,'Content-Type':'application/json'}
+                url=f'https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=pcm_{RATE}'
+            else:
+                headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'}
+                if provider=='cartesia':headers['Cartesia-Version']='2026-08-14'
+                url='https://api.cartesia.ai/tts/bytes' if provider=='cartesia' else 'https://api.openai.com/v1/audio/speech'
+            request=urllib.request.Request(url,data=json.dumps(body).encode(),headers=headers,method='POST')
             try:
                 with urllib.request.urlopen(request,timeout=180) as response:content=response.read()
             except urllib.error.HTTPError as error:
                 raise RuntimeError(f'Speech request failed (HTTP {error.code}); credentials and response body not logged') from None
             except urllib.error.URLError:
                 raise RuntimeError('Speech connection failed; credentials not logged') from None
-            signal,rate=sf.read(io.BytesIO(content),dtype='float32')
+            if provider=='elevenlabs':signal,rate=np.frombuffer(content,dtype='<i2').astype('float32')/32768,RATE
+            else:signal,rate=sf.read(io.BytesIO(content),dtype='float32')
             sf.write(raw,signal,rate)
         signal,rate=sf.read(raw,dtype='float32')
         available=window[1]-window[0]
@@ -85,16 +160,22 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
         signal,ratio=fit_clip(signal,rate,available,cache/identity)
         notify(f'Narration scene {i+1}/{len(cues)} ready')
         return i,signal,ratio
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1 if provider=='cartesia' else 3) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1 if provider=='cartesia' else 2 if provider=='elevenlabs' else 3) as pool:
         clips=list(pool.map(render,enumerate(cues)))
     key=None
     timeline=np.zeros(math.ceil(story['duration']*RATE),dtype='float32');segments=[]
+    # Measure what actually plays under each line: the recording, or the soloed stem.
+    music={'':mono(bundle/manifest.get('audioPath','recording.wav'))}
+    for stem in manifest.get('stems',[]):
+        if any(c['stem']==stem['id'] for c in cues):music[stem['id']]=mono(bundle/stem['audioPath']) if 'audioPath' in stem else mono(bundle/'stems'/(stem['id']+'.wav'))
     for i,signal,ratio in clips:
         if signal is None:continue
         start=round(speech_window(cues[i])[0]*RATE);end=start+len(signal)
         if end>len(timeline):raise ValueError('Narration exceeds recording')
         timeline[start:end]+=signal
-        segments.append(dict(cue=i,start=start/RATE,end=end/RATE,tempoRatio=ratio))
+        solo='' if cues[i].get('releaseSoloAfterNarration') else cues[i]['stem'];under=music.get(solo,music[''])
+        speech=band_rms(signal,RATE,0,len(signal)/RATE);level=band_rms(under[0],under[1],start/RATE,end/RATE)*(cues[i].get('soloGain',1) if solo else 1)
+        segments.append(dict(cue=i,start=start/RATE,end=end/RATE,tempoRatio=ratio,duck=round(duck_gain(speech,level),4)))
     spoken=sum(s['end']-s['start'] for s in segments)
     fraction=spoken/story['duration']
     target=story.get('narrationTargetFraction',2/3)
@@ -108,13 +189,19 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
     subprocess.run(['ffmpeg','-v','error','-y','-i',str(wav),'-codec:a','libmp3lame','-b:a','160k',str(mp3)],check=True,capture_output=True)
     metadata=dict(version=1,storySha256=identity,audioSha256=manifest['audioSha256'],duration=story['duration'],
         audioPath=wav.relative_to(bundle).as_posix(),sha256=sha(wav),mp3Path=mp3.relative_to(bundle).as_posix(),
-        sampleRate=RATE,samples=len(timeline),model=model,voice=voice,provider=provider,disclosure='AI-generated narration',segments=segments,
+        sampleRate=RATE,samples=len(timeline),model=model,voice=voice,voiceName=narrator.get('name',''),language=language,provider=provider,disclosure='AI-generated narration',segments=segments,speechOverMusicDb=SPEECH_OVER_MUSIC_DB,
         narratedSeconds=spoken,musicOnlySeconds=story['duration']-spoken,narrationFraction=fraction)
+    preview_mix(bundle,manifest,cues,segments,timeline,directory/'preview.mp3')
+    metadata['previewPath']=(directory/'preview.mp3').relative_to(bundle).as_posix()
     atomic_json(bundle/'narration.json',metadata)
     return dict(wav=str(wav),mp3=str(mp3),scenes=len(segments),duration=len(timeline)/RATE,narratedSeconds=spoken,musicOnlySeconds=story['duration']-spoken)
 
 
 if __name__=='__main__':
     import argparse
-    p=argparse.ArgumentParser();p.add_argument('bundle');p.add_argument('--key-file',required=True);p.add_argument('--voice');p.add_argument('--provider',choices=['openai','cartesia'],default='openai');a=p.parse_args()
-    print(json.dumps(generate(a.bundle,a.key_file,a.voice,provider=a.provider),indent=2))
+    p=argparse.ArgumentParser();p.add_argument('bundle');p.add_argument('--key-file');p.add_argument('--voice',help="overrides the story's narrator");p.add_argument('--provider',choices=['openai','cartesia'])
+    a=p.parse_args();settings=read_json(DATA/'settings.json') or {}
+    provider=a.provider or settings.get('narrationProvider','openai')
+    key_file=a.key_file or settings.get('cartesiaKeyFile' if provider=='cartesia' else 'storyKeyFile')
+    if not key_file:raise SystemExit('No key file: pass --key-file or configure SongLibraryData/settings.json')
+    print(json.dumps(generate(a.bundle,key_file,settings.get('narrationVoice'),provider=provider,override_voice=a.voice),indent=2))
