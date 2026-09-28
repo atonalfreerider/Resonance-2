@@ -22,6 +22,8 @@ public sealed class TutorialDirector : MonoBehaviour
     public static string Folder=>Path.Combine(Application.streamingAssetsPath,"Tutorial");
     public bool Playing {get;private set;}
     public int StepIndex {get;private set;}=-1;
+    public string StepId=>StepIndex>=0&&StepIndex<steps.Length?steps[StepIndex].id:"";
+    public string StepTitle=>StepIndex>=0&&StepIndex<steps.Length?steps[StepIndex].title:"";
     public string Diagram {get;private set;}="";
     public float StepTime {get;private set;}
     // The sweep of the moebius step: how far round the ring the moving triangle is (0..1) and
@@ -32,7 +34,7 @@ public sealed class TutorialDirector : MonoBehaviour
     const int TrailPoints=120;readonly Vector3[] trail=new Vector3[TrailPoints];Material sweepGlow;bool sweeping;float sweepStart,sweepLength;
     static readonly Color[] TriadColors={new(.36f,.62f,1),new(1,.42f,.42f),new(.42f,.9f,.5f),new(.85f,.6f,1)};
     Main main;MidiPlayer midi;VisualizationViews views;SongLibraryPanel library;CameraControl orbit;AudioSource voice;
-    VisualElement root,caption,sentence;Label title,progress;Button skip,back,next;Diagrams diagrams;int jump=-1;
+    VisualElement root,caption,sentence,buttonRow;Label title,progress;Button skip,back,next;Diagrams diagrams;int jump=-1;
     Step[] steps=Array.Empty<Step>();readonly Dictionary<string,AudioClip> clips=new();readonly Dictionary<string,double> seconds=new();
     readonly Dictionary<string,float[]> wordStarts=new();
     // The caption shows the sentence being spoken, three times the old size, and lights the word
@@ -50,7 +52,7 @@ public sealed class TutorialDirector : MonoBehaviour
         glowTexture.SetPixels32(px);glowTexture.Apply();return glowTexture;
     }int shownSentence=-1,firstWord,litWord=-1;float litAt;bool blooming;
     static readonly Color Upcoming=new(.6f,.67f,.76f),Spoken=new(.9f,.93f,.97f),Lit=new(1,.9f,.55f);
-    float placedWidth=-1,placedHeight=-1;bool placedPortrait;
+    float placedWidth=-1,placedHeight=-1;bool placedPortrait,placedRecording;
     Coroutine run;int keyBefore;bool minorBefore;VisualizationViews.View viewBefore;
 
     public void Bind(VisualElement ui)
@@ -69,11 +71,11 @@ public sealed class TutorialDirector : MonoBehaviour
         caption.style.borderTopLeftRadius=caption.style.borderTopRightRadius=caption.style.borderBottomLeftRadius=caption.style.borderBottomRightRadius=12;
         title=new Label("");title.style.fontSize=TitleSize;title.style.unityFontStyleAndWeight=FontStyle.Bold;title.style.color=new Color(.62f,.8f,1);title.style.marginBottom=6;caption.Add(title);
         sentence=new VisualElement{pickingMode=PickingMode.Ignore};sentence.style.flexDirection=FlexDirection.Row;sentence.style.flexWrap=Wrap.Wrap;caption.Add(sentence);
-        progress=new Label("");progress.style.fontSize=18;progress.style.color=new Color(.52f,.66f,.8f);progress.style.marginTop=10;caption.Add(progress);
+        progress=new Label(""){name="tutorial-progress"};progress.style.fontSize=18;progress.style.color=new Color(.52f,.66f,.8f);progress.style.marginTop=10;caption.Add(progress);
         root.Add(caption);
         skip=new Button(Stop){text="Skip tutorial",name="tutorial-skip"};
         // Step through: back to the step before, on to the next.
-        var row=new VisualElement{pickingMode=PickingMode.Ignore};row.style.flexDirection=FlexDirection.Row;row.style.marginTop=8;row.style.alignItems=Align.Center;caption.Add(row);
+        var row=buttonRow=new VisualElement{pickingMode=PickingMode.Ignore};row.style.flexDirection=FlexDirection.Row;row.style.marginTop=8;row.style.alignItems=Align.Center;caption.Add(row);
         back=new Button(()=>Jump(StepIndex-1)){text="‹ Back",name="tutorial-back"};next=new Button(()=>Jump(StepIndex+1)){text="Next ›",name="tutorial-next"};
         foreach(var b in new[]{back,next,skip}){b.style.fontSize=22;b.style.paddingLeft=b.style.paddingRight=16;b.style.paddingTop=b.style.paddingBottom=6;}
         row.Add(back);row.Add(next);var gap=new VisualElement{pickingMode=PickingMode.Ignore};gap.style.flexGrow=1;row.Add(gap);row.Add(skip);
@@ -212,7 +214,7 @@ public sealed class TutorialDirector : MonoBehaviour
         for(int k=firstWord;k<words.Length&&sentenceOf[k]==index;k++)
         {
             var l=new Label(words[k]){pickingMode=PickingMode.Ignore};l.style.fontSize=SentenceSize;l.style.color=Upcoming;
-            l.style.marginRight=SentenceSize*.28f;l.style.marginTop=l.style.marginBottom=0;l.style.paddingLeft=l.style.paddingRight=0;
+            l.style.marginRight=SentenceSize*.36f;l.style.marginTop=l.style.marginBottom=0;l.style.paddingLeft=l.style.paddingRight=0;
             l.style.transformOrigin=new TransformOrigin(Length.Percent(50),Length.Percent(60));
             var box=new VisualElement{pickingMode=PickingMode.Ignore};
             var glow=new VisualElement{pickingMode=PickingMode.Ignore};glow.style.position=Position.Absolute;
@@ -257,7 +259,7 @@ public sealed class TutorialDirector : MonoBehaviour
         if(placedPortrait){float target=TopInsetTarget;if(Mathf.Abs(views.SceneTopInset-target)>.5f)views.SceneTopInset=Main.ReducedMotion?target:Mathf.Lerp(views.SceneTopInset,target,1-Mathf.Exp(-Time.unscaledDeltaTime*4));}
     }
     float diagramInset;
-    const float ToolbarInset=50;
+    float ToolbarInset=>RecordingMode.Active?12:50;
     float TopInsetTarget=>StepIndex>=0&&StepIndex<steps.Length&&!string.IsNullOrEmpty(steps[StepIndex].diagram)&&steps[StepIndex].diagram!="none"?diagramInset:ToolbarInset;
     // The layout, applied as the tour starts (so the torus is framed from its first frame) and
     // again whenever the window or its orientation change.
@@ -267,19 +269,26 @@ public sealed class TutorialDirector : MonoBehaviour
         bool portrait=Portrait;
         // Styles are written only when the window or its orientation change: the torus's frame is
         // fixed by the window alone, so a longer or shorter caption never moves or resizes it.
-        if(width==placedWidth&&height==placedHeight&&portrait==placedPortrait)return;
+        if(width==placedWidth&&height==placedHeight&&portrait==placedPortrait&&RecordingMode.Active==placedRecording)return;
+        placedRecording=RecordingMode.Active;
         if(portrait!=placedPortrait||placedWidth<0){float zoom=portrait?PortraitZoom:1;if(views.TorusZoom!=zoom){views.TorusZoom=zoom;views.ReframeTorus();}}
         placedWidth=width;placedHeight=height;placedPortrait=portrait;
-        caption.style.top=StyleKeyword.Auto;caption.style.bottom=portrait?16:22;
+        // Recording a vertical video: the caption starts two thirds of the way down, clear of the
+        // space Shorts and Reels cover with their own titles and buttons.
+        bool recordingVertical=portrait&&RecordingMode.Active;
+        // Recording: no buttons, and no empty row where they were.
+        buttonRow.style.display=RecordingMode.Active?DisplayStyle.None:DisplayStyle.Flex;progress.style.display=RecordingMode.Active?DisplayStyle.None:DisplayStyle.Flex;
+        if(recordingVertical){caption.style.bottom=StyleKeyword.Auto;caption.style.top=height*RecordingMode.CaptionTop;}
+        else{caption.style.top=StyleKeyword.Auto;caption.style.bottom=portrait?16:22;}
         if(portrait)
         {
             // Portrait: the diagram above the torus, the caption below it, the torus framed between.
             float d=Mathf.Min(width*.7f,height*.28f);
-            diagrams.style.left=(width-d)*.5f;diagrams.style.top=58;diagrams.style.width=d;diagrams.style.height=d;
+            diagrams.style.left=(width-d)*.5f;diagrams.style.top=RecordingMode.Active?8:58;diagrams.style.width=d;diagrams.style.height=d;
             caption.style.left=16;caption.style.width=width-32;
             // The torus fills the top two thirds (below the diagram on a step that has one); the
             // caption keeps the last third.
-            diagramInset=58+d+6;views.SceneBottomInset=height/3f;views.SceneTopInset=TopInsetTarget;
+            diagramInset=(RecordingMode.Active?8:58)+d+6;views.SceneBottomInset=recordingVertical?height*(1-RecordingMode.CaptionTop)+8:height/3f;views.SceneTopInset=TopInsetTarget;
         }
         else
         {

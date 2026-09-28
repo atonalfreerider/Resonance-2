@@ -77,6 +77,7 @@ public class HarmonyExplorer : MonoBehaviour
         gameObject.AddComponent<TutorialDirector>().Bind(root);
         gameObject.AddComponent<VisualizationViews>().Bind(root,controls,orrery);
         gameObject.AddComponent<SongDirector>().Bind(root,controls,structure,orrery);
+        gameObject.AddComponent<RecordingMode>().Bind(root);gameObject.AddComponent<RecordingSession>();
         panel=advanced;
         Section(panel,"TONAL CONTEXT");
         keyChoice=Choice(panel,"Key / tonic",Enumerable.Range(0,12).Select(i=>HarmonyModel.Name(i)).ToList(),main.currentKey,i=> { midi?.Pause(); main.KeySource="Manual"; main.ChangeKey(i); });

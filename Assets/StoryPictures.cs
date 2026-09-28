@@ -165,7 +165,9 @@ public sealed class StoryPictures : MonoBehaviour
         float x=placement=="left"?left:placement=="center"?(width-cardWidth)*.5f:placement==""&&landscapeOverview?strip.center.x-cardWidth*.5f:right;
         // At the left the story guide's label sits near the top; the card goes below it.
         bool guide=cue!=null&&!string.IsNullOrEmpty(cue.annotationTarget)&&cue.annotationTarget!="none";
-        if(stacked){card.style.left=Mathf.Max(12,left);card.style.top=Mathf.Max(Top,height*.5f-(imageHeight+Chrome)*.5f);return;}
+        // Stacked: in the black space at the mid left, its foot just above the lyric strip.
+        if(stacked){float cardHeight=imageHeight+Chrome,foot=strip.height>0?strip.yMin-10:height*.5f+cardHeight*.5f;
+            card.style.left=Mathf.Max(12,left);card.style.top=Mathf.Max(Top,foot-cardHeight);return;}
         card.style.left=Mathf.Clamp(x,8,Mathf.Max(8,width-cardWidth-8));card.style.top=placement=="left"&&guide?170:Top;
     }
     void OnDestroy(){Clear();}

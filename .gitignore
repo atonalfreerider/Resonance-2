@@ -91,3 +91,6 @@ SongLibraryData/
 .env
 .env.*
 *-key.txt
+
+# Recorded videos (Tools > Resonance > Record)
+/Recordings/Videos/

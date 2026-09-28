@@ -81,6 +81,7 @@ public sealed class VisualizationViews : MonoBehaviour
         SetPanelHidden(true);
         SetView(View.Overview);
     }
+    public void SetVertical(bool on){Vertical=on;vertical?.SetValueWithoutNotify(on);}
     public void SetPanelHidden(bool hidden){PanelHidden=hidden;tuck.text=hidden?"›":"‹";tuck.tooltip=hidden?"Show side menu":"Tuck away side menu";if(hidden)ExplorerInputFocus.ClaimViewport();}
     public void ReframeTorus(){if(Current==View.Torus){cameraMoving=true;if(orbit!=null)orbit.enabled=false;}}
     public void SetView(View view)

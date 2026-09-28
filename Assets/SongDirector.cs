@@ -21,7 +21,7 @@ public sealed class SongDirector : MonoBehaviour
     MidiPlayer midi;SongAudio audio;StemPlayback stems;VisualizationViews views;Main main;
     Toggle toggle;Label status,caption;VisualElement footer,controls;
     Story story;Task<Story> pending;string source;int current=-2;
-    VisualizationViews.View previousView;string previousStem;bool previousUncoil;CameraControl orbit;
+    VisualizationViews.View previousView;string previousStem;bool previousUncoil,captionRaised;CameraControl orbit;
     // The torus turns slowly under the camera while a story plays, as in the tutorial (radians a second).
     const float OrbitSpeed=.09f;
     public bool Directing {get;private set;}
@@ -117,6 +117,10 @@ public sealed class SongDirector : MonoBehaviour
         toggle.SetEnabled(story!=null&&audio.Ready&&!audio.Busy&&!stems.IsLoading);
         if(!Directing||audio.Busy||stems.IsLoading)return;
         footer.style.left=views.PanelHidden?24:controls.resolvedStyle.width+36;
+        // Recording a vertical video, the caption sits two thirds of the way down (clear of the
+        // titles and buttons Shorts and Reels draw over the bottom of the frame).
+        bool raise=RecordingMode.Active&&(views.Vertical||Screen.height>Screen.width);
+        if(raise!=captionRaised){captionRaised=raise;if(raise){footer.style.top=Length.Percent(RecordingMode.CaptionTop*100);footer.style.bottom=StyleKeyword.Auto;}else{footer.style.top=StyleKeyword.Null;footer.style.bottom=StyleKeyword.Null;}}
         double now=midi.Position;int index=Array.FindIndex(story.cues,c=>now>=c.start&&now<c.end);
         // AudioClip.length is a float; its endpoint can be fractionally earlier
         // than the sample-accurate duration stored by preprocessing.
