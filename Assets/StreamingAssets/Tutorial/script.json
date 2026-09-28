@@ -67,10 +67,11 @@
     },
     {
       "id": "credit",
-      "title": "The shape",
+      "title": "The Cholidean harmony structure",
       "action": "torus",
       "diagram": "none",
-      "text": "The umbilic torus comes from singularity theory. Christopher Zeeman named it the umbilic bracelet in nineteen seventy-six. The three-dimensional model used in Resonance is credited to Dimitrios Cholidis."
+      "text": "The shape itself comes from singularity theory; Christopher Zeeman named it the umbilic bracelet in 1976. Putting music on it is the work of Dimitrios Cholidis. In 2024 he published the Cholidean harmony structure, a personal research project that places the twelve tones and the twenty-four chords and scales on the umbilic torus, with the circle of fifths running along its surface. He came to it through Open Music Theory and Schoenberg, and built it, in his words, as a system of reference and a mnemonic rule, so that harmony has fewer exceptions to memorise. Resonance is built on that structure, with his collaboration.",
+      "speech": "The shape itself comes from singularity theory; Christopher Zeeman named it the umbilic bracelet in 1976. Putting music on it is the work of Dimitrios Kho-LEE-dis. In 2024 he published the Kho-LEE-dean harmony structure, a personal research project that places the twelve tones and the twenty-four chords and scales on the umbilic torus, with the circle of fifths running along its surface. He came to it through Open Music Theory and Schoenberg, and built it, in his words, as a system of reference and a mnemonic rule, so that harmony has fewer exceptions to memorise. Resonance is built on that structure, with his collaboration."
     },
     {
       "id": "outro",
