@@ -43,14 +43,21 @@ Timing comes from the best evidence available, in this order:
 2. **A forced alignment guiding the vocal's notes.** When `lyrics.timing.json` comes from a
    phonetic forced aligner (MMS), its syllable times decide which note each sung syllable takes:
    the note assignment below runs with a cost for straying from the aligned time. The notes then
-   give the exact time.
+   give the exact time. Where the notes run out (a melisma the MIDI writes as one note, a line
+   the transcription missed) the syllables that fit take the notes and the rest keep their
+   aligned times; the sync string then says how many were fitted ("forced alignment guiding the
+   vocal notes (412 of 456 syllables on notes)"). Words the aligner missed are placed between
+   their timed neighbours in the line, in text order, and a syllable timed before the one before
+   it is moved after it, so lines never run backwards. A sung syllable lasts as long as its note
+   says, whatever the aligner heard of a held vowel; a held one (`_`) at least two beats.
 3. **The vocal's notes.** Sung syllables are laid on the notes in order by dynamic programming:
    - one syllable per note, a held syllable taking several (cheapest on a stressed or `_`
      syllable);
    - a note may go unsung;
    - lines end where the melody breathes.
 
-   The vocal lane is the lead vocal, else the lane the lyric events sit on. MIDI vocal notes
+   The vocal lane is the lead vocal named in the song's settings, else a lane named for the
+   voice, else the lane the lyric events sit on. MIDI vocal notes
    aligned to the recording are an exact clock. Laying syllables on them by phrase and breath
    proved more reliable than syllable onsets heard in a stem. In Fireflies, the stem's onsets put
    the first line 24 beats before the vocal enters. With the MMS aligner guiding the notes, all
@@ -115,7 +122,7 @@ The score weights beat alignment 0.6 and stress alignment 0.4. The note names wh
 
 | Part | Where | Shows |
 |---|---|---|
-| Reader | scene, on the drum wheel, most of the screen | One lyric line runs across the top of the strip, just above the drum disc. A stem joins it to the disc's comb at twelve o'clock (where the dimples are struck) and flashes with every drum hit, brightest for the kick. The syllable being heard is always centred, with its optimal recognition point (the letter a fast reader fixes on: the second of 2 to 5 letters, the third of 6 to 9, and so on) on the stem. It is set bold, upper case, in the colour of the chord of the moment. The syllables before it build to the left as a trail that dims and fades with distance, and each new syllable slides in along a diagonal (a beat from the upper left, an off-beat from the lower right) as the trail makes room. The slide takes the last 40 to 100 ms before its onset, and the syllable lands exactly on it with a small bloom. As it lands, a slanted strike slices across it: down (\\) on a beat, up (/) off one. The slice cuts in within 25 ms, flares white and widens, then blooms out in about a quarter of a second as its tail chases its head off the end. It is brighter and wider when a drum hit lands with it. The next drum hit comes in from the right at the rim's speed as a translucent steep sawtooth tooth, taller for a heavier hit, whose cliff reaches the stem as it is struck. A held syllable trails a bar that runs out with it and trembles under vibrato. |
+| Reader | scene, on the drum wheel, most of the screen | One lyric line runs across the top of the strip, just above the drum disc. A stem joins it to the disc's comb at twelve o'clock (where the dimples are struck) and flashes with every drum hit, brightest for the kick. The line is a groove: a faint wave scrolling left at the rim's speed, a well at every beat and a crest between. The syllable being heard is always centred, with its optimal recognition point (the letter a fast reader fixes on: the second of 2 to 5 letters, the third of 6 to 9, and so on) on the stem, set bold and upper case in the colour of the chord of the moment, and it fits the groove where it lands. On a beat it hammers straight down into the well and sits low, squashed by the impact; off the beat it is kicked up from below onto the crest and sits high, stretched; between beats it skids in from the right. Emphasis sets how far and how hard. A drawn-out syllable is set wide (its letter spacing grows with the eighths it is held across), comes in more slowly and trails a bar that runs out with it; under vibrato its letters shimmer at the vibrato's rate. Every entry lands exactly on the onset, never past it, with a small bloom. As it lands a slanted strike slices across it: down (\) into the well, up (/) onto the crest, shallow between beats. The slice cuts in within 25 ms, flares white and widens, then blooms out in about a quarter of a second as its tail chases its head off the end, brighter and wider when a drum hit lands with it. The syllables before build to the left as a trail that dims with distance and keeps each one's place in the groove, so the meter reads back as a pattern. The next drum hit comes in from the right at the rim's speed as a translucent steep sawtooth tooth, taller for a heavier hit, whose cliff reaches the stem as it is struck. |
 | Lyric graph | panel, right | The words' structure, not the music's: no chord colours, no pitch. Each stanza is a column headed by its name and rhyme scheme, and each line a row of its words in reading order. End rhymes are arcs on the right from line end to line end, with the rhyme letter beyond. Front rhymes are arcs on the left, internal rhymes dip under the two words, and a line heard before is marked ↺ with how many times. The word being heard is lit and underlined, and the links of the line being heard glow. The columns slide to keep the stanza being heard second from the left. |
 | Vocal wheel | panel, left, small | The vocal changer's top disc facing the viewer, turning once per loop under the comb. The melody is a curve through the notes (radius is pitch). Sung syllables sit on the curve at their notes, always upright. The one being sung is lit, and under vibrato its letters bob at the vibrato's rate. |
 
@@ -243,7 +250,9 @@ manifest, and validates the bundle.
     its line's links glowing, following from Verse 1 into Rap 1;
   - the vocal wheel lights the sung syllable, with vibrato; the reader holds it with its bar;
   - a syllable lands with a small bloom into the chord's colour, and its white strike is gone 0.3 s after it lands;
-  - 80 ms before their onsets, "Stood" slides in from the upper left and "the" from the lower right;
+  - 80 ms before their onsets, the downbeat "Stood" is hammering straight down toward its well and the off-beat "the" is kicked straight up toward its crest;
+  - "Stood" lands low in the well, squashed by the impact, with a down strike; "the" lands high on the crest, stretched, with an up strike; 140 ms later the impact has settled with no bounce;
+  - "Stood" joins the trail still in its well; the held "day" is set wide and the eighth "the" tight; under vibrato the letters of "star" shimmer;
   - the downbeat "Stood" lands centred on the stem with a down strike, the off-beat "the" with
     an up strike, and "Stood" joins the trail to its left;
   - the next drum hit's tooth comes in from the right and reaches the stem as it is struck;

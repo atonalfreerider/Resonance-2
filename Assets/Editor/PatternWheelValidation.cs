@@ -49,15 +49,20 @@ public static class PatternWheelValidation
             // Key changes are detected offline: the lifted last chorus moves the key from C to D.
             const int C=3,D=5,G=10;var lift=data.Sections[7];
             Check(data.KeyChanges.Length==1&&data.KeyChanges[0].From==C&&data.KeyChanges[0].Key==D&&Math.Abs(data.KeyChanges[0].Beat-lift.Start)<1e-6,"Key change C → D at the lifted chorus: "+string.Join(", ",data.KeyChanges.Select(k=>k.Beat+" "+k.Evidence)));
-            midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(lift.Start+2)));await Task.Delay(1200);
-            Check(main.currentKey==D,"The torus completes the change into D");
+            var pointer=main.GetComponent<KeyShiftIndicator>();
+            midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(lift.Start-2)));await Task.Delay(900);
+            midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(lift.Start+.1)));await Task.Delay(120);
+            Check(main.currentKey==D&&main.KeyChanging&&pointer.Visible&&pointer.Direction==1&&pointer.Target==D,$"As the torus turns into D a pointer at the tonic label points up (sharpward) to D (alpha {pointer.Alpha:0.00})");
+            await Task.Delay(1400);
+            Check(main.currentKey==D&&!main.KeyChanging&&!pointer.Visible,"Once the torus is locked into D the pointer is gone");
             // A V/V in the bridge leans the torus toward G and relaxes back into C.
             var vv=data.Tensions.First(t=>t.Kind=="V/V");
             Check(vv.Target==G&&!vv.Completes,"The bridge's D major is V/V pointing at G, without a key change");
-            midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(vv.End-.2)));await Task.Delay(700);
-            Check(main.currentKey==C&&midi.CurrentTension==vv&&main.TensionKey==G&&main.TensionAmount>.25f,"During V/V the torus leans toward G while the key stays C");
+            midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(vv.End-.2)));await Task.Delay(1300);
+            Check(main.currentKey==C&&midi.CurrentTension==vv&&main.TensionKey==G&&main.TensionAmount>.1f&&main.TensionAmount<.3f,$"During V/V the torus leans slightly toward G ({main.TensionAmount:0.00}) while the key stays C");
+            Check(pointer.Visible&&pointer.Direction==1&&pointer.Target==G,"While it leans the pointer shows the flex up toward G");
             midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(vv.End+2.5)));await Task.Delay(1500);
-            Check(main.currentKey==C&&main.TensionAmount<.03f,"After V/V the torus relaxes back into C");
+            Check(main.currentKey==C&&main.TensionAmount<.03f&&!pointer.Visible,"After V/V the torus relaxes back into C and the pointer is gone");
             // The drum wheel names the section each groove belongs to.
             var drums=main.GetComponent<DrumPatternDeck>();var chorus=data.Sections[2];
             midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(chorus.Start+1)));await Task.Delay(150);

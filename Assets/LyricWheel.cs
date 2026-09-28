@@ -96,7 +96,7 @@ public sealed class LyricWheel
             for(double b=Math.Max(n.Beat,from);b<=Math.Min(to,end-glide)+1e-6;b+=step)
             {
                 double pitch=n.Pitch;
-                if(owner!=null&&owner.Vibrato>0&&b>=owner.VibratoStart)pitch+=owner.Vibrato*Math.Sin((b-owner.VibratoStart)*10);
+                if(owner!=null&&owner.Vibrato>0&&b>=owner.VibratoStart)pitch+=owner.Vibrato*Math.Sin(2*Math.PI*(owner.VibratoRate>0?owner.VibratoRate:5.5)*(midi.Cycles.SecondsAt(b)-midi.Cycles.SecondsAt(owner.VibratoStart)));
                 curve.Add(d.At(spin+Phase(b),R(pitch)));curveBeat.Add(b);curveBreak.Add(false);
             }
             if(legato)for(int k=1;k<=6;k++)

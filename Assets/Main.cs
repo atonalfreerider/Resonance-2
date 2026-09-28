@@ -26,6 +26,7 @@ public class Main : MonoBehaviour
     readonly List<LineRenderer> fifthsLineRenderer = new();
     readonly List<LineRenderer> uncoiledRings=new();
     void EnsureUncoiledAurora(){if(GetComponent<UncoiledAurora>()==null)gameObject.AddComponent<UncoiledAurora>();}
+    void EnsureKeyShiftIndicator(){if(GetComponent<KeyShiftIndicator>()==null)gameObject.AddComponent<KeyShiftIndicator>();}
     public bool Uncoiled {get;private set;}
     public float UncoilAmount {get;private set;}
     float unfoldProgress;
@@ -35,6 +36,9 @@ public class Main : MonoBehaviour
     float baseRotation,baseTwist,tensionTarget,tensionAmount;int tensionKey;
     public float TensionAmount=>tensionAmount;
     public int TensionKey=>tensionKey;
+    public int KeyFrom=>uncoilKeyFrom;
+    // Where a pitch class's label sits on the torus (world space), for the key-shift pointer.
+    public Vector3 LabelPosition(int pitchClass){int i=HarmonyModel.Mod(pitchClass);return i<noteTextLabels.Count?noteTextLabels[i].transform.position:transform.position;}
     static float PoseRotation(int key)=>pathMap[HarmonyModel.Mod(key)].x/(float)Tones;
     static float PoseTwist(int key)=>Mathf.PI+pathMap[HarmonyModel.Mod(key)].y*2f*Mathf.PI/3f;
     void ApplyPose(){currentVisualRotation=Mathf.Lerp(baseRotation,PoseRotation(tensionKey),tensionAmount);currentVisualTwist=Mathf.Lerp(baseTwist,PoseTwist(tensionKey),tensionAmount);}
@@ -144,6 +148,7 @@ public class Main : MonoBehaviour
     {
         if(GetComponent<DominantChordOutline>()==null)gameObject.AddComponent<DominantChordOutline>();
         if(GetComponent<ChordAurora>()==null)gameObject.AddComponent<ChordAurora>();
+        EnsureKeyShiftIndicator();
         if(GetComponent<FeaturedInstrument>()==null)gameObject.AddComponent<FeaturedInstrument>();
         visualKeyForRendering = currentKey;
         currentKey = HarmonyModel.Mod(currentKey); baseRotation = currentVisualRotation = PoseRotation(currentKey); baseTwist = currentVisualTwist = PoseTwist(currentKey); tensionKey = currentKey;

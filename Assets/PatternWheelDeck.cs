@@ -138,7 +138,7 @@ public sealed class PatternWheelDeck : VisualElement
         float pixelsPerSong=1000;
         // Cached per bundle: where every bar and section sits on the song ring (0..1).
         double[] barU=Array.Empty<double>(),sectionStartU=Array.Empty<double>(),sectionEndU=Array.Empty<double>(),keyU=Array.Empty<double>();double cachedDuration=-1;
-        int[] familyIndex=Array.Empty<int>(),visitNumber=Array.Empty<int>();
+        int[] familyIndex=Array.Empty<int>(),visitNumber=Array.Empty<int>(),familyKey=Array.Empty<int>();
         FormHatch.Pattern[] hatch=Array.Empty<FormHatch.Pattern>();
         // Orbits: each recurring group's families on one carrier; the rest on an outer orbit.
         sealed class Orbit{public int Group=-1;public int[] Members=Array.Empty<int>();public double Shown=double.NaN;}
@@ -206,6 +206,7 @@ public sealed class PatternWheelDeck : VisualElement
             familyIndex=source.Sections.Select(s=>Array.FindIndex(source.Patterns,p=>p.Family==s.Family)).ToArray();
             visitNumber=source.Sections.Select((s,i)=>source.Sections.Take(i+1).Count(x=>x.Family==s.Family)).ToArray();
             hatch=source.Patterns.Select((p,i)=>FamilyHatch(p,i)).ToArray();
+            familyKey=source.Patterns.Select(p=>source.Sections.FirstOrDefault(s=>s.Family==p.Family)?.KeyRoot??-1).ToArray();
             // The two most recurring groups get their own orbits; every other family (intro,
             // bridge, an interrupting C, outro) rides the outer orbit in order of appearance.
             orbitOf=Enumerable.Repeat(-1,source.Patterns.Length).ToArray();memberOf=new int[source.Patterns.Length];
@@ -484,7 +485,9 @@ public sealed class PatternWheelDeck : VisualElement
             Teeth(p,c,r,Enumerable.Range(0,Math.Max(4,pattern.LoopBars*2)).Select(i=>i/(double)Math.Max(4,pattern.LoopBars*2)),Alpha(Metal,.8f),2);
             FormBand(p,c,r-2.5f,r,0,1,k,playing?.9f:.55f,false);
             double loop=Math.Max(.25,pattern.LoopBeats);float band=r>=14?4.5f:3f;
-            foreach(var chord in pattern.Loop)Band(p,c,r-3.5f-band/2,chord.Start/loop,chord.End/loop,CyclicOrrery.ChordColor(chord,main.currentKey),band);
+            // Its chords in the colours of its own key: a loop keeps its look when the song modulates.
+            int key=familyKey[k]>=0?familyKey[k]:main.currentKey;
+            foreach(var chord in pattern.Loop)Band(p,c,r-3.5f-band/2,chord.Start/loop,chord.End/loop,CyclicOrrery.ChordColor(chord,key),band);
             Text(ctx,pattern.Short,c-new Vector2(0,r*.1f),Mathf.Clamp(r*.5f,8,12),Label(playing?1:.8f));
             // One dot per visit: how often this family returns.
             int visits=Math.Min(10,pattern.Visits);
