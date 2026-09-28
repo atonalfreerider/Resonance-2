@@ -9,9 +9,9 @@ using UnityEngine.UIElements;
 
 // The lyric strip: one lyric line, drawn on its own stage by its own camera and composited,
 // transparent, over whatever part of the screen the views give it (between the pattern wheels
-// and the torus), so it hides nothing behind it. The line is a
-// groove of slashes scrolling left at the bar's speed: a "\" at every beat (tallest on the
-// downbeat) and a "/" at every upbeat. The syllable being heard is always centred, its
+// and the torus), so it hides nothing behind it. The line is a groove of slashes scrolling
+// left at the bar's speed, one for every drum hit: a "\" where the hit falls on a beat (tallest
+// on the downbeat) and a "/" where it falls off the beat. No hit, no slash; no words, no groove. The syllable being heard is always centred, its
 // fastest-to-read letter (the optimal recognition point) on the reticle, bold and in the colour
 // of the chord of the moment, and it slides in along its slash and locks into it exactly on the
 // onset: down along the "\" into the well on a beat, up along the "/" onto the crest off it,
@@ -19,9 +19,8 @@ using UnityEngine.UIElements;
 // emphasis) and the slash under it flares white and blooms out. A drawn-out syllable is set
 // wide and comes in more slowly, trailing a bar that runs out with it; under vibrato it
 // wiggles gently up and down at the vibrato's rate. The syllables before build to the left as
-// a fading trail keeping their places in the groove, so the meter reads back as a pattern. The
-// next drum hit comes in from the right as a translucent steep tooth. Text meshes are rebuilt
-// only when a slot's syllable changes.
+// a fading trail keeping their places in the groove, so the meter reads back as a pattern.
+// Text meshes are rebuilt only when a slot's syllable changes.
 [DefaultExecutionOrder(80)]
 public sealed class DrumLyricRack : MonoBehaviour
 {
@@ -174,7 +173,6 @@ public sealed class DrumLyricRack : MonoBehaviour
         Presence=Near(now);
         DrawLine(fade*Presence);
         DrawSlashes(beat,perBeat,barStart,barLength,fade*Presence);
-        DrawTooth(beat,HitAfter(now),perBeat,fade*Presence);
         DrawReader(now,perBeat,fade);
     }
     void Resize(int w,int h)
@@ -227,18 +225,21 @@ public sealed class DrumLyricRack : MonoBehaviour
         float w=size*.29f,h=size*.5f;
         a=new Vector3(x-w,.028f,Center+(down?h:-h));b=new Vector3(x+w,.028f,Center+(down?-h:h));
     }
-    // The groove: a slash at every beat and upbeat, scrolling left, the downbeat's tallest;
-    // brightest as it reaches the reticle, where the syllable locks into it.
+    // The groove: a slash for every drum hit, scrolling left, "\" on a beat (the downbeat's
+    // tallest) and "/" off it, taller for a heavier hit; brightest as it reaches the reticle,
+    // where the syllable locks into it.
     void DrawSlashes(double beat,double perBeat,double barStart,double barLength,float fade)
     {
         double reach=Span/perBeat;int used=0;
-        for(int k=(int)Math.Ceiling(2*(beat-reach));k<=Math.Floor(2*(beat+reach));k++)
+        int lo=0,hi=hitBeat.Length;while(lo<hi){int mid=(lo+hi)/2;if(hitBeat[mid]<beat-reach)lo=mid+1;else hi=mid;}
+        for(int k=lo;k<hitBeat.Length&&hitBeat[k]<=beat+reach;k++)
         {
-            double b=k/2.0;float x=(float)((b-beat)*perBeat);if(Mathf.Abs(x)>Span)continue;
-            bool down=k%2==0;bool first=down&&Math.Abs(Math.IEEERemainder(b-barStart,barLength))<1e-6;
+            double b=hitBeat[k];float x=(float)((b-beat)*perBeat);if(Mathf.Abs(x)>Span)continue;
+            double frac=b-Math.Floor(b+1e-6);bool down=frac<.1||frac>.9;bool first=down&&Math.Abs(Math.IEEERemainder(b-barStart,barLength))<.1;
+            float weight=.7f+.5f*hitWeight[k];
             while(slashes.Count<=used){var l=Line("Groove slash",.014f,Ink);l.numCapVertices=1;slashes.Add(l);}
             var slash=slashes[used++];
-            SlashEnds(x,down,first?1.15f:down?.95f:.7f,out var a,out var c);
+            SlashEnds(x,down,(first?1.15f:down?.95f:.7f)*weight,out var a,out var c);
             pair[0]=a;pair[1]=c;slash.positionCount=2;slash.SetPositions(pair);
             float near=Mathf.Clamp01(1-Mathf.Abs(x)/.5f);
             var color=Color.Lerp(Ink,Color.white,.35f*near)*(1+.6f*near);color.a=fade*(first?.5f:down?.4f:.28f)*Mathf.Clamp01((Span-Mathf.Abs(x))/.6f)*(1+near);

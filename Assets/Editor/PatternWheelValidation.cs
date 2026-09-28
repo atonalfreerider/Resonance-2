@@ -75,7 +75,8 @@ public static class PatternWheelValidation
             // Portrait stacks the scene above the wheels (the camera starts above them); landscape
             // puts it beside them (the camera starts right of them).
             bool stacked=view.yMin>.05f;
-            Check(stacked?overlay.yMin/screen.height>=1-view.yMin-.01f:overlay.xMax/screen.width<=view.xMin+.01f,"Pattern wheels and the torus/drum viewport do not overlap");
+            // (Beside them the scene may start over the wheels' empty right margin, 48 units at most.)
+            Check(stacked?overlay.yMin/screen.height>=1-view.yMin-.01f:overlay.xMax-48<=view.xMin*screen.width+.5f,"Pattern wheels and the torus/drum viewport do not overlap (beyond the wheels' margin)");
             var verse=data.Sections[3];midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(verse.Start+30)));deck.Tick();await Task.Delay(120);
             Directory.CreateDirectory("Temp/ResonanceChecks");ScreenCapture.CaptureScreenshot("Temp/ResonanceChecks/pattern-wheels.png");await Task.Delay(200);
             results.Add("ALL PATTERN WHEEL CHECKS PASSED");

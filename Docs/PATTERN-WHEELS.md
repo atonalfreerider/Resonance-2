@@ -174,11 +174,13 @@ with no third (a bare fifth, a suspension) is not snapped to the key's quality.
 
 **The torus.** Only a settled key change moves the torus: one whose new key holds for sixteen
 bars, or eight bars to the end of the song. Then it twists fully into the new key, and a
-**rail** stands through the tonic label along the y axis for the change to roll along, muted,
-most present where it meets the torus's edge and fading quickly above and below, with a chevron
-on the side the change goes (up is sharpward on the circle of fifths, down flatward) and the new
-key named there; it fades once the torus is locked in. Tonicizations (V/V, the Neapolitan,
-borrowed chords) and shorter key regions never move the torus; the caption alone names them
+**height scale** stands through the old key's label along the y axis: a thin rule with the
+chromatic scale on it, a tick and a note name per semitone, faint, most present where it
+meets the torus's edge and fading quickly above and below. It stands where the label was as
+the change began and never turns with the torus; it slides as the torus turns, by the
+semitones between the keys the shorter way, so the new key's tick (the longer one) arrives at
+the edge as the turn completes, then fades. Tonicizations (V/V, the Neapolitan, borrowed
+chords) and shorter key regions never move the torus; the caption alone names them
 (`C major · V/V → G major`), and the rack and the ring mark every detected key change.
 
 ## Section boundaries
@@ -191,6 +193,31 @@ between blocks joins the section it changes into (a lead-in) or out of (a tag), 
 novelty at its two ends. Reviewed labels "Chorus 1" and "Chorus 2" name one family. A MIDI
 marker within a beat of the next bar line belongs to that bar. An outro is only the run of
 one-off sections after the last return of a repeated family.
+
+## Torus labels
+
+Every pitch class is labelled by what it is to the key: `C  Key`, `F  4th` (red) and `G  5th`
+(green) for the chords the colours are built on, and the others by interval: `D♭ Neapolitan`,
+`D  2nd maj dom` (the second, which acts as V/V), `E♭ min 3rd`, `E  maj 3rd`, `G♭ tritone`,
+`A♭ min 6th`, `A  maj 6th`, `B♭ min 7th`, `B  maj 7th`. The key, 4th and 5th keep their colours
+and sizes; the other labels are small and white until their note sounds, when they take the
+note's tonal colour and grow with its loudness.
+
+## Tutorial
+
+The song list's **Tutorial** button plays a narrated tour of the surface: the twelve tones as a
+circle, the four augmented-triad triangles that cover them, the triangles spinning a third of
+a turn per revolution into a three-sided band (the umbilic torus), the key at the top with
+every tone named by its relation, why the colours are what they are (I blue, IV red, V green,
+the rest blended by position), what position means (fifths along the edge, thirds across the
+band), a key change as a twist measured on its scale, the circle of fifths compared, and the
+shape's provenance (Zeeman's umbilic bracelet, 1976; the model credited to Dimitrios Cholidis).
+The script (`Assets/StreamingAssets/Tutorial/script.json`) drives a diagram overlay, the torus
+(lit degrees and chords, a key change up a fifth and back) and a slow orbit; the narration
+beside it (one WAV per step, `manifest.json` with durations) is made by
+`Tools/SongLibrary/tutorial_narration.py` with Cartesia, in a male British voice picked from
+the voice library (`--voice` to choose another). Without the WAVs the tour still runs, timed by
+the text.
 
 ## Layout and depth
 

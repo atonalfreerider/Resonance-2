@@ -17,6 +17,11 @@ public sealed class VisualizationViews : MonoBehaviour
     public View Current {get;private set;}
     public bool PanelHidden {get;private set;}
     public float TorusOpacity {get;private set;}=1;
+    // A cap on the torus's opacity (the tutorial lowers it to see through the band).
+    public float TorusOpacityCap=1;
+    // Force the stacked (portrait) layout in any window.
+    public bool Vertical {get;private set;}
+    Toggle vertical;
     public float DrumOpacity {get;private set;}=1;
     // Where the lyric strip sits (pixels, from the top left), for validation.
     public Rect LyricStrip {get;private set;}
@@ -56,6 +61,9 @@ public sealed class VisualizationViews : MonoBehaviour
         uncoil=new Toggle("Uncoil"){name="uncoil-torus",tooltip="Open the torus into concentric octave arcs"};
         uncoil.style.marginLeft=12;uncoil.style.marginRight=12;uncoil.style.color=new Color(.9f,.95f,1);
         uncoil.RegisterValueChangedCallback(e=>GetComponent<Main>().SetUncoiled(e.newValue));toolbar.Add(uncoil);
+        vertical=new Toggle("Vertical"){name="vertical-layout",tooltip="Stack the torus, the lyrics and the pattern wheels top to bottom"};
+        vertical.style.marginLeft=4;vertical.style.marginRight=12;vertical.style.color=new Color(.9f,.95f,1);
+        vertical.RegisterValueChangedCallback(e=>{Vertical=e.newValue;ExplorerInputFocus.ClaimViewport();});toolbar.Add(vertical);
         tuck=new Button(()=>SetPanelHidden(!PanelHidden)){text="‹",name="tuck-side-menu",tooltip="Tuck away side menu"};root.Add(tuck);
         tuck.style.position=Position.Absolute;tuck.style.width=25;tuck.style.height=64;tuck.style.fontSize=27;
         tuck.style.marginLeft=tuck.style.marginRight=tuck.style.marginTop=tuck.style.marginBottom=0;
@@ -99,7 +107,7 @@ public sealed class VisualizationViews : MonoBehaviour
         timelineFocus=Mathf.Lerp(timelineFocus,Current==View.Timeline?1:0,blend);
         timelineOpacity=Mathf.Lerp(timelineOpacity,Current==View.Overview||Current==View.Timeline||Current==View.Lyrics?1:0,blend);
         overviewSplit=Mathf.Lerp(overviewSplit,Current==View.Overview||Current==View.Lyrics?1:0,blend);
-        bool lyricView=Current==View.Lyrics,portrait=available<height*.95f||lyricView;
+        bool lyricView=Current==View.Lyrics,portrait=Vertical||available<height*.95f||lyricView;
         Rect dock,strip,scene;float sideFrame;
         if(!portrait)
         {
@@ -140,7 +148,9 @@ public sealed class VisualizationViews : MonoBehaviour
         var shown=new Rect(Mathf.Lerp(full.x,scene.x,split),Mathf.Lerp(full.y,scene.y,split),Mathf.Lerp(full.width,scene.width,split),Mathf.Lerp(full.height,scene.height,split));
         SceneRect=shown;
         camera.rect=new Rect(shown.x/width,1-shown.yMax/height,shown.width/width,shown.height/height);
-        if(orbit!=null)orbit.SideFrame=sideFrame*split;
+        // The orbit's side framing recomputes the camera's place; while a view change lerps the
+        // camera the two would fight and jitter, so it waits until the orbit is back in charge.
+        if(orbit!=null&&orbit.enabled&&!cameraMoving)orbit.SideFrame=sideFrame*split;
         // Nothing to wheel before a song is chosen: the intro stands alone.
         overlay.style.visibility=timelineOpacity<.005f||!GetComponent<MidiPlayer>().Loaded?Visibility.Hidden:Visibility.Visible;
         // The lyric strip: between the wheels and the torus in the overview, larger in lyric mode.
@@ -150,7 +160,7 @@ public sealed class VisualizationViews : MonoBehaviour
             lyrics.Wanted=wanted;lyrics.Viewport=new Rect(strip.x/width,1-strip.yMax/height,strip.width/width,strip.height/height);
         }
         // Lyric mode focuses on the lyrics: the torus steps back and the drum wheel lies deep behind.
-        TorusOpacity=Mathf.Lerp(TorusOpacity,Current==View.Overview||Current==View.Torus?1:0,blend);
+        TorusOpacity=Mathf.Lerp(TorusOpacity,(Current==View.Overview||Current==View.Torus?1:0)*Mathf.Clamp01(TorusOpacityCap),blend);
         var shape=GetComponent<Main>();
         bool showDrums=Current==View.Overview||Current==View.Drums||Current==View.Lyrics||(Current==View.Torus&&shape.Uncoiled&&!shape.UncoilMoving&&shape.UncoilAmount>.9999f);
         DrumOpacity=showDrums?Mathf.Lerp(DrumOpacity,1,blend):0;
@@ -165,10 +175,11 @@ public sealed class VisualizationViews : MonoBehaviour
         }
         TorusOpacity=Snap(TorusOpacity);DrumOpacity=Snap(DrumOpacity);
         // Opacity only needs reapplying when it changes, when renderers come and go, or while
-        // the uncoil hides labels; otherwise the walk over every renderer is skipped.
+        // the uncoil hides labels; otherwise the walk over every renderer is skipped (a walk on
+        // a timer would be a hitch every time it fired).
         bool uncoiling=GetComponent<Main>().UncoilMoving;int count=transform.hierarchyCount;
-        if(TorusOpacity==shownTorus&&DrumOpacity==shownDrums&&count==shownCount&&!uncoiling&&!wasUncoiling&&Time.unscaledTime<nextWalk)return;
-        shownTorus=TorusOpacity;shownDrums=DrumOpacity;shownCount=count;wasUncoiling=uncoiling;nextWalk=Time.unscaledTime+1;
+        if(TorusOpacity==shownTorus&&DrumOpacity==shownDrums&&count==shownCount&&!uncoiling&&!wasUncoiling)return;
+        shownTorus=TorusOpacity;shownDrums=DrumOpacity;shownCount=count;wasUncoiling=uncoiling;
         renderers.Clear();GetComponentsInChildren(true,renderers);
         if(appliedOpacity.Count>2048)appliedOpacity.Clear();
         var drumRoot=drums?.WheelTransform;

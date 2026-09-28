@@ -1,0 +1,63 @@
+{
+ "version": 1,
+ "voice": "ef191366-f52f-447a-a398-ed8c0f2943a1",
+ "voiceName": "",
+ "sampleRate": 24000,
+ "clips": [
+  {
+   "id": "welcome",
+   "file": "00-welcome.wav",
+   "seconds": 12.606
+  },
+  {
+   "id": "twelve",
+   "file": "01-twelve.wav",
+   "seconds": 8.88
+  },
+  {
+   "id": "triangles",
+   "file": "02-triangles.wav",
+   "seconds": 12.48
+  },
+  {
+   "id": "moebius",
+   "file": "03-moebius.wav",
+   "seconds": 20.079
+  },
+  {
+   "id": "key",
+   "file": "04-key.wav",
+   "seconds": 24.423
+  },
+  {
+   "id": "colours",
+   "file": "05-colours.wav",
+   "seconds": 14.596
+  },
+  {
+   "id": "position",
+   "file": "06-position.wav",
+   "seconds": 14.348
+  },
+  {
+   "id": "keychange",
+   "file": "07-keychange.wav",
+   "seconds": 12.974
+  },
+  {
+   "id": "fifths",
+   "file": "08-fifths.wav",
+   "seconds": 14.44
+  },
+  {
+   "id": "credit",
+   "file": "09-credit.wav",
+   "seconds": 11.754
+  },
+  {
+   "id": "outro",
+   "file": "10-outro.wav",
+   "seconds": 5.013
+  }
+ ]
+}

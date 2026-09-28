@@ -22,7 +22,10 @@ public sealed class SongLibraryPanel : MonoBehaviour
     public bool Open {get;private set;}=true;
     // The width the docked panel takes at the right edge now (for the views' layout).
     public float DockedWidth=>Intro?0:panel!=null?panel.layout.width*shown:0;
-    VisualElement root,panel,list,progress,progressFill;Button tuck;Label status;
+    VisualElement root,panel,list,progress,progressFill;Button tuck,tutorial;Label status;bool hidden;
+    // While the tutorial runs the list is out of the way; it comes back when the tour ends.
+    public void Hide(){hidden=true;panel.style.display=DisplayStyle.None;tuck.style.display=DisplayStyle.None;}
+    public void Show(){hidden=false;panel.style.display=DisplayStyle.Flex;if(!Intro){SetOpen(true);tuck.style.display=DisplayStyle.Flex;}}
     MidiPlayer midi;SongAudio audio;float shown=1;string loadedScore="";
     const float Width=440;
 
@@ -36,7 +39,10 @@ public sealed class SongLibraryPanel : MonoBehaviour
         panel.style.borderLeftColor=panel.style.borderRightColor=panel.style.borderTopColor=panel.style.borderBottomColor=new Color(.2f,.26f,.34f);
         var eyebrow=new Label("RESONANCE");eyebrow.style.color=new Color(.52f,.66f,.8f);eyebrow.style.fontSize=11;eyebrow.style.letterSpacing=3;panel.Add(eyebrow);
         var title=new Label("Choose a song");title.style.fontSize=24;title.style.unityFontStyleAndWeight=FontStyle.Bold;title.style.marginBottom=4;title.style.color=Color.white;panel.Add(title);
-        var hint=new Label("Fully prepared songs from the library: an aligned recording and its pattern bundle.");hint.style.whiteSpace=WhiteSpace.Normal;hint.style.color=new Color(.64f,.7f,.78f);hint.style.fontSize=12;hint.style.marginBottom=12;panel.Add(hint);
+        var hint=new Label("Fully prepared songs from the library: an aligned recording and its pattern bundle.");hint.style.whiteSpace=WhiteSpace.Normal;hint.style.color=new Color(.64f,.7f,.78f);hint.style.fontSize=12;hint.style.marginBottom=10;panel.Add(hint);
+        tutorial=new Button(()=>{ExplorerInputFocus.ClaimUI();GetComponent<TutorialDirector>()?.Play();}){text="▶  Tutorial · how the torus works",name="tutorial-button"};
+        tutorial.style.marginBottom=10;tutorial.style.marginRight=0;tutorial.style.backgroundColor=new Color(.16f,.3f,.42f);tutorial.style.borderLeftColor=tutorial.style.borderRightColor=tutorial.style.borderTopColor=tutorial.style.borderBottomColor=new Color(.35f,.55f,.72f);
+        tutorial.style.borderTopLeftRadius=tutorial.style.borderTopRightRadius=tutorial.style.borderBottomLeftRadius=tutorial.style.borderBottomRightRadius=7;tutorial.style.paddingTop=9;tutorial.style.paddingBottom=9;tutorial.style.unityTextAlign=TextAnchor.MiddleLeft;panel.Add(tutorial);
         var scroll=new ScrollView(ScrollViewMode.Vertical);scroll.style.maxHeight=new Length(70,LengthUnit.Percent);scroll.style.flexGrow=1;panel.Add(scroll);
         list=scroll.contentContainer;
         status=new Label("");status.style.whiteSpace=WhiteSpace.Normal;status.style.fontSize=11;status.style.color=new Color(.64f,.7f,.78f);status.style.marginTop=10;panel.Add(status);
@@ -158,7 +164,7 @@ public sealed class SongLibraryPanel : MonoBehaviour
     }
     void LateUpdate()
     {
-        if(panel==null||root==null)return;
+        if(panel==null||root==null||hidden)return;
         float width=root.resolvedStyle.width,height=root.resolvedStyle.height;
         if(!float.IsFinite(width)||width<1)return;
         // Loaded another way (a validation, a file field): leave the intro without a choice.

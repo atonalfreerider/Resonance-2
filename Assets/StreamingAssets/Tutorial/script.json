@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "welcome",
+      "title": "Resonance",
+      "action": "torus",
+      "diagram": "none",
+      "text": "Welcome to Resonance. Everything you hear in a song is drawn on one surface: the umbilic torus. This short tour shows how the shape is put together, why it is coloured the way it is, and how a key change turns it."
+    },
+    {
+      "id": "twelve",
+      "title": "Twelve tones",
+      "action": "torus",
+      "diagram": "chromatic",
+      "text": "Start with the twelve tones of the octave, laid out as a circle. Each is a semitone from its neighbours, and after twelve steps you are back where you began."
+    },
+    {
+      "id": "triangles",
+      "title": "Four triangles",
+      "action": "torus",
+      "diagram": "triangles",
+      "text": "Take every fourth tone and you get an equilateral triangle: an augmented triad, three notes each a major third apart. There are exactly four of them, and together they cover all twelve tones without a note to spare."
+    },
+    {
+      "id": "moebius",
+      "title": "A three-sided band",
+      "action": "spin",
+      "diagram": "spin",
+      "text": "Now carry one triangle around the ring, tracing along the edge. It turns a third of the way round each time it goes round, and as it sweeps past each of the four triangles it snaps them into place. After three turns the edge closes on itself. That is the umbilic torus: a Möbius band with three sides instead of two.",
+      "speech": "Now carry one triangle around the ring, tracing along the edge. It turns a third of the way round each time it goes round, and as it sweeps past each of the four triangles it snaps them into place. After three turns the edge closes on itself. That is the umbilic torus: a Moybius band with three sides instead of two."
+    },
+    {
+      "id": "key",
+      "title": "Everything is relative to the key",
+      "action": "labels",
+      "diagram": "none",
+      "text": "Along that edge the tones follow the circle of fifths, and the key sits at the top. The largest label is the key. Its fourth and its fifth stand beside it. Every other tone is named by what it is to the key: the minor third, the Neapolitan, the second that acts as a dominant. Inside the band, each note's octaves stack beneath its label, the lower octaves deeper in."
+    },
+    {
+      "id": "colours",
+      "title": "Why the colours",
+      "action": "chords",
+      "diagram": "legend",
+      "text": "Colour is tonality and nothing else. The key's chord glows blue, the subdominant red, the dominant green, and every other chord takes a blend of the three by where it stands. So the same colour always means the same function, in any key."
+    },
+    {
+      "id": "position",
+      "title": "Where a chord sits",
+      "action": "labels",
+      "diagram": "none",
+      "text": "Position matters. Neighbours along the edge are a fifth apart, so chords that lead into each other sit close. Across the band you cross a major third, from one triangle to the next. Distance on the torus is harmonic distance."
+    },
+    {
+      "id": "keychange",
+      "title": "A key change is a twist",
+      "action": "keychange",
+      "diagram": "none",
+      "text": "When a song changes key, nothing is redrawn. The whole torus turns until the new key arrives at the top, and a scale beside it measures how far it went. The colours follow the key, so the new tonic is blue again."
+    },
+    {
+      "id": "fifths",
+      "title": "Compared with the circle of fifths",
+      "action": "torus",
+      "diagram": "fifths",
+      "text": "The circle of fifths lays the keys in a ring, one dimension. The torus keeps that ring along its edge but adds a second direction, the major thirds, so relatives and neighbours are all in view at once, and the whole thing closes on itself with a twist."
+    },
+    {
+      "id": "credit",
+      "title": "The shape",
+      "action": "torus",
+      "diagram": "none",
+      "text": "The umbilic torus comes from singularity theory. Christopher Zeeman named it the umbilic bracelet in nineteen seventy-six. The three-dimensional model used in Resonance is credited to Dimitrios Cholidis."
+    },
+    {
+      "id": "outro",
+      "title": "Choose a song",
+      "action": "finish",
+      "diagram": "none",
+      "text": "That is the surface. Choose a song, and watch its harmony move across it."
+    }
+  ]
+}

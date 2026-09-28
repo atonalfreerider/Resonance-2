@@ -16,6 +16,8 @@ public class CameraControl : MonoBehaviour
         alpha=Mathf.Acos(Mathf.Clamp(offset.y/rad,-1,1));phi=Mathf.Atan2(offset.z,offset.x);
     }
     public void OverviewFraming(){Centered=false;center=new Vector3(0,-.9f,0);}
+    // Turn the orbit by an angle (radians), as the tutorial's slow spin does.
+    public void Turn(float dphi){phi=NormalizeAngle(phi+dphi);UpdateCameraPosition();transform.LookAt(FrameTarget);MovementUpdater?.Invoke();}
     float rad = 5.6f;
     float alpha = 42f * Mathf.Deg2Rad;
     float phi = 45f * Mathf.Deg2Rad;        // Azimuthal angle (around Y-axis) - set to 45 degrees

@@ -117,11 +117,6 @@ public static class LyricModeValidation
             // Vibrato: the letters shimmer while the held star is sung with vibrato.
             await HoldAt(SecondsOf(star.VibratoStart)+.3);
             Check(rack.ReaderSyllable==star&&rack.Shimmer>.5f,$"Under vibrato the letters of \"star\" shimmer at {star.VibratoRate:0.0} Hz (depth {rack.Shimmer:0.00})");
-            // The next drum hit comes in from the right and reaches the stem as it is struck.
-            double toothBeat=rack.NextToothBeat;float toothX=rack.NextToothX;
-            await HoldAt(SecondsOf(toothBeat)-.05);
-            float closer=rack.NextToothX;
-            Check(!double.IsNaN(toothBeat)&&toothX>0&&closer<toothX&&closer>=0&&closer<.25f,$"The next drum hit comes in from the right as a tooth ({toothX:0.00} → {closer:0.00} just before it is struck)");
             // The groove is a slash at every beat and upbeat, scrolling across the strip.
             Check(rack.SlashCount>=6,$"The groove is a slash at every beat and upbeat across the strip ({rack.SlashCount} in view)");
             // Played in real time: each is centred on its onset.

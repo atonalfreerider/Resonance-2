@@ -126,6 +126,10 @@ public class Main : MonoBehaviour
     public float VisualRotation => currentVisualRotation;
     public float VisualTwist => currentVisualTwist;
     public Vector3 UmbilicPoint(float t) => UmbilicTorus.PointAlongUmbilical(Sides, EdgeLength, Rad, Mathf.Repeat(t,1), currentVisualTwist);
+    // The edge in world space by its parameter (one turn of the parameter is three times round
+    // the ring), and where a pitch class's label sits on it (by fifths, turned with the key).
+    public Vector3 EdgePoint(float t) => transform.TransformPoint(GetPointAt(t, 1));
+    public float EdgeParameter(int pitchClass) => HarmonyModel.Mod(pitchClass * 5) / (float)Tones + currentVisualRotation;
     public MusicSynth Synth { get; private set; }
     public IReadOnlyList<Tuple<int, float>> ActiveNotes => lastActiveKeys;
     public bool NotesUseSynth {get;private set;}
@@ -484,6 +488,7 @@ public class Main : MonoBehaviour
     void Update()
     {
         using var perf=Perf.MainUpdate.Auto();
+        UpdateLabelEnergy();
         if(Mathf.Abs(tensionAmount-tensionTarget)>.0005f)
         {
             // Leaning in follows the music; relaxing back is a little slower, like a release.
@@ -545,34 +550,41 @@ public class Main : MonoBehaviour
         }
     }
 
+    // What each pitch class is to the key: the key itself, its 4th and 5th (the chords the
+    // colours are built on), and every other degree by its interval.
+    public static string Role(int rel) => rel switch
+    {
+        0 => "Key", 1 => "Neapolitan", 2 => "2nd maj dom", 3 => "min 3rd", 4 => "maj 3rd", 5 => "4th",
+        6 => "tritone", 7 => "5th", 8 => "min 6th", 9 => "maj 6th", 10 => "min 7th", _ => "maj 7th"
+    };
+    const float LabelBase = 0.5f;
+    readonly float[] labelEnergy = new float[Tones];
     void UpdateLabelStyles()
     {
         for (int i = 0; i < noteTextLabels.Count; i++)
         {
             int rel = (i - visualKeyForRendering + Tones) % Tones;
-            noteTextLabels[i].Text = PitchName(i) + (rel == 0 ? "  I" : rel == 5 ? "  IV" : rel == 7 ? "  V" : "");
-            const float baseSize = 0.5f;
-
-            if (rel == 0) // Key
-            {
-                noteTextLabels[i].Color = Color.blue;
-                noteTextLabels[i].Size = baseSize * 4.0f;
-            }
-            else if (rel == 7) // Upper Fifth
-            {
-                noteTextLabels[i].Color = Color.green;
-                noteTextLabels[i].Size = baseSize * 1.75f;
-            }
-            else if (rel == 5) // Lower Fifth
-            {
-                noteTextLabels[i].Color = Color.red;
-                noteTextLabels[i].Size = baseSize * 1.75f;
-            }
-            else
-            {
-                noteTextLabels[i].Color = Color.white;
-                noteTextLabels[i].Size = baseSize;
-            }
+            noteTextLabels[i].Text = PitchName(i) + "  " + Role(rel);
+            if (rel == 0) { noteTextLabels[i].Color = Color.blue; noteTextLabels[i].Size = LabelBase * 4.0f; }
+            else if (rel == 7) { noteTextLabels[i].Color = Color.green; noteTextLabels[i].Size = LabelBase * 1.75f; }
+            else if (rel == 5) { noteTextLabels[i].Color = Color.red; noteTextLabels[i].Size = LabelBase * 1.75f; }
+            else { noteTextLabels[i].Color = Color.white; noteTextLabels[i].Size = LabelBase; labelEnergy[i] = -1; }
+        }
+    }
+    // The other degrees take their tonal colour and grow while their note sounds.
+    void UpdateLabelEnergy()
+    {
+        for (int i = 0; i < noteTextLabels.Count && i < Tones; i++)
+        {
+            int rel = (i - visualKeyForRendering + Tones) % Tones;
+            if (rel is 0 or 5 or 7) continue;
+            float amp = 0;
+            for (int j = 0; j < Octaves; j++) { int k = j * Tones + i; if (k < notes.Count) amp = Mathf.Max(amp, notes[k].VisualAmplitude); }
+            amp = Mathf.Clamp01(amp);
+            if (Mathf.Abs(amp - labelEnergy[i]) < .02f) continue;
+            labelEnergy[i] = amp;
+            noteTextLabels[i].Color = Color.Lerp(Color.white, TonalColorField.Pitch(i, currentKey), Mathf.Clamp01(amp * 1.6f));
+            noteTextLabels[i].Size = LabelBase * (1 + 2.2f * amp);
         }
     }
 

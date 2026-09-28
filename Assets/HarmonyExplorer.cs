@@ -74,6 +74,7 @@ public class HarmonyExplorer : MonoBehaviour
         var highlight=new Foldout{text="White melody highlight (visual only)",value=false};solo.Add(highlight);highlight.Add(GetComponent<FeaturedInstrument>().BuildUI());
         orrery=new PatternWheelDeck(main,midi);structure.Add(orrery);orrery.AttachOverlay(root);
         gameObject.AddComponent<SongLibraryPanel>().Bind(root);
+        gameObject.AddComponent<TutorialDirector>().Bind(root);
         gameObject.AddComponent<VisualizationViews>().Bind(root,controls,orrery);
         gameObject.AddComponent<SongDirector>().Bind(root,controls,structure,orrery);
         panel=advanced;
