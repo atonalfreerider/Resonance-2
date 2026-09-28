@@ -155,14 +155,33 @@ public class MidiPlayer : MonoBehaviour
         double beat=HarmonicCycles.BeatAt(scorePosition);
         var t=CurrentTension!=null&&CurrentTension.Start<=beat&&beat<CurrentTension.End?CurrentTension:Array.Find(tensions,x=>x.Start<=beat&&beat<x.End);
         CurrentTension=t;
-        if(t==null){main.SetTension(main.currentKey,0);return;}
-        float rise=Mathf.SmoothStep(0,1,(float)((beat-t.Start)/Math.Max(.25,t.End-t.Start)));
-        main.SetTension(t.Target,t.Amount*Mathf.Lerp(.35f,1,rise));
+        // The tension is named in the caption, but it never moves the torus: only a settled key change does.
+        main.SetTension(main.currentKey,0);
+    }
+    // The key the torus shows at a frame: the song's key, moved only by key changes that settle
+    // for a substantial stretch (sixteen bars, or eight bars to the end of the song). A shorter
+    // region, however real, stays in the key around it as far as the torus is concerned.
+    public const int SettledBars=16,SettledClosingBars=8;
+    (int key,bool minor) SettledKey(Frame frame)
+    {
+        int key=frame?.Key??fallbackKey; bool minor=frame?.Key!=null?frame.Minor:fallbackMinor;
+        var p=HarmonicPrepared;var changes=p?.KeyChanges;
+        if(frame?.Key==null||changes==null||changes.Length==0||HarmonicCycles==null||p.Frames==null||p.Frames.Length==0||p.Frames[0].Key<0)return (key,minor);
+        double beat=HarmonicCycles.BeatAt(frame.Time);
+        double bar=p.Measures!=null&&p.Measures.Length>0?Math.Max(1,p.Measures[0].End-p.Measures[0].Start):4;
+        key=p.Frames[0].Key;minor=p.Frames[0].Minor;
+        for(int i=0;i<changes.Length;i++)
+        {
+            var k=changes[i];if(k.Beat>beat+1e-6)break;
+            double until=i+1<changes.Length?changes[i+1].Beat:p.EndBeat;double bars=(until-k.Beat)/bar;
+            if(bars>=SettledBars||i+1==changes.Length&&bars>=SettledClosingBars){key=k.Key;minor=k.Minor;}
+        }
+        return (key,minor);
     }
     void ApplyKey(Frame frame)
     {
         if (!FollowKey) return;
-        int key=frame?.Key??fallbackKey; bool minor=frame?.Key!=null?frame.Minor:fallbackMinor;
+        var (key,minor)=SettledKey(frame);
         main.KeySource=Prepared!=null&&!string.IsNullOrWhiteSpace(Prepared.KeySource)?Prepared.KeySource:frame?.Key!=null?"MIDI signature":"Manual (no MIDI signature)";
         if (main.currentKey!=key || main.MinorMode!=minor) { main.MinorMode=minor; main.ChangeKey(key); }
     }

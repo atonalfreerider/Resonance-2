@@ -335,7 +335,7 @@ public sealed class PatternWheelDeck : VisualElement
             bool wide=area.width>area.height*1.6f;Rect wheel,graph;
             if(wide){float side=Mathf.Min(area.height,area.width*.24f);wheel=new Rect(area.x,area.y,side,side);graph=new Rect(area.x+side+12,area.y,area.width-side-14,area.height-4);}
             else{float side=Mathf.Min(area.width*.6f,area.height*.4f);wheel=new Rect(area.x+(area.width-side)/2,area.y,side,side);graph=new Rect(area.x,area.y+side+8,area.width,area.height-side-10);}
-            ctx.DrawText("LYRIC MODE · the reader on the drum wheel, the words' rhymes and refrains below",new Vector2(90,12),11,Label(.7f));
+            ctx.DrawText("LYRIC MODE · the words' rhymes and refrains; the reader above",new Vector2(90,12),11,Label(.7f));
             Lyrics.DrawVocal(ctx,p,bloom,wheel,beat);
             Graph.Draw(bloom,graph);
         }

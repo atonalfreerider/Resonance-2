@@ -69,6 +69,8 @@ public sealed class SongAudio : MonoBehaviour
     IEnumerator Start()
     {
         yield return null;
+        // With a library to choose from, the intro's song selector opens instead of the last song.
+        if(SongLibraryPanel.Scan().Count>0)yield break;
         string score=StartupScore,audio=!Application.isEditor&&score==BundledScore?"":PlayerPrefs.GetString("Resonance.LastAudio");
         if(!Busy&&!Ready&&File.Exists(score))LoadPair(audio,score);
     }

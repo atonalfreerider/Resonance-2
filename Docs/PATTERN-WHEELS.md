@@ -172,14 +172,14 @@ its third), a seventh must be heard to be named, and a note's release tail lasts
 chord no longer colours the next (F's F♮ used to turn the D of a IV–V/V into D minor). A chord
 with no third (a bare fifth, a suspension) is not snapped to the key's quality.
 
-**The torus.** A key change twists the torus fully into the new key. Over a tonicization it
-leans slightly toward the key the chord points at, growing until the next chord, then relaxes
-back into its key. If the key change to that key follows, the lean hands over to it and the
-twist completes. Whenever the torus flexes, a **pointer** stands at the tonic label: up
-(sharpward on the circle of fifths) or down (flatward) to the key the flex points at, named at
-its tip. It appears as the lean or the change begins and goes once the torus is locked into
-the new key or has settled back. The rack and the ring mark every key change, and the caption
-names the key and any current tension (`C major · V/V → G major`).
+**The torus.** Only a settled key change moves the torus: one whose new key holds for sixteen
+bars, or eight bars to the end of the song. Then it twists fully into the new key, and a
+**rail** stands through the tonic label along the y axis for the change to roll along, muted,
+most present where it meets the torus's edge and fading quickly above and below, with a chevron
+on the side the change goes (up is sharpward on the circle of fifths, down flatward) and the new
+key named there; it fades once the torus is locked in. Tonicizations (V/V, the Neapolitan,
+borrowed chords) and shorter key regions never move the torus; the caption alone names them
+(`C major · V/V → G major`), and the rack and the ring mark every detected key change.
 
 ## Section boundaries
 
@@ -194,10 +194,15 @@ one-off sections after the last return of a repeated family.
 
 ## Layout and depth
 
-- **Overview.** The screen is split so the wheels and the 3D scene never overlap: side by
-  side in a landscape window, stacked in a portrait one (the scene takes the height the
-  wheels do not need). The scene camera renders only its part; a background camera clears
-  the whole screen.
+- **Intro and song list.** The app opens on a song selector listing the fully prepared songs of
+  `PreparedSongs/Library` (an aligned score, its recording manifest and a current pattern
+  bundle). Choosing one loads it; the list then docks at the right edge behind its own tuck
+  button. The side menu at the left starts tucked.
+- **Overview.** The pattern wheels, the lyric strip and the 3D scene share the screen without
+  overlapping: wheels, strip and torus side by side in a landscape window; the torus above, the
+  strip between and the wheels below in a portrait one. The scene camera renders only its part;
+  a background camera clears the whole screen through the same post-processing, so no part ends
+  at a hard edge.
 - **Occlusion.** The torus hides what lies behind it: a depth-only copy of its surface is
   drawn after its own glow and before the drum wheel. The drum plate is dark and sits low
   enough that the torus covers only its far edge, and the struck dimples stay in view.

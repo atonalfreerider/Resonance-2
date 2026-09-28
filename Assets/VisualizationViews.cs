@@ -3,6 +3,13 @@ using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.UIElements;
 
+// The views, and the screen's layout. In the overview the pattern wheels, the lyric strip and
+// the torus sit side by side in a landscape window (wheels, then lyrics, then the torus), and
+// stacked in a portrait one (torus above, lyrics between, wheels below, the drum wheel deep in
+// the scene behind). Every camera clears to the one background, so no part ends at a hard
+// edge; the strip's own camera draws the lyrics in its part. The side
+// menu at the left and the song list at the right each tuck away behind their own button; the
+// side menu starts tucked.
 [DefaultExecutionOrder(1000)]
 public sealed class VisualizationViews : MonoBehaviour
 {
@@ -11,6 +18,9 @@ public sealed class VisualizationViews : MonoBehaviour
     public bool PanelHidden {get;private set;}
     public float TorusOpacity {get;private set;}=1;
     public float DrumOpacity {get;private set;}=1;
+    // Where the lyric strip sits (pixels, from the top left), for validation.
+    public Rect LyricStrip {get;private set;}
+    public Rect SceneRect {get;private set;}
     VisualElement root,panel,overlay,toolbar;Button tuck;
     DropdownField viewChoice;
     Toggle uncoil;
@@ -18,20 +28,22 @@ public sealed class VisualizationViews : MonoBehaviour
     MaterialPropertyBlock block;
     readonly List<Renderer> renderers=new();
     readonly Dictionary<Material,Shader> replacedShaders=new();
-    Camera camera,clear;CameraControl orbit;DrumPatternDeck drums;
+    Camera camera,clear;CameraControl orbit;DrumPatternDeck drums;DrumLyricRack lyrics;SongLibraryPanel library;
     Vector3 overviewPosition;Quaternion overviewRotation;Vector3 overviewAngles;
-    float panelOpen=1,timelineOpacity=1,timelineFocus,overviewSplit=1,lyricDock;
+    float panelOpen,timelineOpacity=1,timelineFocus,overviewSplit=1;
     float shownTorus=-1,shownDrums=-1,nextWalk;int shownCount=-1;bool wasUncoiling;
     bool cameraMoving;
     void Awake(){block=new MaterialPropertyBlock();}
     public void Bind(VisualElement ui,VisualElement controls,PatternWheelDeck wheels)
     {
-        root=ui;panel=controls;overlay=wheels.Overlay;camera=Camera.main;orbit=camera.GetComponent<CameraControl>();drums=GetComponent<DrumPatternDeck>();
-        // The scene camera renders only its part of a split screen; this one clears the whole
-        // screen first, so the wheels never draw over stale frames.
+        root=ui;panel=controls;overlay=wheels.Overlay;camera=Camera.main;orbit=camera.GetComponent<CameraControl>();drums=GetComponent<DrumPatternDeck>();lyrics=GetComponent<DrumLyricRack>();library=GetComponent<SongLibraryPanel>();
+        // The scene camera renders only its part of the screen and clears no colour; this one
+        // clears the whole screen first, through the same post-processing, so the scene and the
+        // wheels share one background with no edge between them.
         var clearing=new GameObject("Screen clear"){hideFlags=HideFlags.DontSave};clear=clearing.AddComponent<Camera>();
         clear.cullingMask=0;clear.clearFlags=CameraClearFlags.SolidColor;clear.backgroundColor=camera.backgroundColor;clear.depth=camera.depth-10;clear.rect=new Rect(0,0,1,1);
-        var clearData=clear.GetUniversalAdditionalCameraData();clearData.renderPostProcessing=false;clearData.renderShadows=false;
+        var clearData=clear.GetUniversalAdditionalCameraData();clearData.renderPostProcessing=camera.GetUniversalAdditionalCameraData().renderPostProcessing;clearData.renderShadows=false;
+        camera.clearFlags=CameraClearFlags.Depth;
         toolbar=new VisualElement{name="visualization-views"};toolbar.style.position=Position.Absolute;toolbar.style.top=12;toolbar.style.right=16;
         toolbar.style.flexDirection=FlexDirection.Row;toolbar.style.alignItems=Align.Center;toolbar.style.backgroundColor=new Color(.055f,.09f,.14f,.92f);
         toolbar.style.borderTopLeftRadius=18;toolbar.style.borderTopRightRadius=18;toolbar.style.borderBottomLeftRadius=18;toolbar.style.borderBottomRightRadius=18;
@@ -53,6 +65,7 @@ public sealed class VisualizationViews : MonoBehaviour
         tuck.style.borderTopLeftRadius=0;tuck.style.borderBottomLeftRadius=0;
         tuck.style.borderTopWidth=tuck.style.borderBottomWidth=tuck.style.borderLeftWidth=tuck.style.borderRightWidth=0;
         panel.style.paddingTop=18;
+        SetPanelHidden(true);
         SetView(View.Overview);
     }
     public void SetPanelHidden(bool hidden){PanelHidden=hidden;tuck.text=hidden?"›":"‹";tuck.tooltip=hidden?"Show side menu":"Tuck away side menu";if(hidden)ExplorerInputFocus.ClaimViewport();}
@@ -80,36 +93,56 @@ public sealed class VisualizationViews : MonoBehaviour
         float panelWidth=panel.layout.width;
         panel.style.translate=new Translate(-panelWidth*(1-panelOpen),0);panel.style.opacity=panelOpen;
         panel.style.visibility=panelOpen<.005f?Visibility.Hidden:Visibility.Visible;
-        float left=panelWidth*panelOpen;
+        float left=panelWidth*panelOpen,right=library!=null?library.DockedWidth:0;
         tuck.style.left=left;tuck.style.top=Mathf.Max(90,(height-64)*.5f);
-        float available=width-left;
+        float available=Mathf.Max(200,width-left-right);
         timelineFocus=Mathf.Lerp(timelineFocus,Current==View.Timeline?1:0,blend);
         timelineOpacity=Mathf.Lerp(timelineOpacity,Current==View.Overview||Current==View.Timeline||Current==View.Lyrics?1:0,blend);
-        // The overview splits the screen so the pattern wheels and the 3D scene (torus and drum
-        // wheel) never overlap: side by side in a landscape window, stacked in a portrait one
-        // (scene above, wheels below). The camera renders only its own part.
-        // Lyric mode always stacks: the reader and the drum wheel dominate, in a wide strip taking
-        // nearly two thirds of the height; the lyric graph and a small vocal wheel sit below.
         overviewSplit=Mathf.Lerp(overviewSplit,Current==View.Overview||Current==View.Lyrics?1:0,blend);
-        lyricDock=Mathf.Lerp(lyricDock,Current==View.Lyrics?1:0,blend);
-        bool portrait=available<height*.9f||lyricDock>.5f;
-        // In portrait the wheels take only the height their width can use (ring, rack and
-        // caption); the rest goes to the scene.
-        float dockHeight=lyricDock>.5f?Mathf.Clamp(height*.36f,250,height*.45f):portrait?Mathf.Clamp(available+150,380,height*.58f):height-64;
-        var dock=portrait?new Rect(left+12,height-dockHeight-10,available-24,dockHeight)
-            :new Rect(left+16,52,Mathf.Clamp(available*.46f,340,640),dockHeight);
+        bool lyricView=Current==View.Lyrics,portrait=available<height*.95f||lyricView;
+        Rect dock,strip,scene;float sideFrame;
+        if(!portrait)
+        {
+            // Landscape: wheels, then a column with the lyric strip at its middle, then the torus.
+            float dockWidth=Mathf.Clamp(available*.4f,340,640);dock=new Rect(left+16,52,dockWidth,height-64);
+            float column=Mathf.Clamp(available*.24f,200,540),stripHeight=Mathf.Clamp(column*.36f,70,190);
+            strip=new Rect(dock.xMax+14,(height-stripHeight)*.5f,column-8,stripHeight);
+            scene=new Rect(dock.xMax+8,0,left+available-(dock.xMax+8),height);
+            sideFrame=5.4f*(column/Mathf.Max(1,scene.width));
+        }
+        else
+        {
+            // Portrait: the torus above, the lyric strip between, the wheels below (in lyric mode
+            // the strip and the panel are larger).
+            float sceneHeight=height*(lyricView?.3f:.44f),stripHeight=Mathf.Clamp(height*(lyricView?.26f:.15f),70,400);
+            strip=new Rect(left+12,sceneHeight+4,available-24,stripHeight);
+            float dockTop=strip.yMax+8;dock=new Rect(left+12,dockTop,available-24,height-dockTop-10);
+            scene=new Rect(left,0,available,strip.yMin-2);
+            sideFrame=0;
+        }
+        LyricStrip=strip;
         float focusWidth=Mathf.Min(available-24,(height-70)*1.12f);
         var focus=new Rect(left+(available-focusWidth)*.5f,52,focusWidth,height-70);
         overlay.style.maxWidth=StyleKeyword.None;
         overlay.style.width=Mathf.Lerp(dock.width,focus.width,timelineFocus);overlay.style.height=Mathf.Lerp(dock.height,focus.height,timelineFocus);
         overlay.style.left=Mathf.Lerp(dock.x,focus.x,timelineFocus)-(1-timelineOpacity)*available;
         overlay.style.top=Mathf.Lerp(dock.y,focus.y,timelineFocus);overlay.style.opacity=timelineOpacity;
+        // The scene camera: its part of the screen in the overview, all of it otherwise.
         float split=overviewSplit*(1-timelineFocus);
-        if(portrait){float below=(height-dock.y+4)/height*split;camera.rect=new Rect(left/width,below,1-left/width,1-below);}
-        else{float beside=(dock.xMax+8-left)*split;camera.rect=new Rect((left+beside)/width,0,1-(left+beside)/width,1);}
-        if(orbit!=null)orbit.SideFrame=1-split;
-        overlay.style.visibility=timelineOpacity<.005f?Visibility.Hidden:Visibility.Visible;
-        // Lyric mode focuses on the lyrics: the torus steps back and the drum wheel carries the rack.
+        var full=new Rect(left,0,available,height);
+        var shown=new Rect(Mathf.Lerp(full.x,scene.x,split),Mathf.Lerp(full.y,scene.y,split),Mathf.Lerp(full.width,scene.width,split),Mathf.Lerp(full.height,scene.height,split));
+        SceneRect=shown;
+        camera.rect=new Rect(shown.x/width,1-shown.yMax/height,shown.width/width,shown.height/height);
+        if(orbit!=null)orbit.SideFrame=sideFrame*split;
+        // Nothing to wheel before a song is chosen: the intro stands alone.
+        overlay.style.visibility=timelineOpacity<.005f||!GetComponent<MidiPlayer>().Loaded?Visibility.Hidden:Visibility.Visible;
+        // The lyric strip: between the wheels and the torus in the overview, larger in lyric mode.
+        if(lyrics!=null)
+        {
+            bool wanted=(Current==View.Overview||lyricView)&&timelineFocus<.5f;
+            lyrics.Wanted=wanted;lyrics.Viewport=new Rect(strip.x/width,1-strip.yMax/height,strip.width/width,strip.height/height);
+        }
+        // Lyric mode focuses on the lyrics: the torus steps back and the drum wheel lies deep behind.
         TorusOpacity=Mathf.Lerp(TorusOpacity,Current==View.Overview||Current==View.Torus?1:0,blend);
         var shape=GetComponent<Main>();
         bool showDrums=Current==View.Overview||Current==View.Drums||Current==View.Lyrics||(Current==View.Torus&&shape.Uncoiled&&!shape.UncoilMoving&&shape.UncoilAmount>.9999f);
@@ -117,18 +150,8 @@ public sealed class VisualizationViews : MonoBehaviour
         if(Current==View.Drums||Current==View.Timeline||Current==View.Lyrics||cameraMoving){
             Vector3 position=overviewPosition;Quaternion rotation=overviewRotation;
             if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);float unfold=GetComponent<Main>().UncoilAmount;position=Vector3.Slerp(position-target,-transform.forward*(6f/Mathf.Min(1,camera.aspect)),unfold)+target;position=target+(position-target)*(1+.55f*GetComponent<Main>().TransitionWiden);rotation=Quaternion.LookRotation(target-position,transform.up);}
-            if(Current==View.Drums){Vector3 target=drums?.WheelTransform!=null?drums.WheelTransform.position:transform.position+Vector3.down*DrumPatternDeck.DeckDepth;position=target+Vector3.up*(3.6f/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);}
+            if(Current==View.Drums||Current==View.Lyrics){Vector3 target=drums?.WheelTransform!=null?drums.WheelTransform.position:transform.position+Vector3.down*DrumPatternDeck.DeckDepth;position=target+Vector3.up*((Current==View.Lyrics?4.6f:3.6f)/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);}
             if(Current==View.Timeline){position=overviewPosition+Vector3.right*5;rotation=overviewRotation;}
-            if(Current==View.Lyrics)
-            {
-                // Straight down on the drum wheel, twelve o'clock up, framing the rack beyond the rim.
-                var wheel=drums?.WheelTransform;Vector3 target=wheel!=null?wheel.position:transform.position+Vector3.down*DrumPatternDeck.DeckDepth;
-                float scale=wheel!=null?wheel.lossyScale.x:1.25f;target+=Vector3.forward*scale*DrumLyricRack.Middle;
-                // The disc, the rack and the line above it set the height; the rack runs as wide as the strip.
-                float tan=Mathf.Tan(camera.fieldOfView*.5f*Mathf.Deg2Rad);
-                float distance=DrumLyricRack.Tall*.5f*scale/tan;
-                position=target+Vector3.up*distance;rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);
-            }
             camera.transform.position=Vector3.Lerp(camera.transform.position,position,blend);camera.transform.rotation=Quaternion.Slerp(camera.transform.rotation,rotation,blend);
             orbit?.MovementUpdater?.Invoke();
             if((Current==View.Overview||Current==View.Torus)&&Vector3.Distance(camera.transform.position,position)<.005f&&Quaternion.Angle(camera.transform.rotation,rotation)<.1f){cameraMoving=GetComponent<Main>().UncoilMoving;if(orbit!=null&&!cameraMoving){if(Current==View.Torus)orbit.AdoptView(transform.position,true);orbit.enabled=true;}}

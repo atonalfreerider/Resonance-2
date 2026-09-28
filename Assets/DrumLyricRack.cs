@@ -3,52 +3,49 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
-// Lyric mode's reader, on the drum wheel: one lyric line across the top of the strip, joined to
-// the disc's comb at twelve o'clock (where the dimples are struck) by a stem that flashes with
-// every drum hit. The line is a groove: a faint wave scrolling left at the rim's speed with a
-// well at every beat and a crest between. The syllable being heard is always centred, its
-// fastest-to-read letter (the optimal recognition point) on the stem, bold and in the colour of
-// the chord of the moment, and it fits the groove where it lands:
-//  • on a beat it hammers straight down into the well and sits low, squashed by the impact;
-//  • off the beat it is kicked up from below onto the crest and sits high, stretched;
-//  • between beats it skids in sideways along the line;
-//  • a drawn-out syllable is set wide (letter spacing grows with its length), comes in more
-//    slowly, and trails a bar that runs out with it;
-//  • under vibrato its letters shimmer at the vibrato's rate;
-//  • emphasis sets how far and hard it comes in.
-// Every entry lands exactly on the onset, never past it. As it lands a slanted strike slices
-// across it, down (\) into the well and up (/) over the crest, a white bloom that fades fast,
-// brighter for the drum hit landing with it. The syllables before build to the left as a fading
-// trail that keeps their groove positions, so the meter reads back as a pattern. The next drum
-// hit comes in from the right as a translucent steep tooth. Text meshes are rebuilt only when a
-// slot's syllable changes (and per frame for the one syllable under vibrato).
+// The lyric strip: one lyric line, drawn on its own stage by its own camera into whatever part
+// of the screen the views give it (between the pattern wheels and the torus). The line is a
+// groove of slashes scrolling left at the bar's speed: a "\" at every beat (tallest on the
+// downbeat) and a "/" at every upbeat. The syllable being heard is always centred, its
+// fastest-to-read letter (the optimal recognition point) on the reticle, bold and in the colour
+// of the chord of the moment, and it slides in along its slash and locks into it exactly on the
+// onset: down along the "\" into the well on a beat, up along the "/" onto the crest off it,
+// sideways between beats. It lands hard (a beat squashed, an off-beat stretched, harder with
+// emphasis) and the slash under it flares white and blooms out. A drawn-out syllable is set
+// wide and comes in more slowly, trailing a bar that runs out with it; under vibrato it
+// wiggles gently up and down at the vibrato's rate. The syllables before build to the left as
+// a fading trail keeping their places in the groove, so the meter reads back as a pattern. The
+// next drum hit comes in from the right as a translucent steep tooth. Text meshes are rebuilt
+// only when a slot's syllable changes.
 [DefaultExecutionOrder(80)]
 public sealed class DrumLyricRack : MonoBehaviour
 {
-    Main main;MidiPlayer midi;DrumPatternDeck deck;DominantChordOutline region;PreparedPatternSong source;
-    Transform root;LineRenderer centerline,groove,hold,stem,tick,strike,tooth;Material glow;
+    Main main;MidiPlayer midi;DominantChordOutline region;PreparedPatternSong source;
+    Transform root;Camera stage;LineRenderer centerline,hold,tick,strike,tooth;Material glow;
+    readonly List<LineRenderer> slashes=new();
     sealed class Slot {public TextBox Box;public Material Face;public PreparedPatternSong.Syllable Syllable;public float Orp,Left,Right;}
     readonly Slot[] reader=new Slot[2];int shown=-1;
     // Trail slots, one per syllable index modulo the pool, so a syllable keeps its slot (and mesh) while it trails.
     const int TrailLength=10;readonly Slot[] trail=new Slot[TrailLength];
     PreparedPatternSong.Syllable[] syllables=Array.Empty<PreparedPatternSong.Syllable>();double[] onsets=Array.Empty<double>();
-    // The drum hits (score seconds and beats, weight 0..1 by drum and velocity): the stem's flash,
-    // the strike's strength and the incoming tooth.
+    // The drum hits (score seconds and beats, weight 0..1 by drum and velocity): the strike's strength and the incoming tooth.
     double[] hitTime=Array.Empty<double>(),hitBeat=Array.Empty<double>();float[] hitWeight=Array.Empty<float>();
     float visible;
+    // The views say where on the screen the strip is (normalized) and whether it is wanted.
+    public Rect Viewport=new(0,0,0,0);public bool Wanted;
     public bool Shown=>visible>.5f;
     public float Visibility=>visible;
-    // Deck-local geometry (the disc's rim is 1.15): the lyric line above it, the groove's depth.
-    public const float Edge=1.15f,Center=1.6f,Well=.11f,Crest=.1f;
-    const float ReaderSize=7.2f,TrailSize=4.3f,Slash=.55f;
-    // The lyric camera frames Tall deck units around Middle: the whole disc and the line with its strikes.
-    public const float Tall=4.1f,Middle=.62f;
+    // Stage geometry: the line at Center, the groove's depth, the strip Tall units high.
+    public const float Center=0,Well=.11f,Crest=.1f,Tall=1.9f;
+    const float ReaderSize=7.2f,TrailSize=4.3f,Slash=.55f,StageScale=1.25f;const int StageLayer=30;
+    static readonly Vector3 StagePosition=new(700,-300,700);
     public float Span {get;private set;}=3;
     public double PerBeat {get;private set;}
     // For validation: the syllable on the line, its entry (+1 down into a well, -1 up onto a
     // crest, 0 sideways), how far it still is from its place, its strike, its recognition letter's
-    // x, its colour, its letter spacing and squash, the trail, the stem's flash and the tooth.
+    // x, its colour, its letter spacing, squash and wiggle, the trail, the slashes and the tooth.
     public PreparedPatternSong.Syllable ReaderSyllable=>shown>=0?syllables[shown]:null;
     public int ReaderFrom {get;private set;}
     public Vector2 ReaderShift {get;private set;}
@@ -60,47 +57,55 @@ public sealed class DrumLyricRack : MonoBehaviour
     public float ReaderSpacing {get;private set;}
     public Vector2 ReaderSquash {get;private set;}=Vector2.one;
     public float Shimmer {get;private set;}
+    public float Wiggle {get;private set;}
     public int TrailCount {get;private set;}
     public float TrailNearestRight {get;private set;}
     public float TrailNearestAlpha {get;private set;}
     public float TrailNearestY {get;private set;}
     public float ReaderLeft {get;private set;}
-    public float Pulse {get;private set;}
+    public int SlashCount {get;private set;}
     public double NextToothBeat {get;private set;}=double.NaN;
     public float NextToothX {get;private set;}
     public bool Holding=>hold!=null&&hold.positionCount==2;
     static readonly Color Ink=new(.5f,.74f,.72f);
     Gradient lineGradient;float lineFade=-1,lineSpan=-1;
-    readonly Vector3[] pair=new Vector3[2],saw=new Vector3[3];Vector3[] wave=Array.Empty<Vector3>();
+    readonly Vector3[] pair=new Vector3[2],saw=new Vector3[3];
 
     void OnEnable()
     {
         if(!Application.isPlaying)return;
-        main=GetComponent<Main>();midi=GetComponent<MidiPlayer>();deck=GetComponent<DrumPatternDeck>();region=GetComponent<DominantChordOutline>();
-        // Not a child of the scene root: the views' opacity pass would override the glow.
-        root=new GameObject("Drum lyric reader · lyric line on the comb").transform;
+        main=GetComponent<Main>();midi=GetComponent<MidiPlayer>();region=GetComponent<DominantChordOutline>();
+        // The stage: far from the scene, on its own layer, seen only by its own camera.
+        root=new GameObject("Lyric strip · stage").transform;root.position=StagePosition;root.localScale=Vector3.one*StageScale;
+        var cam=new GameObject("Lyric strip camera");cam.transform.SetParent(root,false);stage=cam.AddComponent<Camera>();
+        // A base camera always clears its colour in URP: it clears to the screen's own background,
+        // so the strip has no edge of its own.
+        stage.clearFlags=CameraClearFlags.SolidColor;stage.backgroundColor=Camera.main!=null?Camera.main.backgroundColor:Color.black;stage.cullingMask=1<<StageLayer;stage.fieldOfView=30;stage.nearClipPlane=.1f;stage.farClipPlane=40;
+        stage.depth=(Camera.main!=null?Camera.main.depth:0)+1;stage.enabled=false;
+        var data=stage.GetUniversalAdditionalCameraData();data.renderPostProcessing=true;data.renderShadows=false;
+        if(Camera.main!=null)Camera.main.cullingMask&=~(1<<StageLayer);
         glow=new Material(Resources.Load<Shader>("HarmonicGlow"));glow.SetColor("_BaseColor",Color.white*2);glow.renderQueue=3102;
-        centerline=Line("Lyric line",.006f,Ink);groove=Line("Beat groove",.012f,Ink);hold=Line("Held syllable",.03f,Ink);
-        stem=Line("Stem from the comb",.016f,Ink);tick=Line("Reader reticle",.014f,Color.white);
+        centerline=Line("Lyric line",.006f,Ink);hold=Line("Held syllable",.03f,Ink);tick=Line("Reader reticle",.014f,Color.white);
         strike=Line("Strike",.04f,Color.white);tooth=Line("Next drum hit",.02f,Ink);tooth.numCapVertices=0;tooth.numCornerVertices=0;
         for(int i=0;i<2;i++)reader[i]=NewSlot(ReaderSize);
         for(int i=0;i<TrailLength;i++)trail[i]=NewSlot(TrailSize);
         root.gameObject.SetActive(false);
     }
+    static void Layer(GameObject go){go.layer=StageLayer;foreach(Transform t in go.transform)Layer(t.gameObject);}
     LineRenderer Line(string name,float width,Color color)
     {
-        var go=new GameObject(name);go.transform.SetParent(root,false);var l=go.AddComponent<LineRenderer>();l.sharedMaterial=glow;l.useWorldSpace=false;l.widthMultiplier=width;
+        var go=new GameObject(name){layer=StageLayer};go.transform.SetParent(root,false);var l=go.AddComponent<LineRenderer>();l.sharedMaterial=glow;l.useWorldSpace=false;l.widthMultiplier=width;
         l.numCapVertices=2;l.startColor=l.endColor=color;l.positionCount=0;return l;
     }
     Slot NewSlot(float size)
     {
-        var box=TextBox.Create("",TextAlignmentOptions.Left);box.transform.SetParent(root,false);box.Size=size;
-        // Lying flat on the deck, readable from above with twelve o'clock up.
+        var box=TextBox.Create("",TextAlignmentOptions.Left);box.transform.SetParent(root,false);box.Size=size;Layer(box.gameObject);
+        // Lying flat on the stage, readable from above with the line running left to right.
         box.transform.localRotation=Quaternion.Euler(90,0,0);box.TextField.fontMaterial.renderQueue=3103;
         box.TextField.textWrappingMode=TextWrappingModes.NoWrap;box.TextField.fontStyle=FontStyles.Bold|FontStyles.UpperCase;
         box.gameObject.SetActive(false);return new Slot{Box=box,Face=box.TextField.fontMaterial};
     }
-    // A drum's weight: how bright a flash and strike its hit makes.
+    // A drum's weight: how bright a strike its hit makes, how tall its tooth.
     public static float Weight(int pitch)=>pitch switch{35 or 36=>1f,38 or 40=>.9f,37 or 39=>.75f,41 or 43 or 45 or 47 or 48 or 50=>.7f,49 or 55 or 57=>.65f,51 or 53 or 59=>.45f,42 or 44 or 46=>.35f,_=>.4f};
     // The optimal recognition point: the letter the eye reads a word from fastest.
     public static int Recognition(int letters)=>letters<=1?0:letters<=5?1:letters<=9?2:letters<=13?3:4;
@@ -126,30 +131,30 @@ public sealed class DrumLyricRack : MonoBehaviour
     {
         using var perf=Perf.Rack.Auto();
         if(root==null)return;
-        if(midi==null||deck==null){midi=GetComponent<MidiPlayer>();deck=GetComponent<DrumPatternDeck>();return;}
-        var views=GetComponent<VisualizationViews>();
-        bool want=views!=null&&views.Current==VisualizationViews.View.Lyrics&&deck.WheelTransform!=null&&deck.WheelTransform.gameObject.activeInHierarchy&&midi.Prepared!=null;
+        if(midi==null){midi=GetComponent<MidiPlayer>();return;}
+        bool want=Wanted&&Viewport.width>.01f&&Viewport.height>.01f&&midi.Prepared!=null&&HasLyricsLoaded();
         visible=Main.ReducedMotion?(want?1:0):Mathf.MoveTowards(visible,want?1:0,Time.unscaledDeltaTime*3);
-        if(visible<=0){if(root.gameObject.activeSelf)root.gameObject.SetActive(false);return;}
-        if(!root.gameObject.activeSelf)root.gameObject.SetActive(true);
+        if(visible<=0){if(root.gameObject.activeSelf){root.gameObject.SetActive(false);stage.enabled=false;}return;}
+        if(!root.gameObject.activeSelf){root.gameObject.SetActive(true);stage.enabled=true;}
         if(source!=midi.Prepared)Load();
-        var wheel=deck.WheelTransform;root.SetPositionAndRotation(wheel.position,wheel.rotation);root.localScale=wheel.lossyScale;
+        // The camera frames Tall stage units of the strip, looking straight down at the line.
+        stage.rect=Viewport;float aspect=Viewport.width*Screen.width/Mathf.Max(1,Viewport.height*Screen.height);
+        float tan=Mathf.Tan(stage.fieldOfView*.5f*Mathf.Deg2Rad),distance=Tall*.5f/tan;
+        stage.transform.localPosition=new Vector3(0,distance,Center);stage.transform.localRotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);
+        Span=Mathf.Clamp(Tall*.5f*aspect,1.2f,9);
         double beat=midi.Cycles.BeatAt(midi.ScorePosition),now=midi.ScorePosition;
         var bar=CurrentBar(beat);
-        double barLength=bar!=null?bar.End-bar.Start:4;
-        // Rim speed (one revolution per bar): how fast the groove and the next hit come in.
-        double perBeat=2*Math.PI*Edge/Math.Max(1,barLength);PerBeat=perBeat;
+        double barLength=bar!=null?bar.End-bar.Start:4,barStart=bar?.Start??0;
+        // The groove scrolls at the rim's speed of the drum wheel: one bar per turn.
+        double perBeat=2*Math.PI*1.15/Math.Max(1,barLength);PerBeat=perBeat;
         float fade=Mathf.SmoothStep(0,1,visible);
-        var view=Camera.main;float aspect=view!=null?view.aspect:1.6f;
-        Span=Mathf.Clamp(Tall*.5f*aspect-.35f,2.2f,9);
         ChordColor=region!=null&&region.HasRegion?region.RegionColor:Ink;
         DrawLine(fade);
-        DrawGroove(beat,perBeat,fade);
-        int hit=HitAfter(now);
-        DrawStem(now,hit,fade);
-        DrawTooth(beat,hit,perBeat,fade);
+        DrawSlashes(beat,perBeat,barStart,barLength,fade);
+        DrawTooth(beat,HitAfter(now),perBeat,fade);
         DrawReader(now,perBeat,fade);
     }
+    bool HasLyricsLoaded()=>source==midi.Prepared?syllables.Length>0:(midi.Prepared?.Lyrics?.Syllables?.Length??0)>0;
     PreparedPatternSong.DrumBar CurrentBar(double beat)
     {
         var bars=source.DrumBars;if(bars==null||bars.Length==0)return null;
@@ -167,39 +172,37 @@ public sealed class DrumLyricRack : MonoBehaviour
         pair[0]=new Vector3(-Span,.03f,Center);pair[1]=new Vector3(Span,.03f,Center);
         centerline.positionCount=2;centerline.SetPositions(pair);
         lineGradient??=new Gradient();
-        lineGradient.SetKeys(new[]{new GradientColorKey(Ink*.8f,0),new GradientColorKey(Ink*.8f,1)},new[]{new GradientAlphaKey(0,0),new GradientAlphaKey(.3f*fade,.25f),new GradientAlphaKey(.3f*fade,.75f),new GradientAlphaKey(0,1)});
+        lineGradient.SetKeys(new[]{new GradientColorKey(Ink*.8f,0),new GradientColorKey(Ink*.8f,1)},new[]{new GradientAlphaKey(0,0),new GradientAlphaKey(.25f*fade,.25f),new GradientAlphaKey(.25f*fade,.75f),new GradientAlphaKey(0,1)});
         centerline.colorGradient=lineGradient;
-        var faint=new Gradient();
-        faint.SetKeys(new[]{new GradientColorKey(Ink,0),new GradientColorKey(Ink,1)},new[]{new GradientAlphaKey(0,0),new GradientAlphaKey(.22f*fade,.2f),new GradientAlphaKey(.22f*fade,.8f),new GradientAlphaKey(0,1)});
-        groove.colorGradient=faint;
     }
-    // The groove: a wave scrolling left at the rim's speed, a well at every beat, a crest at every
-    // upbeat, so each syllable is seen to land where its beat passes the stem.
-    void DrawGroove(double beat,double perBeat,float fade)
+    // The slash of a beat ("\", from the crest down into the well) or an upbeat ("/"), centred at x.
+    static void SlashEnds(float x,bool down,float size,out Vector3 a,out Vector3 b)
     {
-        int count=Mathf.Clamp(Mathf.RoundToInt(Span*2/(float)perBeat*16)+1,17,257);
-        if(wave.Length!=count)wave=new Vector3[count];
-        for(int i=0;i<count;i++)
+        float w=size*.29f,h=size*.5f;
+        a=new Vector3(x-w,.028f,Center+(down?h:-h));b=new Vector3(x+w,.028f,Center+(down?-h:h));
+    }
+    // The groove: a slash at every beat and upbeat, scrolling left, the downbeat's tallest;
+    // brightest as it reaches the reticle, where the syllable locks into it.
+    void DrawSlashes(double beat,double perBeat,double barStart,double barLength,float fade)
+    {
+        double reach=Span/perBeat;int used=0;
+        for(int k=(int)Math.Ceiling(2*(beat-reach));k<=Math.Floor(2*(beat+reach));k++)
         {
-            float x=-Span+i*(2*Span/(count-1));double b=beat+x/perBeat;
-            float phase=(float)(b-Math.Floor(b));
-            // A well (-Well) at the beat, a crest (+Crest) at the half: a cosine skewed so the drop into the well is steep.
-            float t=phase<.5f?phase/.5f:(1-phase)/.5f;
-            float y=Mathf.Lerp(-Well,Crest,Mathf.SmoothStep(0,1,t));
-            wave[i]=new Vector3(x,.025f,Center+y);
+            double b=k/2.0;float x=(float)((b-beat)*perBeat);if(Mathf.Abs(x)>Span)continue;
+            bool down=k%2==0;bool first=down&&Math.Abs(Math.IEEERemainder(b-barStart,barLength))<1e-6;
+            while(slashes.Count<=used){var l=Line("Groove slash",.014f,Ink);l.numCapVertices=1;slashes.Add(l);}
+            var slash=slashes[used++];
+            SlashEnds(x,down,first?1.15f:down?.95f:.7f,out var a,out var c);
+            pair[0]=a;pair[1]=c;slash.positionCount=2;slash.SetPositions(pair);
+            float near=Mathf.Clamp01(1-Mathf.Abs(x)/.5f);
+            var color=Color.Lerp(Ink,Color.white,.35f*near)*(1+.6f*near);color.a=fade*(first?.5f:down?.4f:.28f)*Mathf.Clamp01((Span-Mathf.Abs(x))/.6f)*(1+near);
+            slash.startColor=slash.endColor=color;slash.widthMultiplier=(first?.018f:down?.014f:.011f)*(1+.6f*near);
         }
-        groove.positionCount=count;groove.SetPositions(wave);
-    }
-    // The stem joins the comb to the line and flashes with each drum hit, brightest for the kick.
-    void DrawStem(double now,int next,float fade)
-    {
-        Pulse=next>0?hitWeight[next-1]*Mathf.Exp(-(float)(now-hitTime[next-1])/.07f):0;
-        pair[0]=new Vector3(0,.035f,Edge+.005f);pair[1]=new Vector3(0,.035f,Center);  // up to the line, behind the letters
-        stem.positionCount=2;stem.SetPositions(pair);stem.widthMultiplier=.016f+.02f*Pulse;
-        var c=Color.Lerp(Ink,Color.white,Pulse)*(1+3*Pulse);c.a=fade;stem.startColor=stem.endColor=c;
+        SlashCount=used;
+        for(int i=used;i<slashes.Count;i++)slashes[i].positionCount=0;
     }
     // The next drum hit, coming in from the right at the rim's speed: a steep translucent tooth
-    // whose cliff reaches the stem as it is struck, taller for a heavier hit.
+    // whose cliff reaches the reticle as it is struck, taller for a heavier hit.
     void DrawTooth(double beat,int next,double perBeat,float fade)
     {
         if(next>=hitBeat.Length){tooth.positionCount=0;NextToothBeat=double.NaN;return;}
@@ -208,7 +211,7 @@ public sealed class DrumLyricRack : MonoBehaviour
         float h=.3f+.35f*hitWeight[next],w=.22f;
         saw[0]=new Vector3(x,.03f,Center-h*.5f);saw[1]=new Vector3(x,.03f,Center+h*.5f);saw[2]=new Vector3(x+w,.03f,Center-h*.5f);
         tooth.positionCount=3;tooth.SetPositions(saw);
-        var c=Color.Lerp(Ink,Color.white,.4f);c.a=fade*.35f*Mathf.Clamp01((Span-x)/.8f);tooth.startColor=tooth.endColor=c;
+        var c=Color.Lerp(Ink,Color.white,.4f);c.a=fade*.3f*Mathf.Clamp01((Span-x)/.8f);tooth.startColor=tooth.endColor=c;
     }
 
     // The syllable whose entry is under way or done: the last with its entry begun. A drawn-out
@@ -232,9 +235,14 @@ public sealed class DrumLyricRack : MonoBehaviour
     }
     // Space between syllable j and the next: none inside a word, a space between words, more between lines.
     float Gap(int j)=>j+1<syllables.Length&&syllables[j].Line!=syllables[j+1].Line?.55f:syllables[j].WordEnd?.2f:.015f;
-    // Where a syllable's entry starts, from its place: a beat from straight above (farther with
-    // emphasis), an off-beat from straight below, a syllable between beats from the right.
-    static Vector2 EntryFrom(PreparedPatternSong.Syllable s)=>s.Metric>=1?new Vector2(0,.5f+.4f*s.Emphasis):s.Metric==0?new Vector2(0,-(.45f+.35f*s.Emphasis)):new Vector2(.7f,0);
+    // Where a syllable's entry starts, from its place: along its slash. A beat slides down the
+    // "\" from the upper left (farther with emphasis), an off-beat up the "/" from the lower
+    // left, a syllable between beats in from the right.
+    static Vector2 EntryFrom(PreparedPatternSong.Syllable s)
+    {
+        float reach=.75f+.4f*s.Emphasis;
+        return s.Metric>=1?new Vector2(-.5f,.86f)*reach:s.Metric==0?new Vector2(-.5f,-.86f)*reach*.8f:new Vector2(.7f,0);
+    }
     void DrawReader(double now,double perBeat,float fade)
     {
         int k=Current(now);
@@ -252,7 +260,7 @@ public sealed class DrumLyricRack : MonoBehaviour
         }
         var s=syllables[k];double gap=k>0?onsets[k]-onsets[k-1]:1;float lead=Lead(gap,s);
         float e=(float)(now-onsets[k]);
-        // The entry: eased hard into the groove, done exactly on the onset, never past it.
+        // The entry: eased hard along the slash, locked exactly on the onset, never past it.
         float p=Mathf.Clamp01((e+lead)/lead),ease=1-(1-p)*(1-p)*(1-p);
         ReaderFrom=s.Metric>=1?1:s.Metric==0?-1:0;
         float y=GrooveY(s);ReaderY=y;
@@ -261,11 +269,10 @@ public sealed class DrumLyricRack : MonoBehaviour
         float impact=e>=0?Mathf.Exp(-e/.045f):0,hard=.6f+.6f*s.Emphasis;
         var squash=ReaderFrom>0?new Vector2(1+.14f*hard*impact,1-.2f*hard*impact):ReaderFrom<0?new Vector2(1-.08f*hard*impact,1+.16f*hard*impact):new Vector2(1+.1f*hard*impact,1-.06f*hard*impact);
         ReaderSquash=squash;incoming.Box.transform.localScale=new Vector3(squash.x,squash.y,1);
-        // Vibrato: the letters shimmer at its rate; otherwise the mesh stays as set.
-        Shimmer=0;
-        if(!s.Spoken&&s.Vibrato>0&&midi.Cycles.BeatAt(now)>=s.VibratoStart&&e>0){Shimmer=Mathf.Clamp(s.Vibrato/.35f,.5f,1.5f);ShimmerLetters(incoming,(float)now,s.VibratoRate>0?s.VibratoRate:5.5f,Shimmer);}
-        else if(shimmered==incoming){incoming.Box.TextField.ForceMeshUpdate(true,true);shimmered=null;}
-        Place(incoming,-incoming.Orp*squash.x+shift.x,Center+y+shift.y);
+        // Vibrato: a gentle wiggle up and down at its rate.
+        Shimmer=0;Wiggle=0;
+        if(!s.Spoken&&s.Vibrato>0&&midi.Cycles.BeatAt(now)>=s.VibratoStart&&e>0){Shimmer=Mathf.Clamp(s.Vibrato/.35f,.5f,1.5f);Wiggle=.016f*Shimmer*Mathf.Sin((float)now*Mathf.PI*2*(s.VibratoRate>0?s.VibratoRate:5.5f));}
+        Place(incoming,-incoming.Orp*squash.x+shift.x,Center+y+shift.y+Wiggle);
         // In the chord's colour, with a small bloom as it lands.
         float hit=e>=0?Mathf.Exp(-e/.08f):0;
         var color=Color.Lerp(ChordColor*1.15f,Color.white,.45f*hit)*(1+(.6f+.5f*s.Emphasis)*hit);color.a=fade*Mathf.Max(.35f,ease);incoming.Face.SetColor(ShaderUtilities.ID_FaceColor,color);ReaderColor=color;
@@ -281,10 +288,10 @@ public sealed class DrumLyricRack : MonoBehaviour
         }
         else if(outgoing.Box.gameObject.activeSelf)outgoing.Box.gameObject.SetActive(false);
         DrawTrail(k,left,ease,fade);
-        DrawStrike(k,e,y,fade);
+        DrawStrike(k,e,fade);
         // The reticle over the recognition letter.
         var mark=Color.white*1.5f;mark.a=fade;
-        pair[0]=new Vector3(0,.04f,Center+.36f);pair[1]=new Vector3(0,.04f,Center+.46f);
+        pair[0]=new Vector3(0,.04f,Center+.4f);pair[1]=new Vector3(0,.04f,Center+.5f);
         tick.positionCount=2;tick.SetPositions(pair);tick.startColor=tick.endColor=mark;
         // A held syllable trails a bar that runs out with it.
         double remaining=s.End-midi.Cycles.BeatAt(now);
@@ -297,29 +304,13 @@ public sealed class DrumLyricRack : MonoBehaviour
         }
         else hold.positionCount=0;
     }
-    // Vibrato: each letter of the syllable bobs at the vibrato's rate, a wave running along the
-    // word, by moving the mesh's vertices from their set positions (the mesh is regenerated first).
-    Slot shimmered;
-    void ShimmerLetters(Slot slot,float time,float rate,float depth)
-    {
-        var text=slot.Box.TextField;text.ForceMeshUpdate(true,true);shimmered=slot;
-        var info=text.textInfo;float amplitude=.09f*depth*text.fontSize;
-        for(int i=0;i<info.characterCount;i++)
-        {
-            var ch=info.characterInfo[i];if(!ch.isVisible)continue;
-            var verts=info.meshInfo[ch.materialReferenceIndex].vertices;
-            var offset=new Vector3(0,amplitude*Mathf.Sin(time*Mathf.PI*2*rate-i*1.1f),0);
-            for(int v=0;v<4;v++)verts[ch.vertexIndex+v]+=offset;
-        }
-        text.UpdateVertexData(TMP_VertexDataUpdateFlags.Vertices);
-    }
     // The syllables before the current one, right to left from its left edge, fading with
     // distance, each keeping its place in the groove. While the new one comes in they slide left
     // from where they sat a syllable ago.
     void DrawTrail(int k,float left,float ease,float fade)
     {
         float cursor=left;int count=0;TrailNearestRight=float.NaN;TrailNearestAlpha=0;
-        // How far the trail moves this entry: the new syllable's width left of the stem, plus its gap.
+        // How far the trail moves this entry: the new syllable's width left of the reticle, plus its gap.
         float slide=(1-ease)*(Mathf.Max(0,-left)+(k>0?Gap(k-1):0));
         used.Clear();
         for(int i=1;i<=TrailLength&&k-i>=0;i++)
@@ -341,11 +332,11 @@ public sealed class DrumLyricRack : MonoBehaviour
         for(int t=0;t<TrailLength;t++)if(!used.Contains(t)&&trail[t].Box.gameObject.activeSelf)trail[t].Box.gameObject.SetActive(false);
     }
     readonly List<int> used=new(TrailLength);
-    // The strike: a slash across the syllable as it lands, down (\) into the well, up (/) onto
-    // the crest, shallow between beats. It slices in within 25 ms, flares and widens, then blooms
-    // out in about a quarter of a second while its tail chases its head off the end; the drum hit
-    // landing with it makes it brighter and wider.
-    void DrawStrike(int k,float e,float y,float fade)
+    // The strike: the slash under the syllable flaring as it locks in, down (\) on a beat, up
+    // (/) off it, shallow between beats. It slices in within 25 ms, flares and widens, then
+    // blooms out in about a quarter of a second while its tail chases its head off the end; the
+    // drum hit landing with it makes it brighter and wider.
+    void DrawStrike(int k,float e,float fade)
     {
         if(e<0){strike.positionCount=0;Strike=0;return;}
         int h=HitAfter(onsets[k]-.06);
@@ -357,7 +348,7 @@ public sealed class DrumLyricRack : MonoBehaviour
         if(Strike<.01f){strike.positionCount=0;return;}
         float tail=e<=slice?0:Mathf.SmoothStep(0,1,(e-slice)/.22f);
         float rise=ReaderFrom>0?-Slash:ReaderFrom<0?Slash:Slash*.25f;
-        var from=new Vector3(-Slash*1.3f,.045f,Center+y-rise);var to=new Vector3(Slash*1.3f,.045f,Center+y+rise);
+        var from=new Vector3(-Slash*.6f,.045f,Center-rise);var to=new Vector3(Slash*.6f,.045f,Center+rise);
         pair[0]=Vector3.Lerp(from,to,tail*head);pair[1]=Vector3.Lerp(from,to,head);
         strike.positionCount=2;strike.SetPositions(pair);
         strike.widthMultiplier=(.03f+.04f*weight)*(.5f+.9f*glow);
@@ -370,7 +361,7 @@ public sealed class DrumLyricRack : MonoBehaviour
     }
     void OnDisable()
     {
-        if(root!=null)Destroy(root.gameObject);root=null;
+        if(root!=null)Destroy(root.gameObject);root=null;slashes.Clear();
         if(glow!=null)Destroy(glow);
     }
 }

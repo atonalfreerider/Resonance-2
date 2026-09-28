@@ -42,7 +42,7 @@ public static class PatternWheelValidation
             {
                 midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(section.Start+1)));deck.Tick();await Task.Delay(80);
                 Check(deck.ActiveFamilyNode==section.Node&&deck.ActiveGroup==section.Group,"Planet and group follow the song: "+section.DisplayName);
-                Check(Vector2.Distance(deck.MetaCenter,deck.FeaturedCenter)<.001f&&deck.FeaturedRadius>40,"Playing section is the centre planet: "+section.DisplayName);
+                Check(Vector2.Distance(deck.MetaCenter,deck.FeaturedCenter)<.001f&&deck.FeaturedRadius>40,$"Playing section is the centre planet: {section.DisplayName} (meta {deck.MetaCenter}, featured {deck.FeaturedCenter}, r {deck.FeaturedRadius:0})");
                 Check(deck.RackPixels>lastPixels&&deck.RackTurns<lastTurns,"Rack and ring advance together: "+section.DisplayName);
                 lastPixels=deck.RackPixels;lastTurns=deck.RackTurns;
             }
@@ -52,17 +52,14 @@ public static class PatternWheelValidation
             var pointer=main.GetComponent<KeyShiftIndicator>();
             midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(lift.Start-2)));await Task.Delay(900);
             midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(lift.Start+.1)));await Task.Delay(120);
-            Check(main.currentKey==D&&main.KeyChanging&&pointer.Visible&&pointer.Direction==1&&pointer.Target==D,$"As the torus turns into D a pointer at the tonic label points up (sharpward) to D (alpha {pointer.Alpha:0.00})");
+            Check(main.currentKey==D&&main.KeyChanging&&pointer.Visible&&pointer.Direction==1&&pointer.Target==D,$"As the torus turns into D a rail stands at the tonic label, its chevron up (sharpward) to D (alpha {pointer.Alpha:0.00})");
             await Task.Delay(1400);
-            Check(main.currentKey==D&&!main.KeyChanging&&!pointer.Visible,"Once the torus is locked into D the pointer is gone");
-            // A V/V in the bridge leans the torus toward G and relaxes back into C.
+            Check(main.currentKey==D&&!main.KeyChanging&&!pointer.Visible,"Once the torus is locked into D the rail is gone");
+            // A V/V in the bridge is named, but the torus does not move for it and no rail stands.
             var vv=data.Tensions.First(t=>t.Kind=="V/V");
             Check(vv.Target==G&&!vv.Completes,"The bridge's D major is V/V pointing at G, without a key change");
             midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(vv.End-.2)));await Task.Delay(1300);
-            Check(main.currentKey==C&&midi.CurrentTension==vv&&main.TensionKey==G&&main.TensionAmount>.1f&&main.TensionAmount<.3f,$"During V/V the torus leans slightly toward G ({main.TensionAmount:0.00}) while the key stays C");
-            Check(pointer.Visible&&pointer.Direction==1&&pointer.Target==G,"While it leans the pointer shows the flex up toward G");
-            midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(vv.End+2.5)));await Task.Delay(1500);
-            Check(main.currentKey==C&&main.TensionAmount<.03f&&!pointer.Visible,"After V/V the torus relaxes back into C and the pointer is gone");
+            Check(main.currentKey==C&&midi.CurrentTension==vv&&main.TensionAmount==0&&!pointer.Visible,"During V/V the torus stays still in C and no rail stands: the caption alone names the tension");
             // The drum wheel names the section each groove belongs to.
             var drums=main.GetComponent<DrumPatternDeck>();var chorus=data.Sections[2];
             midi.Seek(midi.AudioTime(midi.Cycles.SecondsAt(chorus.Start+1)));await Task.Delay(150);
