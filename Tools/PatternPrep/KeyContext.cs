@@ -54,15 +54,15 @@ public static class KeyContext
         else
         {
             int initial=settings.Key>=0?settings.Key:authored.Count==1?authored[0].key:-1;bool minor=settings.Key>=0?settings.Minor:authored.Count==1&&authored[0].minor;
-            double beatsPerBar=song.Measures?.Length>0?song.Measures.GroupBy(m=>Math.Round(m.End-m.Start,3)).OrderByDescending(g=>g.Count()).First().Key:4;
-            regions=KeyAnalysis.Regions(chords,initial,minor,beatsPerBar);
+            regions=KeyAnalysis.Regions(chords,initial,minor,BeatsPerBar(song));
             regions[^1].End=Math.Max(regions[^1].End,song.EndBeat);
             foreach(var f in song.Frames){double beat=cycles.BeatAt(f.Time);var region=regions.LastOrDefault(r=>r.Start<=beat+1e-6)??regions[0];f.Key=region.Key;f.Minor=region.Minor;}
             song.KeySource=regions.Count>1?(authored.Count==1?"MIDI signature; key changes detected offline (review)":"Offline chord-timeline keys; key changes detected (review)")
                 :(authored.Count==1||settings.Key>=0?song.KeySource??"":"Offline chord-timeline key (review)");
         }
-        (song.KeyChanges,song.Tensions)=KeyAnalysis.Describe(chords,regions,song.Sections);
+        (song.KeyChanges,song.Tensions)=KeyAnalysis.Describe(chords,regions,song.Sections,BeatsPerBar(song));
     }
+    static double BeatsPerBar(PreparedPatternSong song)=>song.Measures?.Length>0?song.Measures.GroupBy(m=>Math.Round(m.End-m.Start,3)).OrderByDescending(g=>g.Count()).First().Key:4;
     public static void SelfTest()
     {
         var notes=new List<MidiCycleAnalysis.Hit>();

@@ -72,7 +72,7 @@ def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=
             provenance['selected']=accepted[0]
     settings=dict(Key=info['key'],Minor=info['minor'],LeadVocalTrack=-1,
                   KeySource='Estimated from recording chroma; review required',
-                  SectionSource='Repeated-pattern families; automatic eight-bar boundaries, review required')
+                  SectionSource='Repetition-based sections (review in Song Workshop)')
     for existing in existing_bundles:
         known=read_json(existing/'song.json',{})
         if known.get('Key',-1)>=0 and 'reviewed' in known.get('KeySource','').lower():

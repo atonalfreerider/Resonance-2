@@ -447,8 +447,11 @@ public static partial class FormAnalysis
                 roles[s] = name;
             }
         }
-        // Several unique sections at the very end form one outro.
-        for (int s = n - 1; s > 0 && count[family[s]] == 1 && roles[s] is "Interlude" or "Outro" && roles[s - 1] is "Interlude"; s--) roles[s - 1] = "Outro";
+        // Several unique sections at the very end form one outro: only the run after the last
+        // return of a repeated family, and at most a third of the song (a through-composed
+        // stretch is interludes, not an outro).
+        int lastReturn = Enumerable.Range(0, n).LastOrDefault(s => count[family[s]] >= 2, -1);
+        for (int s = n - 1; s > Math.Max(lastReturn, n * 2 / 3) && count[family[s]] == 1 && roles[s] is "Interlude" or "Outro" && roles[s - 1] is "Interlude"; s--) roles[s - 1] = "Outro";
         return roles;
     }
 
@@ -543,7 +546,15 @@ public static partial class FormAnalysis
             }
             else
             {
-                foreach (var g in cycles.Markers.Where(m => m.Beat < cycles.EndBeat).GroupBy(m => cycles.Measures.FindIndex(b => b.End > m.Beat + 1e-6)).OrderBy(g => g.Key))
+                // A marker within a beat of the next bar line belongs to that bar: markers are
+                // often placed on a pickup, or land a hair early after retiming.
+                int BarOf(double beat)
+                {
+                    int i = cycles.Measures.FindIndex(b => b.End > beat + 1e-6); if (i < 0) return i;
+                    var bar = cycles.Measures[i];
+                    return i + 1 < cycles.Measures.Count && bar.End - beat <= Math.Min(1, (bar.End - bar.Start) * .25) + 1e-6 && beat > bar.Start + 1e-6 ? i + 1 : i;
+                }
+                foreach (var g in cycles.Markers.Where(m => m.Beat < cycles.EndBeat).GroupBy(m => BarOf(m.Beat)).OrderBy(g => g.Key))
                     if (g.Key >= 0 && (starts.Count == 0 || g.Key > starts[^1].bar)) starts.Add((g.Key, g.Last().Label));
                 if (starts[0].bar > 0) starts.Insert(0, (0, "Intro"));
                 form.BoundarySource = "MIDI section markers";
@@ -562,7 +573,9 @@ public static partial class FormAnalysis
         }
         else
         {
-            var names = labels.Select(l => l.Trim()).ToList();
+            // "Chorus 1" and "Chorus 2" name visits of one family: the trailing number is not part of its identity.
+            static string Identity(string l) => System.Text.RegularExpressions.Regex.Replace(l.Trim(), @"\s+\d+$", "");
+            var names = labels.Select(Identity).ToList();
             var ids = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             family = names.Select(l => ids.FindIndex(x => string.Equals(x, l, StringComparison.OrdinalIgnoreCase))).ToArray();
             transpose = new int[segments.Count]; similarity = Enumerable.Repeat(1.0, segments.Count).ToArray();

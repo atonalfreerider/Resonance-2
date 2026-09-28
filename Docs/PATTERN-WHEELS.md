@@ -142,26 +142,55 @@ syllables on its melody.
 
 The pipeline (`KeyAnalysis`) detects key changes from the chord timeline:
 
-- **Viterbi pass.** It runs over 24 key states. Diatonic chords fit their key and tonic
-  chords are rewarded. Tonicizations fit at a small cost:
-  - secondary dominants (V/V) and leading-tone chords (vii°/V);
-  - the Neapolitan ♭II;
-  - chords borrowed from the parallel minor.
+- **Viterbi pass.** It runs over 24 key states. Diatonic chords fit their key for free; the
+  tonic chord is rewarded, most when a cadence (V, vii° or IV) prepares it. Tonicizations fit
+  at a small cost, smaller still when they resolve where they point, and the chord they
+  resolve to is then read as prepared:
+  - secondary dominants (V/V) and leading-tone chords (vii°/V), resolving to their target;
+  - the Neapolitan ♭II, falling to V or I;
+  - chords borrowed from the parallel minor, resolving to I or V.
 
-  Changing key costs more than a few chromatic beats.
-- **Modulations.** A new key must hold for four bars. A key change lands on the new tonic,
-  and the dominant just before it is the tension that leads there.
+  So vi–V/V–V–I loops and ♭II–V–I vamps are the home key's own colour however often they
+  turn: a tension every time, never a key change. Anything else is expensive, and a major
+  seventh on the dominant degree counts as chromatic (E♭maj7 is I in E♭, not V in A♭).
+- **Modulations.** A change must be worth more than a few bars of chromatic colour, and the
+  new key must then hold for eight bars with its own cadences: a four-bar excursion is a lean.
+  The song's own key is the default: a bridge on the dominant (IV V iii vi V/V V ♭VII V) reads
+  in the home key unless the new key is clearly better for as long as it lasts. The opening key
+  is never merged away. A key change lands on the new tonic, and the dominant
+  just before it is the tension that leads there.
 - **Output.** `KeyChanges` (beat, from, to, evidence such as "D major held 10 bars · Chorus 3
   transposed +2") and `Tensions`. Each tension carries its span, target key, label
-  (V/V, ♭II Neapolitan…) and whether a real key change completes it.
+  (V/V, ♭II Neapolitan…), an amount (slight for a passing tonicization, twice that for the
+  one that leads into a real change) and whether a real key change completes it.
 - **Signatures.** A reviewed key stays locked. Several authored key signatures are kept.
   One opening signature is only where detection starts.
 
+**Chord quality.** The chord timeline (`ChordTimeline`) names each beat's chord from the
+notes sounding in it. The bass names the root (C–E–G–A with C in the bass is C6, not Am7 over
+its third), a seventh must be heard to be named, and a note's release tail lasts at most half a beat at a quarter weight, so the third of one
+chord no longer colours the next (F's F♮ used to turn the D of a IV–V/V into D minor). A chord
+with no third (a bare fifth, a suspension) is not snapped to the key's quality.
+
 **The torus.** A key change twists the torus fully into the new key. Over a tonicization it
-leans toward the key the chord points at, growing until the next chord, then relaxes back
-into its key. If the key change to that key follows, the lean hands over to it and the twist
-completes. The rack and the ring mark every key change, and the caption names the key and
-any current tension (`C major · V/V → G major`).
+leans slightly toward the key the chord points at, growing until the next chord, then relaxes
+back into its key. If the key change to that key follows, the lean hands over to it and the
+twist completes. Whenever the torus flexes, a **pointer** stands at the tonic label: up
+(sharpward on the circle of fifths) or down (flatward) to the key the flex points at, named at
+its tip. It appears as the lean or the change begins and goes once the torus is locked into
+the new key or has settled back. The rack and the ring mark every key change, and the caption
+names the key and any current tension (`C major · V/V → G major`).
+
+## Section boundaries
+
+Repetition-based segmentation (`FormStructure`) finds repeated blocks first. Their edges are
+then checked against where the music changes: a block whose copies would all match a bar
+earlier or later, where the novelty at both edges is higher, slides there together (a pickup
+or fill bar that differs between copies no longer pushes a chorus a bar late). A bar or two
+between blocks joins the section it changes into (a lead-in) or out of (a tag), by the
+novelty at its two ends. Reviewed labels "Chorus 1" and "Chorus 2" name one family. A MIDI
+marker within a beat of the next bar line belongs to that bar. An outro is only the run of
+one-off sections after the last return of a repeated family.
 
 ## Layout and depth
 
@@ -205,8 +234,9 @@ any current tension (`C major · V/V → G major`).
     groups and grammar;
   - repetition-first structure on pop, varied verse–chorus and A A B B A C C strain fixtures;
   - the A B A B C A B C alternating pair;
-  - key analysis: V/V and Neapolitan tensions relax, a dominant pivot completes a
-    modulation, and a lifted chorus changes key;
+  - key analysis: V/V and Neapolitan tensions relax, vi–V/V–V–I loops and ♭II vamps never
+    change the key, a four-bar excursion is a lean, a sustained new key with cadences changes
+    and comes back, a dominant pivot completes a modulation, and a lifted chorus changes key;
   - instrument patterns and lyrics on the public-domain lyric fixture: each lane's grammar,
     runs and changed spans, and the lyric sync, meter and rhyme (see
     [LYRIC-MODE.md](LYRIC-MODE.md)).

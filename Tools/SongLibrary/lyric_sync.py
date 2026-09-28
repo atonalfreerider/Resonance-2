@@ -335,8 +335,9 @@ def align_mms(stanzas, vocal_path: Path, download: bool):
             clean = re.sub(r"[^a-z']", '', e['text'].lower())
             if clean:
                 tokens.append(clean); index.append(e)
+        tokens.append('*'); index.append(None)                  # and after the last line: outro ad-libs
         spans = aligner(emission, tokenizer(tokens))
-    ratio = total / emission.size(0) / bundle.sample_rate
+    ratio = hop / bundle.sample_rate                                 # one emission frame is exactly 20 ms
     words = []
     for word, span in zip(index, spans):
         if word is None:

@@ -1,13 +1,14 @@
 // Key changes and tonal tension from the chord timeline.
 //
 // A Viterbi pass over the chords chooses a key (24 states) for every chord. Diatonic chords
-// fit their key for free (the tonic chord is rewarded); chromatic chords that a key explains
-// as a brief tonicization — secondary dominants (V/V), leading-tone chords (vii°/V), the
-// Neapolitan (♭II) and chords borrowed from the parallel minor (♭VI, ♭VII, iv) — fit at a small
-// cost; anything else is expensive. Changing key costs more than a few chromatic beats, so one
-// V/V never moves the key, while a sustained new collection with its own tonic does.
-// A key region must last at least four bars to be a modulation; shorter excursions fold back
-// into the key around them. Each chromatic chord inside a key region becomes a tension: the
+// fit their key for free (the tonic chord is rewarded, most when a cadence prepares it);
+// chromatic chords that a key explains as a brief tonicization — secondary dominants (V/V),
+// leading-tone chords (vii°/V), the Neapolitan (♭II) and chords borrowed from the parallel
+// minor (♭VI, ♭VII, iv) — fit at a small cost, smaller still when they resolve where they
+// point, and the chord they resolve to is then read as prepared. So a V/V that resolves to V
+// and comes home, or a ♭II that falls to V, is the home key's own colour: a tension, never a
+// change. Anything else is expensive. A key region must last at least eight bars to be a
+// modulation; shorter excursions fold back into the key around them. Each chromatic chord inside a key region becomes a tension: the
 // torus leans toward the key it points at until the next chord, then relaxes — unless a real
 // key change to that key follows, which the tension completes.
 public static class KeyAnalysis
@@ -62,19 +63,59 @@ public static class KeyAnalysis
         return (Kind.Foreign, key, minor, "");
     }
 
-    static double Cost(SongFormAnalysis.ChordStep c, int key, bool minor)
+    static SongFormAnalysis.ChordStep Near(IReadOnlyList<SongFormAnalysis.ChordStep> steps, int i, int step)
     {
-        if (c.Rest) return 0;
-        var (kind, _, _, _) = Explain(c.Root, c.Quality, key, minor);
+        for (int k = i + step; k >= 0 && k < steps.Count; k += step) if (!steps[k].Rest) return steps[k];
+        return null;
+    }
+    // Where a tonicization resolves: a secondary dominant or leading-tone chord to the chord it
+    // points at, the Neapolitan or a borrowed chord to the dominant or the tonic.
+    static bool Resolves(Kind kind, int target, SongFormAnalysis.ChordStep next, int key)
+    {
+        if (next == null || next.Rest) return false;
+        int rel = HarmonyModel.Mod(next.Root - key);
+        return kind switch { Kind.Secondary or Kind.LeadingTone => HarmonyModel.Mod(next.Root) == target, Kind.Neapolitan or Kind.Borrowed => rel is 7 or 0, _ => false };
+    }
+    // The cost of hearing chord i in a key, weighted by its length (capped at a bar).
+    static double Cost(IReadOnlyList<SongFormAnalysis.ChordStep> steps, int i, int key, bool minor)
+    {
+        var c = steps[i]; if (c.Rest) return 0;
+        var (kind, target, _, _) = Explain(c.Root, c.Quality, key, minor);
         int rel = HarmonyModel.Mod(c.Root - key); char triad = Triad(c.Quality);
-        double cost = kind switch { Kind.Diatonic => 0, Kind.Secondary or Kind.LeadingTone => .6, Kind.Neapolitan or Kind.Borrowed => .7, _ => 2.2 };
-        if (kind == Kind.Diatonic && rel == 0 && triad != '?') cost -= .45;          // the tonic chord confirms the key
-        if (kind == Kind.Diatonic && rel == 7 && triad == 'M') cost -= .12;          // so does its dominant
+        var next = Near(steps, i, 1); var prev = Near(steps, i, -1);
+        bool resolved = Resolves(kind, target, next, key);
+        // A major seventh on the dominant degree is no dominant: it carries the leading tone of
+        // the key a fifth up (E♭maj7 is I in E♭, not V in A♭), so it is chromatic here.
+        if (kind == Kind.Diatonic && rel == 7 && c.Quality == "maj7") kind = Kind.Borrowed;
+        double cost = kind switch
+        {
+            Kind.Diatonic => 0,
+            Kind.Secondary or Kind.LeadingTone => resolved ? .3 : .6,
+            Kind.Neapolitan or Kind.Borrowed => resolved ? .3 : .7,
+            _ => 2.2
+        };
+        if (kind == Kind.Diatonic && triad != '?')
+        {
+            if (rel == 0) cost -= .45;                                            // the tonic chord confirms the key
+            if (rel == 7 && triad == 'M') cost -= .12;                            // so does its dominant
+            if (prev != null)
+            {
+                var (pk, pt, _, _) = Explain(prev.Root, prev.Quality, key, minor); int prel = HarmonyModel.Mod(prev.Root - key);
+                // A cadence: the tonic after its dominant, leading-tone chord or subdominant.
+                if (rel == 0 && pk == Kind.Diatonic && prel is 5 or 7 or 11) cost -= .3;
+                // A chord its own tonicization prepared (V/V then V, the Neapolitan then V) belongs to this key.
+                if (Resolves(pk, pt, c, key)) cost -= .2;
+            }
+        }
         if (triad == '?') cost *= .5;
         return cost * Math.Min(4, c.End - c.Start);
     }
 
-    const double ChangeCost = 9, MinimumBars = 4;
+    // A change must be worth more than a few bars of chromatic colour, and the new key must
+    // then hold for eight bars: a four-bar tonicization is a lean, not a modulation. The song's
+    // own key is also the default: a passage on the dominant (IV V iii vi V/V V ♭VII V) reads in
+    // the home key unless the new key is clearly better for as long as it lasts.
+    const double ChangeCost = 5, MinimumBars = 8, HomeBonus = .1;
 
     // Key regions over the chord timeline, starting in the given key.
     public static List<Region> Regions(IReadOnlyList<SongFormAnalysis.ChordStep> chords, int initial, bool initialMinor, double beatsPerBar)
@@ -84,13 +125,14 @@ public static class KeyAnalysis
         // An unknown starting key (initial < 0) lets the opening chords choose it.
         int states = 24, start = initial < 0 ? -1 : initial + (initialMinor ? 12 : 0);
         var cost = new double[steps.Count, states]; var back = new int[steps.Count, states];
-        for (int s = 0; s < states; s++) cost[0, s] = (start < 0 || s == start ? 0 : ChangeCost) + Cost(steps[0], s % 12, s >= 12);
+        double Home(int i, int s) => s == start ? HomeBonus * Math.Min(4, steps[i].End - steps[i].Start) : 0;
+        for (int s = 0; s < states; s++) cost[0, s] = (start < 0 || s == start ? 0 : ChangeCost) + Cost(steps, 0, s % 12, s >= 12) - Home(0, s);
         for (int i = 1; i < steps.Count; i++)
             for (int s = 0; s < states; s++)
             {
                 double best = double.PositiveInfinity; int from = s;
                 for (int p = 0; p < states; p++) { double v = cost[i - 1, p] + (p == s ? 0 : ChangeCost); if (v < best) { best = v; from = p; } }
-                cost[i, s] = best + Cost(steps[i], s % 12, s >= 12); back[i, s] = from;
+                cost[i, s] = best + Cost(steps, i, s % 12, s >= 12) - Home(i, s); back[i, s] = from;
             }
         var path = new int[steps.Count]; int last = 0;
         for (int s = 1; s < states; s++) if (cost[steps.Count - 1, s] < cost[steps.Count - 1, last]) last = s;
@@ -118,12 +160,16 @@ public static class KeyAnalysis
             }
         }
         regions.RemoveAll(r => r.End <= r.Start + 1e-9);
-        // A key held for less than four bars is a tonicization of the key around it.
+        // A key held for less than eight bars is a tonicization of the key around it.
         double minimum = MinimumBars * Math.Max(1, beatsPerBar);
+        // The opening key (given, or the song's own) is never merged away: a short intro in
+        // the home key before a modulation is still the home key. Unless it never really
+        // sounded: a stated key the song leaves within two bars was simply wrong.
+        bool keepFirst = initial >= 0 && regions[0].Key == initial && regions[0].Minor == initialMinor && regions[0].End - regions[0].Start >= 2 * Math.Max(1, beatsPerBar);
         for (bool merged = true; merged && regions.Count > 1;)
         {
             merged = false;
-            int shortest = Enumerable.Range(0, regions.Count).OrderBy(r => regions[r].End - regions[r].Start).First();
+            int shortest = Enumerable.Range(keepFirst ? 1 : 0, regions.Count - (keepFirst ? 1 : 0)).OrderBy(r => regions[r].End - regions[r].Start).First();
             if (regions[shortest].End - regions[shortest].Start >= minimum) break;
             int into = shortest == 0 ? 1 : shortest - 1;
             if (into < shortest) regions[into].End = regions[shortest].End; else regions[into].Start = regions[shortest].Start;
@@ -138,13 +184,13 @@ public static class KeyAnalysis
     static string Name(int key, bool minor) => HarmonyModel.Name(key) + (minor ? " minor" : " major");
 
     // Key changes between regions and tensions inside them.
-    public static (PreparedPatternSong.KeyChange[] changes, PreparedPatternSong.Tension[] tensions) Describe(IReadOnlyList<SongFormAnalysis.ChordStep> chords, List<Region> regions, PreparedPatternSong.Section[] sections)
+    public static (PreparedPatternSong.KeyChange[] changes, PreparedPatternSong.Tension[] tensions) Describe(IReadOnlyList<SongFormAnalysis.ChordStep> chords, List<Region> regions, PreparedPatternSong.Section[] sections, double beatsPerBar = 4)
     {
         var changes = new List<PreparedPatternSong.KeyChange>();
         for (int r = 1; r < regions.Count; r++)
         {
             var (a, b) = (regions[r - 1], regions[r]);
-            double bars = (b.End - b.Start) / 4;
+            double bars = (b.End - b.Start) / Math.Max(1, beatsPerBar);
             var section = sections?.FirstOrDefault(s => Math.Abs(s.Start - b.Start) <= 4);
             string evidence = $"{Name(b.Key, b.Minor)} held {bars:0} bars";
             if (section != null && section.Transpose != 0) evidence += $" · {section.DisplayName} transposed {(HarmonyModel.Mod(section.Transpose) <= 6 ? "+" + HarmonyModel.Mod(section.Transpose) : "−" + (12 - HarmonyModel.Mod(section.Transpose)))}";
@@ -157,10 +203,12 @@ public static class KeyAnalysis
             var region = regions.LastOrDefault(r => r.Start <= c.Start + 1e-6) ?? regions[0];
             var (kind, target, targetMinor, label) = Explain(c.Root, c.Quality, region.Key, region.Minor);
             if (kind is Kind.Diatonic or Kind.Foreign) continue;
-            // A tension completes when the key it points at arrives right after it.
+            // A tension completes when the key it points at arrives right after it. A passing
+            // tonicization is the slightest lean; the one that leads into a real change leans further.
             var next = changes.FirstOrDefault(k => k.Beat >= c.Start - 1e-6 && k.Beat <= c.End + 4);
-            bool completes = next != null && next.Key == target;
-            float amount = kind switch { Kind.Secondary => .45f, Kind.LeadingTone => .4f, Kind.Neapolitan => .4f, _ => .3f };
+            bool completes = next != null && next.Key == target && next.Minor == targetMinor;
+            float amount = kind switch { Kind.Secondary => .2f, Kind.LeadingTone => .18f, Kind.Neapolitan => .18f, _ => .12f };
+            if (completes) amount *= 2;
             tensions.Add(new PreparedPatternSong.Tension { Start = c.Start, End = c.End, Target = target, TargetMinor = targetMinor, Kind = label, Amount = amount, Completes = completes });
         }
         return (changes.ToArray(), tensions.ToArray());
@@ -186,8 +234,9 @@ public static class KeyAnalysis
         Check(vv != null && vv.Kind == "V7/V" && vv.Target == G && !vv.Completes, "D7 in C is V7/V leaning to G and relaxing: " + vv?.Kind);
         Check(np != null && np.Kind == "♭II Neapolitan" && np.Target == Db && !np.Completes, "D♭ in C is the Neapolitan");
         // Modulation to G through its dominant: the key changes, and the pivot's tension completes it.
+        // (The new key is heard as itself: G on the downbeats, cadences into it, C only as its IV.)
         var modulation = Progression((C, ""), (F, ""), (G, ""), (C, ""), (A, "m"), (D, "7"),
-            (G, ""), (C, ""), (D, ""), (G, ""), (E, "m"), (C, ""), (D, "7"), (G, ""), (C, ""), (D, "7"), (G, ""));
+            (G, ""), (D, ""), (G, ""), (E, "m"), (C, ""), (D, "7"), (G, ""), (A, "m"), (D, "7"), (G, ""), (G, ""));
         regions = Regions(modulation, C, false, 4);
         (changes, tensions) = Describe(modulation, regions, null);
         Check(changes.Length == 1 && changes[0].Key == G && changes[0].From == C && changes[0].Beat == 24, "sustained G major after its dominant is a key change at the G chord: " + string.Join(",", changes.Select(k => $"{k.Key}@{k.Beat}")));
@@ -197,6 +246,18 @@ public static class KeyAnalysis
         (changes, _) = Describe(lift, Regions(lift, C, false, 4), null);
         Check(changes.Length == 1 && changes[0].Key == D && changes[0].Beat == 32, "a section lifted a whole step changes the key");
         Check(Explain(E, "", A, true).label == "V/iv" || Explain(E, "", A, true).kind == Kind.Diatonic, "harmonic-minor V stays diatonic in minor");
-        Console.WriteLine("PASS: key analysis — V/V and Neapolitan tensions relax, a dominant pivot completes a modulation, a lifted chorus changes key");
+        // Loops that come home never change the key, however often they turn: vi V/V V I, and a ♭II–V–I vamp.
+        var loops = Progression(Enumerable.Repeat(new[] { (A, "m"), (D, ""), (G, ""), (C, "") }, 10).SelectMany(x => x).ToArray());
+        (changes, tensions) = Describe(loops, Regions(loops, C, false, 4), null);
+        Check(changes.Length == 0 && tensions.Count(t => t.Kind == "V/V") == 10 && tensions.All(t => !t.Completes && t.Amount < .25f), "ten vi–V/V–V–I loops stay in C: ten slight leans, no key change");
+        var vamp = Progression(Enumerable.Repeat(new[] { (Db, ""), (G, "7"), (C, "") }, 8).SelectMany(x => x).ToArray());
+        Check(Regions(vamp, C, false, 4).Count == 1 && Regions(vamp, C, false, 4)[0].Key == C, "a ♭II–V7–I vamp stays in C");
+        // A four-bar visit to G inside C is a tonicization; twelve bars of G with its own cadences is a key change.
+        var brief = Progression((C, ""), (F, ""), (G, ""), (C, ""), (G, ""), (C, ""), (D, ""), (G, ""), (C, ""), (F, ""), (G, ""), (C, ""), (C, ""), (F, ""), (G, ""), (C, ""));
+        Check(Regions(brief, C, false, 4).Count == 1, "four bars in G inside C are a lean, not a change");
+        var longer = Progression((C, ""), (F, ""), (G, ""), (C, ""), (G, ""), (D, ""), (G, ""), (E, "m"), (A, "m"), (D, ""), (G, ""), (G, ""), (G, ""), (D, ""), (E, "m"), (D, ""), (C, ""), (F, ""), (G, ""), (C, ""), (C, ""), (F, ""), (G, ""), (C, ""));
+        var longerChanges = Describe(longer, Regions(longer, C, false, 4), null).changes;
+        Check(longerChanges.Length == 2 && longerChanges[0].Key == G && longerChanges[0].Beat == 16 && longerChanges[1].Key == C, "twelve bars of G with cadences change the key and come back: " + string.Join(",", longerChanges.Select(k => $"{HarmonyModel.Name(k.Key)}@{k.Beat}")));
+        Console.WriteLine("PASS: key analysis — V/V and Neapolitan tensions relax (loops and vamps never change the key), a four-bar excursion is a lean, a sustained new key with cadences is a change, a lifted chorus changes key");
     }
 }

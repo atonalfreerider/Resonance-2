@@ -27,6 +27,9 @@ public static class ChordTimeline
         public int[] StepsOfBar(int bar) => Enumerable.Range(0, Count).Where(i => Bar[i] == bar).ToArray();
     }
 
+    const double TailWeight = .25;
+    static double Tail(double length) => Math.Min(.5, Math.Max(.2, length * .5));
+
     public static double BeatUnit(MidiCycleAnalysis.Bar bar)
     {
         // Compound meters (6/8, 9/8, 12/8) are felt in dotted quarters.
@@ -51,14 +54,15 @@ public static class ChordTimeline
         {
             int pc = HarmonyModel.Mod(note.Pitch - 21);
             double on = note.Beat, off = note.Beat + note.Length;
-            // A short resonance tail stands in for pedal and room sound at half weight.
-            double tail = off + Math.Min(1, Math.Max(.25, note.Length));
+            // A short resonance tail stands in for pedal and room sound, at a quarter weight and
+            // never longer than half a beat: the third of one chord must not colour the next.
+            double tail = off + Tail(note.Length);
             int i = Array.BinarySearch(grid.End, on); if (i < 0) i = ~i;
             for (; i < n && grid.Start[i] < tail; i++)
             {
                 double body = Math.Max(0, Math.Min(grid.End[i], off) - Math.Max(grid.Start[i], on));
                 double decay = Math.Max(0, Math.Min(grid.End[i], tail) - Math.Max(grid.Start[i], off));
-                double w = note.Velocity * (body + .5 * decay);
+                double w = note.Velocity * (body + TailWeight * decay);
                 if (w <= 0) continue;
                 grid.Chroma[i][pc] += w; grid.Weight[i] += w;
                 if (body > 0) grid.Bass[i] = Math.Min(grid.Bass[i], note.Pitch);
@@ -80,13 +84,13 @@ public static class ChordTimeline
         foreach (var note in notes)
         {
             int pc = HarmonyModel.Mod(note.Pitch - 21);
-            double on = note.Beat, off = note.Beat + note.Length, tail = off + Math.Min(1, Math.Max(.25, note.Length));
+            double on = note.Beat, off = note.Beat + note.Length, tail = off + Tail(note.Length);
             int i = Array.BinarySearch(grid.End, on); if (i < 0) i = ~i;
             for (; i < n && grid.Start[i] < tail; i++)
             {
                 double body = Math.Max(0, Math.Min(grid.End[i], off) - Math.Max(grid.Start[i], on));
                 double decay = Math.Max(0, Math.Min(grid.End[i], tail) - Math.Max(grid.Start[i], off));
-                grid.Chroma[i][pc] += note.Velocity * (body + .5 * decay);
+                grid.Chroma[i][pc] += note.Velocity * (body + TailWeight * decay);
                 if (body <= 0) continue;
                 grid.Weight[i] += note.Velocity * body; classes[i] |= 1 << pc;
                 grid.Bass[i] = Math.Min(grid.Bass[i], note.Pitch);
@@ -126,15 +130,19 @@ public static class ChordTimeline
         double dot = 0, wn = 0;
         for (int k = 0; k < notes.Length; k++) { dot += c[HarmonyModel.Mod(root + notes[k])] * weights[k]; wn += weights[k] * weights[k]; }
         double score = dot / (norm * Math.Sqrt(wn));
+        // The bass names the root: C–E–G–A with C in the bass is C6, not Am7 over its third.
         if (g.Bass[i] != int.MaxValue)
         {
             int bass = HarmonyModel.Mod(g.Bass[i] - 21);
-            if (bass == HarmonyModel.Mod(root)) score += .1;
+            if (bass == HarmonyModel.Mod(root)) score += .16;
             else if (notes.Any(x => HarmonyModel.Mod(root + x) == bass)) score += .02;
-            else score -= .03;
+            else score -= .05;
         }
-        if (notes.Length == 4) score -= .03;
-        if (Diatonic(root, quality, key, minor)) score += .04;
+        // A seventh must be heard to be named; and only a chord with a third has a quality to
+        // snap to the key (a bare fifth or a suspension under D in C is not thereby D minor).
+        if (notes.Length == 4) score -= .05;
+        double third = Math.Max(c[HarmonyModel.Mod(root + 3)], c[HarmonyModel.Mod(root + 4)]);
+        if (Diatonic(root, quality, key, minor) && third >= .12 * c[HarmonyModel.Mod(root)]) score += .04;
         return score;
     }
 

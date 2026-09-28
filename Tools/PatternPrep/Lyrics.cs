@@ -100,7 +100,7 @@ public static class Lyrics
         public string method { get; set; } = "";
     }
 
-    sealed class Flat
+    internal sealed class Flat
     {
         public int Stanza, Line, Word, Index; public SheetWord Source; public string Text = "";
         public double Start = double.NaN, End = double.NaN; public int Pitch = -1; public float Velocity = .7f; public bool Spoken, Hold;
@@ -141,7 +141,8 @@ public static class Lyrics
         }
         if (vocal.track < 0)
         {
-            var named = lanes.Keys.Where(k => k.Track == song.LeadVocalTrack || k.Track < song.TrackNames.Length && Regex.IsMatch(song.TrackNames[k.Track], "vocal|voice|sing", RegexOptions.IgnoreCase) && !Regex.IsMatch(song.TrackNames[k.Track], "back|rap", RegexOptions.IgnoreCase)).ToList();
+            var lead = lanes.Keys.Where(k => k.Track == song.LeadVocalTrack).ToList();
+            var named = lead.Count > 0 ? lead : lanes.Keys.Where(k => k.Track < song.TrackNames.Length && Regex.IsMatch(song.TrackNames[k.Track], "vocal|voice|sing", RegexOptions.IgnoreCase) && !Regex.IsMatch(song.TrackNames[k.Track], "back|rap", RegexOptions.IgnoreCase)).ToList();
             vocal = named.Count > 0 ? named.OrderByDescending(k => lanes[k].Length).First() : lanes.Count > 0 ? lanes.OrderByDescending(l => l.Value.Average(n => n.Pitch)).First().Key : (-1, -1);
         }
         sheet.Track = vocal.track; sheet.Channel = vocal.channel;
@@ -164,8 +165,11 @@ public static class Lyrics
                     var prior = guided.Select(f => (f.Start, f.End)).ToArray();
                     foreach (var f in guided) { f.Start = double.NaN; f.End = double.NaN; }
                     SyncNotes(guided, notes, prior.Select(x => x.Start).ToArray());
-                    for (int i = 0; i < guided.Count; i++) if (double.IsNaN(guided[i].Start)) (guided[i].Start, guided[i].End) = prior[i];
+                    int onNotes = 0;
+                    for (int i = 0; i < guided.Count; i++) if (double.IsNaN(guided[i].Start)) (guided[i].Start, guided[i].End) = prior[i]; else onNotes++;
+                    if (onNotes < guided.Count) syncs[^1] += $" ({onNotes} of {guided.Count} syllables on notes)";
                 }
+                Interpolate(flat);
             }
         }
         // 3. The vocal's notes for sung syllables still untimed: MIDI vocal notes aligned to the
@@ -173,7 +177,11 @@ public static class Lyrics
         //    reliable than syllable onsets heard in a stem.
         if (flat.Any(f => !f.Spoken && double.IsNaN(f.Start)) && notes.Length > 0 && SyncNotes(flat.Where(f => !f.Spoken && double.IsNaN(f.Start)).ToList(), notes)) syncs.Add("vocal notes");
         // 4. Audio alignment for what remains: spoken lines, or sung lines with no vocal notes.
-        if (timing != null && flat.Any(f => double.IsNaN(f.Start)) && SyncWords(flat, timing, cycles)) syncs.Add("audio alignment" + (timing.method.Length > 0 ? $" ({timing.method})" : ""));
+        if (timing != null && flat.Any(f => double.IsNaN(f.Start)) && SyncWords(flat, timing, cycles)) { syncs.Add("audio alignment" + (timing.method.Length > 0 ? $" ({timing.method})" : "")); Interpolate(flat); }
+        // Text order is time order inside a line: a syllable timed before the one before it is moved after it.
+        for (int i = 1; i < flat.Count; i++)
+            if (flat[i].Line == flat[i - 1].Line && !double.IsNaN(flat[i].Start) && !double.IsNaN(flat[i - 1].Start) && flat[i].Start < flat[i - 1].Start + 1 / 16.0)
+            { flat[i].Start = flat[i - 1].Start + 1 / 16.0; if (!double.IsNaN(flat[i].End)) flat[i].End = Math.Max(flat[i].End, flat[i].Start + 1 / 16.0); }
         // Every sung syllable takes its note's pitch, length and loudness; a held syllable runs
         // through the notes that follow it until the next syllable.
         var timed = flat.Where(f => !double.IsNaN(f.Start)).OrderBy(f => f.Start).ToList();
@@ -186,13 +194,15 @@ public static class Lyrics
                 f.Pitch = note.Pitch; f.Velocity = note.Velocity;
                 double end = note.Beat + note.Length;
                 foreach (var n in notes.Where(n => n.Beat > note.Beat + 1e-6 && n.Beat < next - 1e-6)) end = Math.Max(end, n.Beat + n.Length);
-                f.End = double.IsNaN(f.End) ? Math.Min(end, next) : f.End;
+                // The note says how long a sung syllable lasts: an aligner hears a held vowel short.
+                f.End = double.IsNaN(f.End) ? Math.Min(end, next) : Math.Max(f.End, Math.Min(end, next));
             }
             // A held syllable (star_) runs up to a bar; a spoken one otherwise lasts an eighth.
             if (double.IsNaN(f.End)) f.End = Math.Min(next, f.Start + (f.Hold ? 4 : f.Spoken ? .5 : 1));
+            if (f.Hold) f.End = Math.Min(next, Math.Max(f.End, f.Start + 2));
             f.End = Math.Max(f.End, f.Start + 1 / 16.0);
         }
-        // 4. Spoken stanzas still untimed are placed on the beat grid.
+        // 5. Spoken stanzas still untimed are placed on the beat grid.
         if (flat.Any(f => f.Spoken && double.IsNaN(f.Start)) && Place(song, cycles, flat)) syncs.Add("estimated spoken placement");
         flat.RemoveAll(f => double.IsNaN(f.Start));
         if (flat.Count == 0) { Console.WriteLine($"  lyrics: {sheet.Source} could not be synced (no lyric events, timing or vocal notes)"); return; }
@@ -291,11 +301,37 @@ public static class Lyrics
         return matched > 0;
     }
 
+    // Words the timing missed take their place between their timed neighbours in the line,
+    // in text order; a line with no timed word at all is left for the notes or the grid.
+    static void Interpolate(List<Flat> flat)
+    {
+        foreach (var line in flat.GroupBy(f => f.Line))
+        {
+            var list = line.ToList(); int n = list.Count;
+            for (int i = 0; i < n;)
+            {
+                if (!double.IsNaN(list[i].Start)) { i++; continue; }
+                int j = i; while (j < n && double.IsNaN(list[j].Start)) j++;
+                var prev = i > 0 ? list[i - 1] : null; var next = j < n ? list[j] : null;
+                if (prev == null && next == null) break;
+                double from = prev != null ? (double.IsNaN(prev.End) ? prev.Start + .5 : prev.End) : next.Start - .5 * (j - i);
+                double to = next != null ? next.Start : from + .5 * (j - i);
+                if (to <= from + 1e-6) to = from + .25 * (j - i);
+                for (int k = i; k < j; k++) { list[k].Start = from + (to - from) * (k - i) / (j - i); list[k].End = from + (to - from) * (k - i + 1) / (j - i); }
+                i = j;
+            }
+        }
+    }
+
     // Sung syllables on the vocal notes, in order. A syllable may hold over several notes
     // (cheaper on a stressed or marked syllable), a note may go unsung (costly), and lines
     // prefer to end where the melody breathes rather than breathe inside a line.
-    // With a prior (a syllable's time from a forced alignment, in beats), a note far from it costs more.
-    static bool SyncNotes(List<Flat> syllables, MidiCycleAnalysis.Hit[] all, double[] prior = null)
+    // With a prior (a syllable's time from a forced alignment, in beats), a note far from it costs
+    // more, and a syllable may keep its prior instead of taking any note: where the notes run
+    // out (a melisma the MIDI writes as one note, a line the transcription missed) the syllables
+    // that fit take the notes and the rest keep their aligned times.
+    const double Keep = 3;
+    internal static bool SyncNotes(List<Flat> syllables, MidiCycleAnalysis.Hit[] all, double[] prior = null)
     {
         // Chords in the vocal lane: sing the top note.
         var notes = all.GroupBy(n => Math.Round(n.Beat * 48)).Select(g => g.OrderByDescending(n => n.Pitch).First()).OrderBy(n => n.Beat).ToArray();
@@ -306,19 +342,22 @@ public static class Lyrics
         for (int i = 0; i <= s; i++) for (int j = 0; j <= m; j++) cost[i, j] = double.PositiveInfinity;
         cost[0, 0] = 0;
         for (int j = 1; j <= m; j++) { cost[0, j] = cost[0, j - 1] + (Breath(j - 1) ? .5 : 1.5); back[0, j] = -1; }
+        bool Prior(int i) => prior != null && i - 1 < prior.Length && !double.IsNaN(prior[i - 1]);
         for (int i = 1; i <= s; i++)
         {
             var f = syllables[i - 1]; bool lineEnd = i == s || syllables[i].Line != f.Line;
             bool stressed = f.Source.Stress.Length > f.Index && f.Source.Stress[f.Index] > 0;
+            if (Prior(i) && !double.IsInfinity(cost[i - 1, 0])) { cost[i, 0] = cost[i - 1, 0] + Keep; back[i, 0] = 0; }
             for (int j = 1; j <= m; j++)
             {
-                // Skip an unsung note.
+                // Skip an unsung note, or keep the prior (taking no note).
                 double best = cost[i, j - 1] + 2.5; int from = -1;
+                if (Prior(i) && cost[i - 1, j] + Keep < best) { best = cost[i - 1, j] + Keep; from = 0; }
                 for (int k = 1; k <= Most && k <= j; k++)
                 {
                     double before = cost[i - 1, j - k]; if (double.IsInfinity(before)) continue;
                     double c = before + (k - 1) * (f.Hold ? .1 : stressed ? .7 : 1.3);
-                    if (prior != null && !double.IsNaN(prior[i - 1])) c += 1.5 * Math.Min(4, Math.Abs(notes[j - k].Beat - prior[i - 1]));
+                    if (Prior(i)) c += 1.5 * Math.Abs(notes[j - k].Beat - prior[i - 1]);
                     for (int x = j - k; x < j - 1; x++) if (Breath(x)) c += 2;
                     if (lineEnd && !Breath(j - 1)) c += 1.2;
                     if (!lineEnd && Breath(j - 1)) c += 1.6;
@@ -327,14 +366,17 @@ public static class Lyrics
                 cost[i, j] = best; back[i, j] = from;
             }
         }
-        for (int i = s, j = m; i > 0 && j > 0;)
+        if (double.IsInfinity(cost[s, m])) return false;
+        for (int i = s, j = m; i > 0;)
         {
             int k = back[i, j];
-            if (k <= 0) { j--; continue; }
-            var f = syllables[i - 1]; f.Start = notes[j - k].Beat; f.End = notes[j - 1].Beat + notes[j - 1].Length;
+            if (k < 0) { j--; continue; }
+            var f = syllables[i - 1];
+            if (k == 0) { i--; continue; }                                        // keeps its prior: the caller restores it
+            f.Start = notes[j - k].Beat; f.End = notes[j - 1].Beat + notes[j - 1].Length;
             i--; j -= k;
         }
-        return syllables.Any(f => !double.IsNaN(f.Start));
+        return true;
     }
 
     // Spoken stanzas with no timing: one line after another in the song's untaken bars, each
@@ -388,7 +430,7 @@ public static class Lyrics
                 foreach (var v in timing.vibrato)
                 {
                     double a = cycles.BeatAt(v.start), b = cycles.BeatAt(v.end);
-                    if (b > f.Start && a < f.End && b - a >= .25) { f.Vibrato = v.depth; f.VibratoRate = v.rate; f.VibratoStart = Math.Max(a, f.Start); break; }
+                    if (Math.Min(b, f.End) - Math.Max(a, f.Start) >= .25) { f.Vibrato = v.depth; f.VibratoRate = v.rate; f.VibratoStart = Math.Max(a, f.Start); break; }
                 }
         }
     }

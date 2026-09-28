@@ -69,6 +69,17 @@ public static partial class SelfTests
             && links.Any(l => l.Kind == "repeat" && l.A == lyrics.Lines[0].First && l.B == lyrics.Lines[4].First),
             $"rhyme links: star–are, By the / By the, the refrain heard again ({links.Count(l => l.Kind == "end")} end, {links.Count(l => l.Kind == "front")} front, {links.Count(l => l.Kind == "internal")} internal, {links.Count(l => l.Kind == "repeat")} repeat)");
 
+        // Fitting aligned syllables to fewer notes than syllables: the ones that fit take the
+        // notes, the rest keep their aligned times, and nothing is lost or reordered.
+        Lyrics.Flat Syllable(int line, int index, double prior) => new() { Line = line, Index = 0, Source = new Lyrics.SheetWord { Text = "la", Stress = new[] { 1 } }, Text = "la" };
+        var few = Enumerable.Range(0, 6).Select(i => Syllable(0, i, i)).ToList();
+        var threeNotes = new[] { 0.0, 1, 2 }.Select(b => new MidiCycleAnalysis.Hit { Beat = b, Length = .9, Pitch = 60, Velocity = .8f }).ToArray();
+        Check(Lyrics.SyncNotes(few, threeNotes, new double[] { 0, 1, 2, 3, 4, 5 }) && few.Take(3).Select(f => f.Start).SequenceEqual(new[] { 0.0, 1, 2 }) && few.Skip(3).All(f => double.IsNaN(f.Start)), "six aligned syllables over three notes: three take the notes, three keep their aligned times");
+        var far = Enumerable.Range(0, 3).Select(i => Syllable(0, i, 20 + i)).ToList();
+        Check(Lyrics.SyncNotes(far, threeNotes, new double[] { 20, 21, 22 }) && far.All(f => double.IsNaN(f.Start)), "syllables aligned twenty beats from the only notes keep their aligned times");
+        var near = Enumerable.Range(0, 3).Select(i => Syllable(0, i, i + .2)).ToList();
+        Check(Lyrics.SyncNotes(near, threeNotes, new double[] { .2, 1.2, 2.2 }) && near.Select(f => f.Start).SequenceEqual(new[] { 0.0, 1, 2 }), "syllables aligned just after their notes take the notes");
+
         // Without lyric events: sung syllables fall on the vocal's notes in order, spoken ones
         // are placed on the beat grid.
         var bare = new MidiFile(path, false);

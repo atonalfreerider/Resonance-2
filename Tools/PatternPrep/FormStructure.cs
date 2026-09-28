@@ -85,11 +85,13 @@ public static partial class FormAnalysis
             if (covering != null) { a = covering.Start + covering.Length; continue; }
             int b = a; while (b < n && !visits.Any(v => v.Start <= b && b < v.Start + v.Length)) b++;
             // A bar or two between returns is a lead-in or a tag of its neighbour, not a
-            // section. At the very start or end it stands alone (a count-in, a final chord).
+            // section: a lead-in to what follows when the music changes going into it (a pickup
+            // bar, a fill), a tag of what came before when it changes going out (a turnaround).
+            // At the very start or end it stands alone (a count-in, a final chord).
             if (b - a < minLength && a > 0 && b < n)
             {
                 var before = visits.FirstOrDefault(v => v.Start + v.Length == a); var after = visits.FirstOrDefault(v => v.Start == b);
-                var host = a == 0 || before == null ? after : before;
+                var host = before == null ? after : after == null ? before : m.Change[a] >= m.Change[b] ? after : before;
                 if (host != null) { if (host == after) host.Start = a; host.Length += b - a; a = b; continue; }
             }
             foreach (var (start, length) in Solve(m, w, a, b)) pieces.Add(new Visit { Start = start, Length = length, Family = -1, Score = 1 });
@@ -235,6 +237,25 @@ public static partial class FormAnalysis
                     if (fit > bestFit + 1e-9) { bestFit = fit; best = chosen; }
                 }
             if (best == null) break;
+            // The block's copies match best where their bars agree, which can be a bar past a
+            // varied first bar (a pickup, a fill) or a bar before it (a shared turnaround).
+            // Slide every copy together by a bar toward where the music changes at both edges,
+            // as long as the copies still match.
+            double Edges(List<Visit> vs) => vs.Sum(v => Start(v.Start) + (v.Start + v.Length >= n ? 1 : Math.Min(1, m.Novelty[v.Start + v.Length])));
+            int blockLength = best[0].Length; double bestEdges = Edges(best);
+            foreach (int shift in new[] { -1, 1 })
+            {
+                var moved = best.Select(v => new Visit { Start = v.Start + shift, Length = blockLength, Family = v.Family, T = v.T }).ToList();
+                if (moved.Any(v => v.Start < 0 || v.Start + blockLength > n || Claimed(v.Start, blockLength) > 0)) continue;
+                bool holds = true; moved[0].Score = 1;
+                for (int c = 1; c < moved.Count && holds; c++)
+                {
+                    var (score, t) = d.Match(moved[0].Start, moved[c].Start, blockLength, classical, unit);
+                    if (score < CopyThreshold - .02) holds = false; else { moved[c].Score = score; moved[c].T = t; }
+                }
+                double edges = Edges(moved);
+                if (holds && edges > bestEdges + .35 * moved.Count) { best = moved; bestEdges = edges; }
+            }
             foreach (var v in best) { v.Family = families; visits.Add(v); for (int k = v.Start; k < v.Start + v.Length; k++) owner[k] = families; }
             for (int k = 0; k < n; k++) claimed[k + 1] = claimed[k] + (owner[k] >= 0 ? 1 : 0);
             families++;
