@@ -39,7 +39,7 @@ public sealed class TutorialDirector : MonoBehaviour
         root=ui;main=GetComponent<Main>();midi=GetComponent<MidiPlayer>();views=GetComponent<VisualizationViews>();library=GetComponent<SongLibraryPanel>();
         orbit=Camera.main!=null?Camera.main.GetComponent<CameraControl>():null;
         var go=new GameObject("Tutorial narration");go.transform.SetParent(transform,false);voice=go.AddComponent<AudioSource>();voice.playOnAwake=false;voice.spatialBlend=0;
-        sweepGlow=new Material(Resources.Load<Shader>("HarmonicGlow"));sweepGlow.SetColor("_BaseColor",Color.white*2);sweepGlow.renderQueue=3107;
+        sweepGlow=new Material(Resources.Load<Shader>("HarmonicGlowOverlay"));sweepGlow.SetColor("_BaseColor",Color.white*2);sweepGlow.renderQueue=3107;
         sweepTriangle=Stroke("Tutorial · sweeping triangle",.035f);travelArrow=Stroke("Tutorial · direction of travel",.03f);spinArrow=Stroke("Tutorial · direction of rotation",.025f);
         for(int i=0;i<4;i++)snapped[i]=Stroke("Tutorial · triangle "+i,.022f);
         diagrams=new Diagrams(this,main){name="tutorial-diagram",pickingMode=PickingMode.Ignore};diagrams.style.position=Position.Absolute;diagrams.style.display=DisplayStyle.None;root.Add(diagrams);
@@ -86,13 +86,13 @@ public sealed class TutorialDirector : MonoBehaviour
             var step=steps[i];StepIndex=i;StepTime=0;Diagram=step.diagram;jump=-1;
             back.SetEnabled(i>0);next.SetEnabled(i<steps.Length-1);
             // The band is seen through while a triangle sweeps round inside it.
-            views.TorusOpacityCap=step.action=="spin"?.38f:1;
+            views.TorusOpacityCap=step.action=="spin"?.22f:1;
             if(step.action!="spin"){sweeping=false;Snapped=0;foreach(var l in snapped)l.positionCount=0;}
             title.text=step.title;text.text=step.text;progress.text=$"{i+1} / {steps.Length}";
             double length=clips.TryGetValue(step.id,out var clip)?clip.length:seconds.TryGetValue(step.id,out var s)?s:Mathf.Max(5,step.text.Length/16f);
             if(clip!=null){voice.clip=clip;voice.Play();}
             var action=StartCoroutine(Act(step.action,(float)length));
-            for(float t=0;t<length+.6f&&jump<0;t+=Time.unscaledDeltaTime){StepTime=t;if(orbit!=null&&step.action!="keychange")orbit.Turn(-.09f*Time.unscaledDeltaTime);yield return null;}
+            for(float t=0;t<length+.6f&&jump<0;t+=Time.unscaledDeltaTime){StepTime=t;if(orbit!=null&&orbit.enabled&&step.action!="keychange")orbit.Turn(-.09f*Time.unscaledDeltaTime);yield return null;}
             if(action!=null)StopCoroutine(action);
             if(jump>=0){voice.Stop();main.Silence();i=jump-1;}
         }
@@ -111,14 +111,19 @@ public sealed class TutorialDirector : MonoBehaviour
         }
     }
     // What the torus does under each step.
+    float elapsed=>StepTime;
     IEnumerator Act(string action,float length)
     {
         switch(action)
         {
             case "labels":
-                // Light the key, its fourth and its fifth in turn.
-                foreach(int rel in new[]{0,7,5,0}){Light(new[]{rel});yield return Wait(length/4.5f);}
-                main.Silence();break;
+                // Lit as the narration names them: the key, its fourth, its fifth, then the minor
+                // third, the Neapolitan and the second, then the key in every octave.
+                foreach(var (from,to,degrees,octaves) in new[]{(0f,.36f,new[]{0},false),(.36f,.46f,new[]{5},false),(.46f,.56f,new[]{7},false),(.6f,.67f,new[]{3},false),(.67f,.74f,new[]{1},false),(.74f,.82f,new[]{2},false),(.86f,1f,new[]{0},true)})
+                {
+                    yield return Wait(Mathf.Max(0,from*length-elapsed));Light(degrees,octaves);yield return Wait(Mathf.Max(0,(to-from)*length));main.Silence();
+                }
+                break;
             case "chords":
                 // I, IV, V, I: the three colours the rest are blended from.
                 foreach(var chord in new[]{new[]{0,4,7},new[]{5,9,0},new[]{7,11,2},new[]{0,4,7}}){Light(chord);yield return Wait(length/4.4f);}
@@ -139,10 +144,10 @@ public sealed class TutorialDirector : MonoBehaviour
         }
     }
     static IEnumerator Wait(float s){for(float t=0;t<s;t+=Time.unscaledDeltaTime)yield return null;}
-    void Light(int[] degrees)
+    void Light(int[] degrees,bool allOctaves=false)
     {
         var list=new List<Tuple<int,float>>();
-        foreach(int d in degrees){int pc=HarmonyModel.Mod(main.currentKey+d);list.Add(Tuple.Create(pc+Main.Tones*1,.8f));}
+        foreach(int d in degrees){int pc=HarmonyModel.Mod(main.currentKey+d);if(allOctaves)for(int j=0;j<Main.Octaves;j++)list.Add(Tuple.Create(pc+Main.Tones*j,.7f));else list.Add(Tuple.Create(pc+Main.Tones*1,.8f));}
         main.SetNotes(list,true);
     }
     void Finish()

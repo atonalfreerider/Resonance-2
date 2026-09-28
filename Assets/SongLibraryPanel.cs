@@ -26,7 +26,7 @@ public sealed class SongLibraryPanel : MonoBehaviour
     // While the tutorial runs the list is out of the way; it comes back when the tour ends.
     public void Hide(){hidden=true;panel.style.display=DisplayStyle.None;tuck.style.display=DisplayStyle.None;}
     public void Show(){hidden=false;panel.style.display=DisplayStyle.Flex;if(!Intro){SetOpen(true);tuck.style.display=DisplayStyle.Flex;}}
-    MidiPlayer midi;SongAudio audio;float shown=1;string loadedScore="";
+    MidiPlayer midi;SongAudio audio;float shown=1,placedShown=-1,placedWidth=-1,placedHeight=-1;bool placedIntro,placedBusy;string loadedScore="";
     const float Width=440;
 
     public void Bind(VisualElement ui)
@@ -170,7 +170,11 @@ public sealed class SongLibraryPanel : MonoBehaviour
         // Loaded another way (a validation, a file field): leave the intro without a choice.
         if(Intro&&midi!=null&&midi.Loaded){Intro=false;SetOpen(false);tuck.style.display=DisplayStyle.Flex;}
         float blend=Main.ReducedMotion?1:1-Mathf.Exp(-Time.unscaledDeltaTime*8);
-        shown=Mathf.Lerp(shown,Intro||Open?1:0,blend);
+        shown=Mathf.Lerp(shown,Intro||Open?1:0,blend);if(Mathf.Abs(shown-(Intro||Open?1:0))<.002f)shown=Intro||Open?1:0;
+        // Styles are written only when something moved: a write relayouts the whole list.
+        bool busy=audio?.Busy??false;
+        if(shown==placedShown&&width==placedWidth&&height==placedHeight&&Intro==placedIntro&&busy==placedBusy&&!busy)return;
+        placedShown=shown;placedWidth=width;placedHeight=height;placedIntro=Intro;placedBusy=busy;
         if(Intro)
         {
             panel.style.left=(width-Width)*.5f;panel.style.top=Mathf.Max(24,height*.12f);panel.style.maxHeight=height*.76f;panel.style.translate=new Translate(0,0);panel.style.opacity=1;
@@ -180,7 +184,6 @@ public sealed class SongLibraryPanel : MonoBehaviour
         panel.style.translate=new Translate(Width*(1-shown),0);panel.style.opacity=shown;
         panel.style.visibility=shown<.005f?Visibility.Hidden:Visibility.Visible;
         tuck.style.left=width-Width*shown-25;tuck.style.top=Mathf.Max(90,(height-64)*.5f);
-        bool busy=audio?.Busy??false;
         foreach(var card in list.Children())card.SetEnabled(!busy);
         progress.style.display=busy?DisplayStyle.Flex:DisplayStyle.None;
         if(busy)progressFill.style.width=new Length(100*Mathf.Clamp01(audio.Progress),LengthUnit.Percent);

@@ -26,7 +26,7 @@ public sealed class DrumLyricRack : MonoBehaviour
 {
     Main main;MidiPlayer midi;DominantChordOutline region;PreparedPatternSong source;
     Transform root;Camera stage;LineRenderer centerline,hold,tick,strike,tooth;Material glow,composite;
-    RenderTexture hdr,texture;GameObject display;PanelSettings panelSettings;VisualElement displayRoot;Image image;
+    RenderTexture hdr,texture;GameObject display;PanelSettings panelSettings;VisualElement displayRoot;Image image;Rect placed;
     readonly List<LineRenderer> slashes=new();
     sealed class Slot {public TextBox Box;public Material Face;public PreparedPatternSong.Syllable Syllable;public float Orp,Left,Right;}
     readonly Slot[] reader=new Slot[2];int shown=-1;
@@ -155,7 +155,8 @@ public sealed class DrumLyricRack : MonoBehaviour
         if(!float.IsFinite(panelWidth)||panelWidth<1)return;
         int w=Mathf.Max(8,Mathf.RoundToInt(Viewport.width*Screen.width)),h=Mathf.Max(8,Mathf.RoundToInt(Viewport.height*Screen.height));
         if(hdr==null||Mathf.Abs(hdr.width-w)>w*.1f||Mathf.Abs(hdr.height-h)>h*.1f)Resize(w,h);
-        image.style.left=Viewport.x*panelWidth;image.style.top=(1-Viewport.y-Viewport.height)*panelHeight;image.style.width=Viewport.width*panelWidth;image.style.height=Viewport.height*panelHeight;
+        var place=new Rect(Viewport.x*panelWidth,(1-Viewport.y-Viewport.height)*panelHeight,Viewport.width*panelWidth,Viewport.height*panelHeight);
+        if(place!=placed){placed=place;image.style.left=place.x;image.style.top=place.y;image.style.width=place.width;image.style.height=place.height;}
         // The camera frames Tall stage units of the strip, looking straight down at the line.
         float aspect=w/(float)h;
         float tan=Mathf.Tan(stage.fieldOfView*.5f*Mathf.Deg2Rad),distance=Tall*.5f/tan;

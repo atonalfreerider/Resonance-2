@@ -581,7 +581,7 @@ public class Main : MonoBehaviour
             float amp = 0;
             for (int j = 0; j < Octaves; j++) { int k = j * Tones + i; if (k < notes.Count) amp = Mathf.Max(amp, notes[k].VisualAmplitude); }
             amp = Mathf.Clamp01(amp);
-            if (Mathf.Abs(amp - labelEnergy[i]) < .02f) continue;
+            if (Mathf.Abs(amp - labelEnergy[i]) < .06f) continue;
             labelEnergy[i] = amp;
             noteTextLabels[i].Color = Color.Lerp(Color.white, TonalColorField.Pitch(i, currentKey), Mathf.Clamp01(amp * 1.6f));
             noteTextLabels[i].Size = LabelBase * (1 + 2.2f * amp);
