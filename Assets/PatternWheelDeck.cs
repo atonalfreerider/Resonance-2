@@ -131,7 +131,7 @@ public sealed class PatternWheelDeck : VisualElement
     {
         readonly Main main;readonly MidiPlayer midi;OrreryBloom bloom;
         PreparedPatternSong source;
-        readonly VisualElement rackInput;readonly Button transport;int dragPointer=-1;float dragY;double dragTime;
+        readonly VisualElement rackInput,progressTrack,progressFill;readonly Button transport;int dragPointer=-1;float dragY;double dragTime;
         public int ActiveNode=-1,ActiveGroup=-1,LeadTrack=-1,LeadChannel=-1;public double Turns;public float RackScroll;
         public Vector2 metaCenter,featuredCenter;public float FeaturedRadius;
         public readonly InstrumentChangers Changers;public readonly LyricWheel Lyrics;public readonly LyricGraph Graph=new();public bool LyricLayout;float lyricFocus;
@@ -152,6 +152,10 @@ public sealed class PatternWheelDeck : VisualElement
             Changers=new InstrumentChangers(main,midi);Lyrics=new LyricWheel(main,midi,Changers);Add(Graph.Element);
             transport=new Button(()=>{ExplorerInputFocus.ClaimUI();if(midi.IsPlaying)midi.Pause();else midi.Play();}){name="rack-play-pause",text="Play",pickingMode=PickingMode.Position};
             transport.style.position=Position.Absolute;transport.style.left=0;transport.style.top=0;transport.style.width=76;Add(transport);
+            // While the song loads the button is locked, with the load's progress along its foot.
+            progressTrack=new VisualElement{name="load-progress",pickingMode=PickingMode.Ignore};progressTrack.style.position=Position.Absolute;progressTrack.style.left=4;progressTrack.style.top=34;progressTrack.style.width=68;progressTrack.style.height=4;
+            progressTrack.style.backgroundColor=new Color(.12f,.18f,.26f);progressTrack.style.display=DisplayStyle.None;Add(progressTrack);
+            progressFill=new VisualElement{pickingMode=PickingMode.Ignore};progressFill.style.position=Position.Absolute;progressFill.style.left=0;progressFill.style.top=0;progressFill.style.height=4;progressFill.style.backgroundColor=new Color(.5f,.78f,.95f);progressTrack.Add(progressFill);
             rackInput=new VisualElement{name="time-rack-seek",pickingMode=PickingMode.Position,tooltip="Drag upward to seek forward; drag downward to rewind."};
             rackInput.style.position=Position.Absolute;rackInput.style.left=0;rackInput.style.top=45;rackInput.style.bottom=44;rackInput.style.width=88;Add(rackInput);
             rackInput.RegisterCallback<PointerDownEvent>(e=>{if(e.button!=0||!midi.Loaded)return;ExplorerInputFocus.ClaimUI();dragPointer=e.pointerId;dragY=e.position.y;dragTime=midi.Position;rackInput.CapturePointer(e.pointerId);e.StopPropagation();});
@@ -168,7 +172,11 @@ public sealed class PatternWheelDeck : VisualElement
         readonly List<VisualElement> picks=new();
         public void TickControls()
         {
-            transport.text=midi.IsPlaying?"Pause":"Play";transport.SetEnabled(midi.Loaded);
+            var audio=main.GetComponent<SongAudio>();var stems=main.GetComponent<StemPlayback>();
+            bool loading=(audio!=null&&audio.Busy)||(stems!=null&&stems.IsLoading);
+            transport.text=loading?"Loading":midi.IsPlaying?"Pause":"Play";transport.SetEnabled(midi.Loaded&&!loading);
+            progressTrack.style.display=loading?DisplayStyle.Flex:DisplayStyle.None;
+            if(loading)progressFill.style.width=68*Mathf.Clamp01(audio!=null?audio.Progress:0);
             Changers.FeaturedTrack=LeadTrack;Changers.FeaturedChannel=LeadChannel;if(midi.Cycles!=null)Graph.Tick(LyricLayout&&Lyrics.HasLyrics,midi.Cycles.BeatAt(midi.ScorePosition));
             var cells=Changers.Cells;
             while(picks.Count<cells.Count)

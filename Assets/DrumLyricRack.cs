@@ -169,9 +169,12 @@ public sealed class DrumLyricRack : MonoBehaviour
         double perBeat=2*Math.PI*1.15/Math.Max(1,barLength);PerBeat=perBeat;
         float fade=Mathf.SmoothStep(0,1,visible);
         ChordColor=region!=null&&region.HasRegion?region.RegionColor:Ink;
-        DrawLine(fade);
-        DrawSlashes(beat,perBeat,barStart,barLength,fade);
-        DrawTooth(beat,HitAfter(now),perBeat,fade);
+        // The groove is there only around the words: it fades in a moment before a line
+        // begins and out a moment after it ends.
+        Presence=Near(now);
+        DrawLine(fade*Presence);
+        DrawSlashes(beat,perBeat,barStart,barLength,fade*Presence);
+        DrawTooth(beat,HitAfter(now),perBeat,fade*Presence);
         DrawReader(now,perBeat,fade);
     }
     void Resize(int w,int h)
@@ -185,6 +188,17 @@ public sealed class DrumLyricRack : MonoBehaviour
         if(rendered!=stage||hdr==null)return;
         var command=CommandBufferPool.Get("Transparent lyric strip");command.Blit(hdr,texture,composite);
         context.ExecuteCommandBuffer(command);CommandBufferPool.Release(command);
+    }
+    // How present the words are now: full within 1.2 s of a syllable, gone 2.4 s from any.
+    public float Presence {get;private set;}
+    float Near(double now)
+    {
+        if(onsets.Length==0)return 0;
+        int lo=0,hi=onsets.Length;while(lo<hi){int mid=(lo+hi)/2;if(onsets[mid]<=now)lo=mid+1;else hi=mid;}
+        double ahead=lo<onsets.Length?onsets[lo]-now:double.PositiveInfinity;
+        double behind=lo>0?now-Math.Max(onsets[lo-1],midi.Cycles.SecondsAt(syllables[lo-1].End)):double.PositiveInfinity;
+        double gap=Math.Min(ahead,behind);
+        return Mathf.Clamp01((float)(1-(gap-1.2)/1.2));
     }
     bool HasLyricsLoaded()=>source==midi.Prepared?syllables.Length>0:(midi.Prepared?.Lyrics?.Syllables?.Length??0)>0;
     PreparedPatternSong.DrumBar CurrentBar(double beat)

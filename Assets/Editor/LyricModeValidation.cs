@@ -64,7 +64,7 @@ public static class LyricModeValidation
             feature.Select(before.Item1,before.Item2);
             // In the overview the lyric strip sits between the pattern wheels and the torus.
             var stripO=views.LyricStrip;var wheelsO=deck.Overlay.worldBound;
-            Check(rack.Shown&&stripO.height>60&&stripO.x>=wheelsO.xMax-2&&stripO.xMax<views.SceneRect.xMax-120,$"In the overview the lyric strip ({stripO.width:0}×{stripO.height:0}) sits between the pattern wheels and the torus");
+            Check(rack.Shown&&stripO.height>60&&stripO.x>=wheelsO.xMax-48&&stripO.xMax<views.SceneRect.xMax-120,$"In the overview the lyric strip ({stripO.width:0}×{stripO.height:0}) sits between the pattern wheels and the torus");
 
             // Lyric mode: the reader and the drum wheel take most of the screen; the lyric graph and
             // a small vocal wheel sit in the panel below.

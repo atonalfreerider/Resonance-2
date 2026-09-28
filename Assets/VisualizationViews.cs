@@ -104,12 +104,12 @@ public sealed class VisualizationViews : MonoBehaviour
         if(!portrait)
         {
             // Landscape: wheels, then a column with the lyric strip at its middle, then the torus.
-            float dockWidth=Mathf.Clamp(available*.4f,340,640);dock=new Rect(left+16,52,dockWidth,height-64);
-            // The strip keeps left, right after the wheels, and is composited transparent: the
-            // torus is aimed to its right and nothing it overlaps is hidden.
-            float column=Mathf.Clamp(available*.22f,180,480),stripHeight=Mathf.Clamp(column*.34f,60,170);
-            strip=new Rect(dock.xMax+6,(height-stripHeight)*.5f,column-8,stripHeight);
-            scene=new Rect(dock.xMax+8,0,left+available-(dock.xMax+8),height);
+            float dockWidth=Mathf.Clamp(available*.37f,340,600);dock=new Rect(left+16,52,dockWidth,height-64);
+            // The strip keeps hard left, overlapping the wheels' empty right margin, and is
+            // composited transparent: the torus is aimed to its right and nothing is hidden.
+            float column=Mathf.Clamp(available*.17f,150,360),stripHeight=Mathf.Clamp(column*.34f,56,150);
+            strip=new Rect(dock.xMax-40,(height-stripHeight)*.5f,column,stripHeight);
+            scene=new Rect(dock.xMax-40,0,left+available-(dock.xMax-40),height);
             // Aim the camera so the torus centres in the part right of the lyric column, but never
             // so far that it leaves the frame: the look-at moves right by the column's share of
             // the view's width at the torus, capped by the room the torus needs.

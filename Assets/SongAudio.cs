@@ -22,6 +22,9 @@ public sealed class SongAudio : MonoBehaviour
     public SongAlignment Alignment {get;private set;}
     public bool Ready=>Source!=null&&Source.clip!=null;
     public bool Busy {get;private set;}
+    // How far the load has come, 0..1: the recording's decode, then the stems.
+    public float Progress=>!Busy?1:.6f*decodeProgress+.4f*(GetComponent<StemPlayback>()?.Progress??0);
+    volatile float decodeProgress;
     public string Status="Load a recording and its offline-preprocessed MIDI.";
     public string AudioPath="";
     public string ReportPath {get;private set;}
@@ -82,14 +85,14 @@ public sealed class SongAudio : MonoBehaviour
         try{manifest=ValidatePrepared(audio,score,out canonical,out report);}
         catch(Exception e){Status=e.Message;yield break;}
         if(!midi.Load(score)){Status=midi.Status;yield break;}
-        Busy=true;int version=generation;Status="Loading fingerprint-aligned song…";AudioPath=canonical;RecordingName=Path.GetFileName(manifest.sourceAudioPath);ReportPath=report;midi.playbackSpeed=1;
+        Busy=true;decodeProgress=0;int version=generation;Status="Loading fingerprint-aligned song…";AudioPath=canonical;RecordingName=Path.GetFileName(manifest.sourceAudioPath);ReportPath=report;midi.playbackSpeed=1;
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
         string decodePath=canonical;
         var decode=Task.Run(()=>
         {
             using var reader=new NAudio.Wave.AudioFileReader(decodePath);
             var buffer=new float[16384];var pcm=new System.Collections.Generic.List<float>();int read;
-            while((read=reader.Read(buffer,0,buffer.Length))>0)for(int i=0;i<read;i++)pcm.Add(buffer[i]);
+            while((read=reader.Read(buffer,0,buffer.Length))>0){for(int i=0;i<read;i++)pcm.Add(buffer[i]);decodeProgress=reader.Length>0?(float)((double)reader.Position/reader.Length):0;}
             return (data:pcm.ToArray(),channels:reader.WaveFormat.Channels,rate:reader.WaveFormat.SampleRate);
         });
         while(!decode.IsCompleted){if(version!=generation)yield break;yield return null;}
@@ -97,7 +100,7 @@ public sealed class SongAudio : MonoBehaviour
         if(decode.IsFaulted){Busy=false;Status="Audio decode failed: "+decode.Exception.GetBaseException().Message;yield break;}
         var decoded=decode.Result;
         Source.clip=AudioClip.Create(Path.GetFileName(canonical),decoded.data.Length/decoded.channels,decoded.channels,decoded.rate,false);
-        Source.clip.SetData(decoded.data,0);
+        Source.clip.SetData(decoded.data,0);decodeProgress=1;
 #else
         using(var request=UnityWebRequestMultimedia.GetAudioClip(new Uri(canonical).AbsoluteUri,AudioType.WAV))
         {

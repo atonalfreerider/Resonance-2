@@ -16,6 +16,9 @@ public sealed class StemPlayback : MonoBehaviour
     }
     public Stem[] Stems {get;private set;}=Array.Empty<Stem>();
     public bool IsLoading {get;private set;}
+    // How far the stems' preparation has come, 0..1 (1 when there are none or it is done).
+    public float Progress=>!IsLoading?1:Stems.Length==0?1:(prepared+stemProgress)/Stems.Length;
+    int prepared;volatile float stemProgress;
     public string SelectedId {get;private set;}="";
     public string Status {get;private set;}="No separated stems in this bundle.";
     sealed class CachedStem { public AudioSource Source;public PreparedPatternSong Score;public float Gain; }
@@ -29,7 +32,7 @@ public sealed class StemPlayback : MonoBehaviour
     void Awake(){midi=GetComponent<MidiPlayer>();recording=GetComponent<SongAudio>();}
     public IEnumerator Preload(Stem[] stems,string folder)
     {
-        Stems=stems??Array.Empty<Stem>();directory=folder;SelectedId="";MasterGain=1;IsLoading=true;int version=++generation;
+        Stems=stems??Array.Empty<Stem>();directory=folder;SelectedId="";MasterGain=1;IsLoading=true;prepared=0;stemProgress=0;int version=++generation;
         foreach(var stem in Stems){
             Status="Preparing instant solo: "+stem.name+"…";RefreshUI();
             var task=Task.Run(()=>{
@@ -38,7 +41,7 @@ public sealed class StemPlayback : MonoBehaviour
                 using var reader=new NAudio.Wave.AudioFileReader(audio);
                 int channels=reader.WaveFormat.Channels,rate=reader.WaveFormat.SampleRate;
                 var pcm=new float[(int)(reader.Length/sizeof(float))];int offset=0,read;
-                while(offset<pcm.Length&&(read=reader.Read(pcm,offset,pcm.Length-offset))>0)offset+=read;
+                while(offset<pcm.Length&&(read=reader.Read(pcm,offset,pcm.Length-offset))>0){offset+=read;stemProgress=(float)offset/pcm.Length;}
                 if(offset!=pcm.Length)throw new InvalidDataException("Incomplete stem decode.");
                 return (pcm,channels,rate,analysis);
             });
@@ -56,7 +59,7 @@ public sealed class StemPlayback : MonoBehaviour
                 cache.Add(stem.id,new CachedStem{Source=source,Score=data});midi.WarmVisualPrepared(data);
             }catch(Exception e){error=e.Message;}
             if(error!=null){Status="Stem preparation failed: "+error;IsLoading=false;RefreshUI();yield break;}
-            yield return null;
+            prepared++;stemProgress=0;yield return null;
         }
         IsLoading=false;Status=Stems.Length>0?"Ready · instant audio + visual solo. Full-song chord colors stay visible.":"No stems yet · use Add stems in Song Workshop.";RefreshUI();
     }

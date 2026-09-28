@@ -13,13 +13,16 @@ using UnityEngine.UIElements;
 public sealed class SongLibraryPanel : MonoBehaviour
 {
     public static string LibraryRoot=>Path.GetFullPath(Path.Combine(Application.dataPath,"../PreparedSongs/Library"));
-    public sealed class Song {public string Folder,Title,Details,Score;public bool Lyrics,Stems;}
+    public sealed class Song {public string Folder,Title,Details,Score;public bool Lyrics,Stems;public Color[] Stripes;public VisualElement StripeRow;}
+    // A song's chord progression as colour stripes, sampled evenly over its length, cached beside the bundle.
+    [Serializable] sealed class ChordStripes {public int version=1;public int key;public Color[] stripes;}
+    const int StripeCount=48;
     public List<Song> Songs {get;private set;}=new();
     public bool Intro {get;private set;}=true;
     public bool Open {get;private set;}=true;
     // The width the docked panel takes at the right edge now (for the views' layout).
     public float DockedWidth=>Intro?0:panel!=null?panel.layout.width*shown:0;
-    VisualElement root,panel,list;Button tuck;Label status;
+    VisualElement root,panel,list,progress,progressFill;Button tuck;Label status;
     MidiPlayer midi;SongAudio audio;float shown=1;string loadedScore="";
     const float Width=440;
 
@@ -38,6 +41,8 @@ public sealed class SongLibraryPanel : MonoBehaviour
         list=scroll.contentContainer;
         status=new Label("");status.style.whiteSpace=WhiteSpace.Normal;status.style.fontSize=11;status.style.color=new Color(.64f,.7f,.78f);status.style.marginTop=10;panel.Add(status);
         root.Add(panel);
+        progress=new VisualElement{pickingMode=PickingMode.Ignore};progress.style.height=3;progress.style.marginTop=6;progress.style.backgroundColor=new Color(.12f,.18f,.26f);progress.style.display=DisplayStyle.None;panel.Add(progress);
+        progressFill=new VisualElement{pickingMode=PickingMode.Ignore};progressFill.style.height=3;progressFill.style.backgroundColor=new Color(.5f,.78f,.95f);progress.Add(progressFill);
         tuck=new Button(()=>SetOpen(!Open)){text="›",name="tuck-song-library",tooltip="Tuck away the song list"};root.Add(tuck);
         tuck.style.position=Position.Absolute;tuck.style.width=25;tuck.style.height=64;tuck.style.fontSize=27;
         tuck.style.marginLeft=tuck.style.marginRight=tuck.style.marginTop=tuck.style.marginBottom=0;tuck.style.paddingLeft=tuck.style.paddingRight=0;
@@ -95,9 +100,55 @@ public sealed class SongLibraryPanel : MonoBehaviour
             card.RegisterCallback<PointerEnterEvent>(_=>card.style.backgroundColor=new Color(.21f,.29f,.4f));card.RegisterCallback<PointerLeaveEvent>(_=>card.style.backgroundColor=new Color(.13f,.19f,.27f));
             var name=new Label(s.Title);name.style.fontSize=15;name.style.color=Color.white;name.style.whiteSpace=WhiteSpace.Normal;card.Add(name);
             var details=new Label((s.Lyrics?"lyrics · ":"")+(s.Stems?"stems · ":"")+"recording");details.style.fontSize=11;details.style.color=new Color(.6f,.72f,.8f);card.Add(details);
+            // The chord progression as a row of colour stripes along the card's foot.
+            s.StripeRow=new VisualElement{pickingMode=PickingMode.Ignore};s.StripeRow.style.flexDirection=FlexDirection.Row;s.StripeRow.style.height=7;s.StripeRow.style.marginTop=7;s.StripeRow.style.width=new Length(100,LengthUnit.Percent);
+            card.Add(s.StripeRow);if(s.Stripes!=null)ShowStripes(s);
             list.Add(card);
         }
+        StopAllCoroutines();StartCoroutine(FillStripes());
         status.text=Songs.Count==0?$"No fully prepared songs in {LibraryRoot}. Prepare one with the Song Workshop.":$"{Songs.Count} song{(Songs.Count==1?"":"s")} · {LibraryRoot}";
+    }
+    static void ShowStripes(Song s)
+    {
+        s.StripeRow.Clear();
+        foreach(var c in s.Stripes){var stripe=new VisualElement{pickingMode=PickingMode.Ignore};stripe.style.flexGrow=1;stripe.style.height=7;stripe.style.backgroundColor=new Color(c.r,c.g,c.b,.85f);s.StripeRow.Add(stripe);}
+    }
+    // Stripes come from a small sidecar beside the bundle; the first time, from the bundle
+    // itself, one song a frame so the intro stays quick.
+    System.Collections.IEnumerator FillStripes()
+    {
+        foreach(var song in Songs.ToList())
+        {
+            if(song.Stripes!=null)continue;
+            string sidecar=song.Score+".stripes.json";
+            try
+            {
+                ChordStripes cached=File.Exists(sidecar)?JsonUtility.FromJson<ChordStripes>(File.ReadAllText(sidecar)):null;
+                if(cached==null||cached.stripes==null||cached.stripes.Length!=StripeCount)
+                {
+                    var data=JsonUtility.FromJson<PreparedPatternSong>(File.ReadAllText(song.Score+".patterns.json"));
+                    cached=new ChordStripes{key=data.Frames!=null&&data.Frames.Length>0&&data.Frames[0].Key>=0?data.Frames[0].Key:Math.Max(0,data.Key),stripes=Sample(data)};
+                    File.WriteAllText(sidecar,JsonUtility.ToJson(cached));
+                }
+                song.Stripes=cached.stripes;
+            }
+            catch(Exception e){Debug.LogWarning($"No chord stripes for {song.Title}: {e.Message}");song.Stripes=new Color[StripeCount];}
+            if(song.StripeRow!=null)ShowStripes(song);
+            yield return null;
+        }
+    }
+    static Color[] Sample(PreparedPatternSong data)
+    {
+        var stripes=new Color[StripeCount];var chords=data.Chords??Array.Empty<SongFormAnalysis.ChordStep>();
+        int key=data.Frames!=null&&data.Frames.Length>0&&data.Frames[0].Key>=0?data.Frames[0].Key:Math.Max(0,data.Key);
+        double end=Math.Max(1e-6,data.EndBeat);
+        for(int i=0;i<StripeCount;i++)
+        {
+            double beat=(i+.5)/StripeCount*end;SongFormAnalysis.ChordStep at=null;
+            foreach(var c in chords)if(c.Start<=beat&&beat<c.End){at=c;break;}
+            stripes[i]=at==null||at.Root<0?new Color(.12f,.16f,.2f):CyclicOrrery.ChordColor(at,key);
+        }
+        return stripes;
     }
     void Choose(Song song)
     {
@@ -123,6 +174,9 @@ public sealed class SongLibraryPanel : MonoBehaviour
         panel.style.translate=new Translate(Width*(1-shown),0);panel.style.opacity=shown;
         panel.style.visibility=shown<.005f?Visibility.Hidden:Visibility.Visible;
         tuck.style.left=width-Width*shown-25;tuck.style.top=Mathf.Max(90,(height-64)*.5f);
-        foreach(var card in list.Children())card.SetEnabled(!(audio?.Busy??false));
+        bool busy=audio?.Busy??false;
+        foreach(var card in list.Children())card.SetEnabled(!busy);
+        progress.style.display=busy?DisplayStyle.Flex:DisplayStyle.None;
+        if(busy)progressFill.style.width=new Length(100*Mathf.Clamp01(audio.Progress),LengthUnit.Percent);
     }
 }
