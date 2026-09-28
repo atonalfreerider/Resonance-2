@@ -44,6 +44,7 @@ public class Main : MonoBehaviour
     void ApplyPose(){currentVisualRotation=Mathf.Lerp(baseRotation,PoseRotation(tensionKey),tensionAmount);currentVisualTwist=Mathf.Lerp(baseTwist,PoseTwist(tensionKey),tensionAmount);}
     public void SetTension(int key,float amount){amount=Mathf.Clamp01(amount);if(amount>0)tensionKey=HarmonyModel.Mod(key);tensionTarget=amount;}
     public bool KeyChanging=>keyBlend<1;
+    public float KeyBlend=>keyBlend;
     public bool UncoilMoving=>Mathf.Abs(unfoldProgress-(Uncoiled?1:0))>.00001f;
     public float CoiledVisibility=>1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(0,.38f,unfoldProgress));
     public float TransitionWiden=>Mathf.Sin(Mathf.PI*unfoldProgress);

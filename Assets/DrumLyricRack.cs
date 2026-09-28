@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.UIElements;
 
-// The lyric strip: one lyric line, drawn on its own stage by its own camera into whatever part
-// of the screen the views give it (between the pattern wheels and the torus). The line is a
+// The lyric strip: one lyric line, drawn on its own stage by its own camera and composited,
+// transparent, over whatever part of the screen the views give it (between the pattern wheels
+// and the torus), so it hides nothing behind it. The line is a
 // groove of slashes scrolling left at the bar's speed: a "\" at every beat (tallest on the
 // downbeat) and a "/" at every upbeat. The syllable being heard is always centred, its
 // fastest-to-read letter (the optimal recognition point) on the reticle, bold and in the colour
@@ -23,7 +26,8 @@ using UnityEngine.Rendering.Universal;
 public sealed class DrumLyricRack : MonoBehaviour
 {
     Main main;MidiPlayer midi;DominantChordOutline region;PreparedPatternSong source;
-    Transform root;Camera stage;LineRenderer centerline,hold,tick,strike,tooth;Material glow;
+    Transform root;Camera stage;LineRenderer centerline,hold,tick,strike,tooth;Material glow,composite;
+    RenderTexture hdr,texture;GameObject display;PanelSettings panelSettings;VisualElement displayRoot;Image image;
     readonly List<LineRenderer> slashes=new();
     sealed class Slot {public TextBox Box;public Material Face;public PreparedPatternSong.Syllable Syllable;public float Orp,Left,Right;}
     readonly Slot[] reader=new Slot[2];int shown=-1;
@@ -80,10 +84,20 @@ public sealed class DrumLyricRack : MonoBehaviour
         var cam=new GameObject("Lyric strip camera");cam.transform.SetParent(root,false);stage=cam.AddComponent<Camera>();
         // A base camera always clears its colour in URP: it clears to the screen's own background,
         // so the strip has no edge of its own.
-        stage.clearFlags=CameraClearFlags.SolidColor;stage.backgroundColor=Camera.main!=null?Camera.main.backgroundColor:Color.black;stage.cullingMask=1<<StageLayer;stage.fieldOfView=30;stage.nearClipPlane=.1f;stage.farClipPlane=40;
-        stage.depth=(Camera.main!=null?Camera.main.depth:0)+1;stage.enabled=false;
+        // Rendered to a texture through the torus's post-processing, then composited transparent
+        // (glow on nothing) into a panel of its own over the screen.
+        stage.clearFlags=CameraClearFlags.SolidColor;stage.backgroundColor=Color.clear;stage.cullingMask=1<<StageLayer;stage.fieldOfView=30;stage.nearClipPlane=.1f;stage.farClipPlane=40;
+        stage.allowHDR=true;stage.allowMSAA=false;stage.depth=-19;stage.enabled=false;
         var data=stage.GetUniversalAdditionalCameraData();data.renderPostProcessing=true;data.renderShadows=false;
-        if(Camera.main!=null)Camera.main.cullingMask&=~(1<<StageLayer);
+        if(Camera.main!=null){data.volumeLayerMask=Camera.main.GetUniversalAdditionalCameraData().volumeLayerMask;Camera.main.cullingMask&=~(1<<StageLayer);}
+        composite=new Material(Resources.Load<Shader>("OrreryTransparent"));
+        display=new GameObject("Lyric strip display"){hideFlags=HideFlags.HideAndDontSave};
+        panelSettings=Instantiate(main.GetComponent<UIDocument>().panelSettings);panelSettings.sortingOrder+=1;
+        var document=display.AddComponent<UIDocument>();document.panelSettings=panelSettings;
+        displayRoot=document.rootVisualElement;displayRoot.pickingMode=PickingMode.Ignore;
+        image=new Image{pickingMode=PickingMode.Ignore,scaleMode=ScaleMode.StretchToFill};image.style.position=Position.Absolute;displayRoot.Add(image);
+        displayRoot.style.display=DisplayStyle.None;
+        RenderPipelineManager.endCameraRendering+=Composite;
         glow=new Material(Resources.Load<Shader>("HarmonicGlow"));glow.SetColor("_BaseColor",Color.white*2);glow.renderQueue=3102;
         centerline=Line("Lyric line",.006f,Ink);hold=Line("Held syllable",.03f,Ink);tick=Line("Reader reticle",.014f,Color.white);
         strike=Line("Strike",.04f,Color.white);tooth=Line("Next drum hit",.02f,Ink);tooth.numCapVertices=0;tooth.numCornerVertices=0;
@@ -134,11 +148,17 @@ public sealed class DrumLyricRack : MonoBehaviour
         if(midi==null){midi=GetComponent<MidiPlayer>();return;}
         bool want=Wanted&&Viewport.width>.01f&&Viewport.height>.01f&&midi.Prepared!=null&&HasLyricsLoaded();
         visible=Main.ReducedMotion?(want?1:0):Mathf.MoveTowards(visible,want?1:0,Time.unscaledDeltaTime*3);
-        if(visible<=0){if(root.gameObject.activeSelf){root.gameObject.SetActive(false);stage.enabled=false;}return;}
-        if(!root.gameObject.activeSelf){root.gameObject.SetActive(true);stage.enabled=true;}
+        if(visible<=0){if(root.gameObject.activeSelf){root.gameObject.SetActive(false);stage.enabled=false;displayRoot.style.display=DisplayStyle.None;}return;}
+        if(!root.gameObject.activeSelf){root.gameObject.SetActive(true);stage.enabled=true;displayRoot.style.display=DisplayStyle.Flex;}
         if(source!=midi.Prepared)Load();
+        // The strip's texture matches its part of the screen; the image sits there in its own panel.
+        float panelWidth=displayRoot.resolvedStyle.width,panelHeight=displayRoot.resolvedStyle.height;
+        if(!float.IsFinite(panelWidth)||panelWidth<1)return;
+        int w=Mathf.Max(8,Mathf.RoundToInt(Viewport.width*Screen.width)),h=Mathf.Max(8,Mathf.RoundToInt(Viewport.height*Screen.height));
+        if(hdr==null||Mathf.Abs(hdr.width-w)>w*.1f||Mathf.Abs(hdr.height-h)>h*.1f)Resize(w,h);
+        image.style.left=Viewport.x*panelWidth;image.style.top=(1-Viewport.y-Viewport.height)*panelHeight;image.style.width=Viewport.width*panelWidth;image.style.height=Viewport.height*panelHeight;
         // The camera frames Tall stage units of the strip, looking straight down at the line.
-        stage.rect=Viewport;float aspect=Viewport.width*Screen.width/Mathf.Max(1,Viewport.height*Screen.height);
+        float aspect=w/(float)h;
         float tan=Mathf.Tan(stage.fieldOfView*.5f*Mathf.Deg2Rad),distance=Tall*.5f/tan;
         stage.transform.localPosition=new Vector3(0,distance,Center);stage.transform.localRotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);
         Span=Mathf.Clamp(Tall*.5f*aspect,1.2f,9);
@@ -153,6 +173,18 @@ public sealed class DrumLyricRack : MonoBehaviour
         DrawSlashes(beat,perBeat,barStart,barLength,fade);
         DrawTooth(beat,HitAfter(now),perBeat,fade);
         DrawReader(now,perBeat,fade);
+    }
+    void Resize(int w,int h)
+    {
+        if(hdr!=null){stage.targetTexture=null;hdr.Release();Destroy(hdr);texture.Release();Destroy(texture);}
+        hdr=new RenderTexture(w,h,24,RenderTextureFormat.ARGBHalf){name="Lyric strip HDR"};hdr.Create();stage.targetTexture=hdr;
+        texture=new RenderTexture(w,h,0,RenderTextureFormat.ARGBHalf){name="Lyric strip transparent"};texture.Create();image.image=texture;
+    }
+    void Composite(ScriptableRenderContext context,Camera rendered)
+    {
+        if(rendered!=stage||hdr==null)return;
+        var command=CommandBufferPool.Get("Transparent lyric strip");command.Blit(hdr,texture,composite);
+        context.ExecuteCommandBuffer(command);CommandBufferPool.Release(command);
     }
     bool HasLyricsLoaded()=>source==midi.Prepared?syllables.Length>0:(midi.Prepared?.Lyrics?.Syllables?.Length??0)>0;
     PreparedPatternSong.DrumBar CurrentBar(double beat)
@@ -361,7 +393,10 @@ public sealed class DrumLyricRack : MonoBehaviour
     }
     void OnDisable()
     {
+        RenderPipelineManager.endCameraRendering-=Composite;
         if(root!=null)Destroy(root.gameObject);root=null;slashes.Clear();
-        if(glow!=null)Destroy(glow);
+        if(hdr!=null){hdr.Release();Destroy(hdr);hdr=null;}if(texture!=null){texture.Release();Destroy(texture);texture=null;}
+        if(display!=null)Destroy(display);if(panelSettings!=null)Destroy(panelSettings);
+        if(glow!=null)Destroy(glow);if(composite!=null)Destroy(composite);
     }
 }
