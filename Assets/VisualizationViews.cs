@@ -108,7 +108,12 @@ public sealed class VisualizationViews : MonoBehaviour
             float column=Mathf.Clamp(available*.24f,200,540),stripHeight=Mathf.Clamp(column*.36f,70,190);
             strip=new Rect(dock.xMax+14,(height-stripHeight)*.5f,column-8,stripHeight);
             scene=new Rect(dock.xMax+8,0,left+available-(dock.xMax+8),height);
-            sideFrame=5.4f*(column/Mathf.Max(1,scene.width));
+            // Aim the camera so the torus centres in the part right of the lyric column, but never
+            // so far that it leaves the frame: the look-at moves right by the column's share of
+            // the view's width at the torus, capped by the room the torus needs.
+            float rad=orbit!=null?orbit.OrbitState.x:5.6f,halfWidth=rad*Mathf.Tan(camera.fieldOfView*.5f*Mathf.Deg2Rad)*(scene.width/Mathf.Max(1,scene.height));
+            float shift=Mathf.Clamp(Mathf.Min(column/Mathf.Max(1,scene.width)*halfWidth,halfWidth-3.3f),0,2.2f);
+            sideFrame=shift/.95f;
         }
         else
         {
