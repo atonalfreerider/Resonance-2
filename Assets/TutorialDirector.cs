@@ -72,7 +72,7 @@ public sealed class TutorialDirector : MonoBehaviour
         title=new Label("");title.style.fontSize=TitleSize;title.style.unityFontStyleAndWeight=FontStyle.Bold;title.style.color=new Color(.62f,.8f,1);title.style.marginBottom=6;caption.Add(title);
         sentence=new VisualElement{pickingMode=PickingMode.Ignore};sentence.style.flexDirection=FlexDirection.Row;sentence.style.flexWrap=Wrap.Wrap;caption.Add(sentence);
         progress=new Label(""){name="tutorial-progress"};progress.style.fontSize=18;progress.style.color=new Color(.52f,.66f,.8f);progress.style.marginTop=10;caption.Add(progress);
-        root.Add(caption);
+        root.Add(caption);caption.RegisterCallback<GeometryChangedEvent>(FitCaption);
         skip=new Button(Stop){text="Skip tutorial",name="tutorial-skip"};
         // Step through: back to the step before, on to the next.
         var row=buttonRow=new VisualElement{pickingMode=PickingMode.Ignore};row.style.flexDirection=FlexDirection.Row;row.style.marginTop=8;row.style.alignItems=Align.Center;caption.Add(row);
@@ -211,10 +211,11 @@ public sealed class TutorialDirector : MonoBehaviour
     {
         shownSentence=index;sentence.Clear();wordLabels.Clear();wordGlows.Clear();
         firstWord=Array.IndexOf(sentenceOf,index);if(firstWord<0)return;
+        sentenceSize=FitSentenceSize(index);
         for(int k=firstWord;k<words.Length&&sentenceOf[k]==index;k++)
         {
-            var l=new Label(words[k]){pickingMode=PickingMode.Ignore};l.style.fontSize=SentenceSize;l.style.color=Upcoming;
-            l.style.marginRight=SentenceSize*.36f;l.style.marginTop=l.style.marginBottom=0;l.style.paddingLeft=l.style.paddingRight=0;
+            var l=new Label(words[k]){pickingMode=PickingMode.Ignore};l.style.fontSize=sentenceSize;l.style.color=Upcoming;
+            l.style.marginRight=sentenceSize*.36f;l.style.marginTop=l.style.marginBottom=0;l.style.paddingLeft=l.style.paddingRight=0;
             l.style.transformOrigin=new TransformOrigin(Length.Percent(50),Length.Percent(60));
             var box=new VisualElement{pickingMode=PickingMode.Ignore};
             var glow=new VisualElement{pickingMode=PickingMode.Ignore};glow.style.position=Position.Absolute;
@@ -222,6 +223,46 @@ public sealed class TutorialDirector : MonoBehaviour
             glow.style.backgroundImage=new StyleBackground(Glow());glow.style.unityBackgroundImageTintColor=new Color(1,.72f,.25f);glow.style.opacity=0;
             box.Add(glow);box.Add(l);sentence.Add(box);wordLabels.Add(l);wordGlows.Add(glow);
         }
+    }
+    // Recording a vertical video, the caption hangs from CaptionTop with nothing below it, so a long
+    // sentence at the full size (the credit's, the circle of fifths') ran off the bottom of the
+    // frame. There each sentence takes the largest size, down to MinSentenceSize, whose words,
+    // wrapped by a generous estimate, fit above the bottom margin; should the laid-out caption still
+    // reach past the frame's edge, FitCaption steps the size down. Landscape and interactive
+    // portrait keep SentenceSize.
+    const float MinSentenceSize=24,CaptionBottomMargin=24,CaptionLineHeight=1.5f;
+    float sentenceSize=SentenceSize;
+    bool RecordingVertical=>RecordingMode.Active&&Portrait;
+    // The lines `items` take wrapped into `width` at `size`: `perLetter` em a letter, then `gap` em
+    // and `extra` px after each (the real captions wrap a little tighter than this).
+    static int WrappedLines(IEnumerable<string> items,float size,float perLetter,float gap,float extra,float width)
+    {
+        int lines=0;float x=0;
+        foreach(var item in items){float w=item.Length*perLetter*size+gap*size+extra;if(lines==0||(x>0&&x+w>width)){lines++;x=0;}x+=w;}
+        return Math.Max(lines,1);
+    }
+    float FitSentenceSize(int index)
+    {
+        if(!RecordingVertical)return SentenceSize;
+        float width=root.resolvedStyle.width,height=root.resolvedStyle.height;if(!float.IsFinite(width)||width<1||!float.IsFinite(height)||height<1)return SentenceSize;
+        // Place() gives the caption width-32 and it pads 22 a side and 14 above and below; the
+        // title's line, its 6 below and the theme's spacing come before the sentence.
+        float inner=width-32-44;
+        float titleHeight=WrappedLines((title.text??"").Split((char[])null,StringSplitOptions.RemoveEmptyEntries),TitleSize,.62f,.28f,0,inner)*TitleSize*CaptionLineHeight+6+12;
+        float room=height*(1-RecordingMode.CaptionTop)-28-titleHeight-CaptionBottomMargin;
+        var sentenceWords=new List<string>();for(int k=firstWord;k<words.Length&&sentenceOf[k]==index;k++)sentenceWords.Add(words[k]);
+        float size=SentenceSize;
+        while(size>MinSentenceSize&&WrappedLines(sentenceWords,size,.58f,.36f,3,inner)*size*CaptionLineHeight>room)size--;
+        return size;
+    }
+    // The safety net: once laid out, a caption still reaching into the bottom margin shrinks its
+    // words a step at a time (each step lays it out again) until it clears or hits MinSentenceSize.
+    void FitCaption(GeometryChangedEvent e)
+    {
+        if(!Playing||!RecordingVertical||wordLabels.Count==0||sentenceSize<=MinSentenceSize)return;
+        if(caption.worldBound.yMax<=root.worldBound.yMax-CaptionBottomMargin*.5f)return;
+        sentenceSize=Mathf.Max(MinSentenceSize,sentenceSize-2);
+        foreach(var l in wordLabels){l.style.fontSize=sentenceSize;l.style.marginRight=sentenceSize*.36f;}
     }
     // Only the words whose state changed are restyled; the bloom touches the lit word alone.
     void LightWords()
