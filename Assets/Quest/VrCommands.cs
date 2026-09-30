@@ -27,10 +27,14 @@ public sealed class VrCommands : MonoBehaviour
     string Folder=>Application.persistentDataPath;
     readonly FrameTiming[] timing=new FrameTiming[1];
 
-    void Start(){session=GetComponent<VrSession>();}
+    float started;
+    void Start(){session=GetComponent<VrSession>();started=Time.unscaledTime;}
     void Update()
     {
         FrameTimingManager.CaptureFrameTimings();
+        // Commands wait until the session has settled (the first seconds start tracking,
+        // passthrough and the composition layers).
+        if(Time.unscaledTime-started<5)return;
         if((poll-=Time.unscaledDeltaTime)>0)return;poll=.5f;
         string path=Path.Combine(Folder,"vr-commands.txt");
         if(!File.Exists(path))return;
@@ -59,7 +63,7 @@ public sealed class VrCommands : MonoBehaviour
                 case "msaa":if(Pipeline!=null)Pipeline.msaaSampleCount=int.Parse(arg);break;
                 case "eyescale":XRSettings.eyeTextureResolutionScale=float.Parse(arg,System.Globalization.CultureInfo.InvariantCulture);break;
                 case "sweep":if(!sweeping)StartCoroutine(Sweep());break;
-                case "probe":Probe();break;
+                case "probe":StartCoroutine(Probe());break;
                 default:Debug.LogWarning("VR command unknown: "+line);break;
             }
         }
@@ -74,28 +78,48 @@ public sealed class VrCommands : MonoBehaviour
     }
 
     // ---------- the probe ----------
-    void Probe()
+    IEnumerator Probe()
     {
-        var head=session.Head;var text=new StringBuilder();
+        var text=new StringBuilder();
         foreach(bool post in new[]{true,false})
         {
-            var go=new GameObject("Alpha probe camera");var cam=go.AddComponent<Camera>();
-            cam.CopyFrom(head);cam.stereoTargetEye=StereoTargetEyeMask.None;cam.fieldOfView=90;cam.aspect=1;cam.clearFlags=CameraClearFlags.SolidColor;cam.backgroundColor=Color.clear;   // as in passthrough
-            go.transform.SetPositionAndRotation(head.transform.position,head.transform.rotation);
-            var data=cam.GetUniversalAdditionalCameraData();var from=head.GetUniversalAdditionalCameraData();
-            data.renderPostProcessing=post;data.volumeLayerMask=from.volumeLayerMask;data.antialiasing=from.antialiasing;
-            var rt=new RenderTexture(256,256,24,RenderTextureFormat.ARGB32){antiAliasing=1};rt.Create();cam.targetTexture=rt;
-            cam.Render();
-            var stats=Stats(rt);text.Append($"eye picture (post {(post?"on":"off")}): {stats}; ");
-            cam.targetTexture=null;rt.Release();Destroy(rt);Destroy(go);
+            float share=-1;yield return EyeTransparency(post,x=>share=x);
+            text.Append($"eye picture (post {(post?"on":"off")}): {share*100:0}% transparent; ");
         }
         var output=session.Lyrics!=null?session.Lyrics.Output as RenderTexture:null;
         text.Append(output!=null?$"lyric texture {output.width}x{output.height} {output.format}: {Stats(output)}; ":"lyric texture none; ");
-        var card=session.LyricCard;
+        var head=session.Head;var card=session.LyricCard;
         if(card!=null){var v=head.WorldToViewportPoint(card.transform.position);text.Append($"lyric card active {card.activeInHierarchy} at viewport ({v.x:0.00},{v.y:0.00}) {v.z/VrSession.Scale:0.00} m, scale {card.transform.lossyScale/VrSession.Scale}; ");}
         foreach(var layer in FindObjectsByType<Unity.XR.CompositionLayers.CompositionLayer>(FindObjectsInactive.Include))
             text.Append($"layer {layer.name} order {layer.Order} {layer.LayerData?.GetType().Name} blend {layer.LayerData?.BlendType} enabled {layer.isActiveAndEnabled}; ");
         Debug.Log("VR probe: "+text);
+    }
+    // The eye camera's picture, as the passthrough clear leaves it, rendered once into a small
+    // texture: the share of it that is transparent. The texture outlives the render by a few
+    // frames, so the GPU is done with it before it is released.
+    public IEnumerator EyeTransparency(bool post,Action<float> done)
+    {
+        var head=session.Head;
+        var go=new GameObject("Alpha probe camera");var cam=go.AddComponent<Camera>();
+        cam.CopyFrom(head);cam.stereoTargetEye=StereoTargetEyeMask.None;cam.fieldOfView=90;cam.aspect=1;cam.clearFlags=CameraClearFlags.SolidColor;cam.backgroundColor=Color.clear;cam.enabled=false;
+        go.transform.SetPositionAndRotation(head.transform.position,head.transform.rotation);
+        var data=cam.GetUniversalAdditionalCameraData();var from=head.GetUniversalAdditionalCameraData();
+        data.renderPostProcessing=post;data.volumeLayerMask=from.volumeLayerMask;data.antialiasing=from.antialiasing;
+        var rt=new RenderTexture(128,128,24,RenderTextureFormat.ARGB32){antiAliasing=1};rt.Create();cam.targetTexture=rt;
+        cam.Render();
+        yield return null;
+        float share=Transparent(rt);
+        cam.targetTexture=null;Destroy(go);
+        for(int i=0;i<4;i++)yield return null;
+        rt.Release();Destroy(rt);
+        done(share);
+    }
+    static float Transparent(RenderTexture rt)
+    {
+        var previous=RenderTexture.active;RenderTexture.active=rt;
+        var read=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);read.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);read.Apply();
+        RenderTexture.active=previous;var px=read.GetPixels32();int clear=0;foreach(var c in px)if(c.a<13)clear++;Destroy(read);
+        return clear/(float)px.Length;
     }
     // How much of a texture is transparent (alpha under 0.05), its mean alpha and brightest pixel.
     static string Stats(RenderTexture rt)

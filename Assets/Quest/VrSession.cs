@@ -206,15 +206,38 @@ public sealed class VrSession : MonoBehaviour
         // The deck places itself each frame from DeckDepth (in the torus's own units).
         DrumPatternDeck.DeckDepth=below*Scale/Mathf.Max(1e-4f,Main.transform.lossyScale.y);
     }
+    // Post-processing on the eye camera, as the desktop has it; off while passthrough is on if
+    // the check below finds it makes the picture opaque.
+    bool postForPassthrough=true;Coroutine passthroughCheck;
     public void SetPassthrough(bool on)
     {
         Passthrough=on;
         // Transparent where nothing is drawn lets the room through; opaque black blacks it out.
         Head.clearFlags=CameraClearFlags.SolidColor;Head.backgroundColor=on?new Color(0,0,0,0):Color.black;
-        if(cameraManager!=null)cameraManager.enabled=on;
-        if(on)StartCoroutine(LogPassthrough());
+        Head.GetUniversalAdditionalCameraData().renderPostProcessing=!on||postForPassthrough;
+        // The camera subsystem starts and stops the passthrough layer: only on a real change.
+        if(cameraManager!=null&&cameraManager.enabled!=on)cameraManager.enabled=on;
+        if(passthroughCheck!=null)StopCoroutine(passthroughCheck);
+        passthroughCheck=on?StartCoroutine(CheckPassthrough()):null;
     }
-    IEnumerator LogPassthrough(){yield return new WaitForSecondsRealtime(1);Debug.Log("VR passthrough on: "+Diagnostics());}
+    // Once passthrough is on, the eye picture must be transparent where nothing is drawn. If
+    // post-processing makes it opaque (on the headset its alpha-keeping variant can be missing),
+    // passthrough runs without post-processing.
+    IEnumerator CheckPassthrough()
+    {
+        yield return new WaitForSecondsRealtime(1);
+        var commands=GetComponent<VrCommands>();float share=-1;
+        if(commands!=null&&postForPassthrough)yield return commands.EyeTransparency(true,x=>share=x);
+        if(share>=0&&share<.2f&&Passthrough)
+        {
+            postForPassthrough=false;Head.GetUniversalAdditionalCameraData().renderPostProcessing=false;
+            float without=-1;yield return commands.EyeTransparency(false,x=>without=x);
+            Debug.Log($"VR passthrough: post-processing made the eye picture opaque ({share*100:0}% transparent); without it {without*100:0}%. Passthrough now runs without post-processing.");
+        }
+        else if(share>=0)Debug.Log($"VR passthrough: eye picture {share*100:0}% transparent with post-processing.");
+        Debug.Log("VR passthrough on: "+Diagnostics());
+        passthroughCheck=null;
+    }
     public void SetMode(Mode mode)
     {
         if(mode==Current)return;Current=mode;
@@ -240,9 +263,29 @@ public sealed class VrSession : MonoBehaviour
         return s.ToString();
     }
 
+    float lyricReport=10;
+    // While a song plays, a line every 15 s on what the lyric line shows: whether the strip is
+    // on, how much of its texture has content, and where its card is in view.
+    void ReportLyrics()
+    {
+        if((lyricReport-=Time.unscaledDeltaTime)>0)return;lyricReport=15;
+        if(lyrics==null||!Midi.IsPlaying)return;
+        var output=lyrics.Output as RenderTexture;string content="none";
+        if(output!=null)
+        {
+            var small=RenderTexture.GetTemporary(175,45,0,RenderTextureFormat.ARGB32);Graphics.Blit(output,small);
+            var previous=RenderTexture.active;RenderTexture.active=small;var read=new Texture2D(175,45,TextureFormat.RGBA32,false);read.ReadPixels(new Rect(0,0,175,45),0,0);read.Apply();RenderTexture.active=previous;
+            var px=read.GetPixels32();int lit=0;float bright=0;foreach(var c in px){if(c.a>25)lit++;bright=Mathf.Max(bright,Mathf.Max(c.r,Mathf.Max(c.g,c.b))/255f);}
+            Destroy(read);RenderTexture.ReleaseTemporary(small);content=$"{100f*lit/px.Length:0.0}% lit, brightest {bright:0.00}";
+        }
+        var v=Head.WorldToViewportPoint(lyricQuad.transform.position);
+        Debug.Log($"VR lyrics: wanted {lyrics.Wanted} shown {lyrics.Shown} presence {lyrics.Presence:0.00} has lyrics {lyrics.HasLyrics} texture {content}; card {lyricQuad.activeInHierarchy} at viewport ({v.x:0.00},{v.y:0.00}) {v.z/Scale:0.00} m");
+    }
+
     void LateUpdate()
     {
         if(Head==null)return;
+        ReportLyrics();
         // The first valid head pose (and any system recentre) puts the torus where it belongs:
         // before tracking starts the head reads as the floor.
         if(awaitingPose&&(Simulated||Head.transform.localPosition.sqrMagnitude>.01f)){awaitingPose=false;Recenter();}

@@ -139,6 +139,21 @@ public static class QuestBuild
         so.ApplyModifiedPropertiesWithoutUndo();EditorUtility.SetDirty(asset);AssetDatabase.SaveAssets();
     }
 
+    // URP strips shader variants at build time for the pipeline assets the project's graphics and
+    // quality settings name. Loaded only at runtime, the headset pipeline's variants (post-processing
+    // that keeps alpha, which passthrough needs) were stripped, so the headset build makes it the
+    // project's pipeline. Only for the batch build, in its own copy of the project: never run this
+    // in the desktop project.
+    static void UseHeadsetPipeline()
+    {
+        if(!Application.isBatchMode){Debug.LogWarning("Quest: the headset pipeline is only made the project's pipeline in the batch build's copy.");return;}
+        var pipeline=AssetDatabase.LoadAssetAtPath<RenderPipelineAsset>(PipelinePath);if(pipeline==null)throw new Exception("Quest: no "+PipelinePath);
+        GraphicsSettings.defaultRenderPipeline=pipeline;
+        for(int i=0;i<QualitySettings.names.Length;i++){QualitySettings.SetQualityLevel(i,false);QualitySettings.renderPipeline=null;}
+        AssetDatabase.SaveAssets();
+        Debug.Log("Quest: the headset pipeline is the build's pipeline.");
+    }
+
     public static void Build()
     {
         try
@@ -146,6 +161,7 @@ public static class QuestBuild
             if(EditorUserBuildSettings.activeBuildTarget!=BuildTarget.Android)
                 EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android,BuildTarget.Android);
             Configure();
+            UseHeadsetPipeline();
             Directory.CreateDirectory(Path.GetDirectoryName(Output));
             var options=new BuildPlayerOptions{scenes=new[]{Scene},locationPathName=Output,target=BuildTarget.Android,targetGroup=BuildTargetGroup.Android,options=BuildOptions.None};
             var report=BuildPipeline.BuildPlayer(options);
