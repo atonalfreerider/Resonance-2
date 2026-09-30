@@ -88,6 +88,7 @@ public sealed class DrumLyricRack : MonoBehaviour
         // so the strip has no edge of its own.
         // Rendered to a texture through the torus's post-processing, then composited transparent
         // (glow on nothing) into a panel of its own over the screen.
+        stage.stereoTargetEye=StereoTargetEyeMask.None;   // a headset would otherwise render it in stereo to the eyes, leaving its texture empty
         stage.clearFlags=CameraClearFlags.SolidColor;stage.backgroundColor=Color.clear;stage.cullingMask=1<<StageLayer;stage.fieldOfView=30;stage.nearClipPlane=.1f;stage.farClipPlane=40;
         stage.allowHDR=true;stage.allowMSAA=false;stage.depth=-19;stage.enabled=false;
         var data=stage.GetUniversalAdditionalCameraData();data.renderPostProcessing=true;data.renderShadows=false;

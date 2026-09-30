@@ -12,7 +12,7 @@ using UnityEngine.XR;
 // Driving the headset app from the computer over USB, for testing without hands: the app reads
 // vr-commands.txt in its data folder (pushed with adb), runs each line and deletes the file.
 //   passthrough on|off · mode song|torus · load <part of a song folder> · play · pause ·
-//   seek <seconds> · recenter · dump · probe · sweep · post on|off · msaa 1|2|4 · eyescale <0.5–1>
+//   seek <seconds> · recenter · dump · probe · sweep · seethrough on|off · delay <ms> · post on|off · msaa 1|2|4 · eyescale <0.5–1>
 // "probe" checks what passthrough and the lyric line depend on: the eye camera's picture
 // rendered once into a texture (how much of it is transparent, with and without post-processing),
 // every composition layer with its order and blending, and whether the lyric texture has content.
@@ -64,6 +64,8 @@ public sealed class VrCommands : MonoBehaviour
                 case "eyescale":XRSettings.eyeTextureResolutionScale=float.Parse(arg,System.Globalization.CultureInfo.InvariantCulture);break;
                 case "sweep":if(!sweeping)StartCoroutine(Sweep());break;
                 case "probe":StartCoroutine(Probe());break;
+                case "seethrough":session.SetSeeThrough(arg!="off");break;
+                case "delay":MidiPlayer.VisualDelayMs=float.Parse(arg,System.Globalization.CultureInfo.InvariantCulture);break;
                 default:Debug.LogWarning("VR command unknown: "+line);break;
             }
         }

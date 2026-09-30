@@ -13,7 +13,7 @@ using UnityEngine;
 public sealed class VrMenu : MonoBehaviour
 {
     VrSession session;HandInput hands;
-    Transform palm,list;VrButton songs,play,mode,room,recenter,prev,next,close;TextBox listTitle,listStatus;
+    Transform palm,list;VrButton songs,play,mode,room,recenter,inside,sooner,later,prev,next,close;TextBox listTitle,listStatus,syncLabel;
     readonly List<VrButton> cards=new();List<SongLibraryPanel.Song> library=new();int page;float palmLinger;
     // Built in metres; the roots take the rig's scale (which changes with the mode) each frame.
     static float S=>VrSession.Scale;
@@ -30,6 +30,12 @@ public sealed class VrMenu : MonoBehaviour
         mode=Row("Play the torus",()=>session.SetMode(session.Current==VrSession.Mode.Song?VrSession.Mode.TorusPlay:VrSession.Mode.Song));
         room=Row("Passthrough",()=>session.SetPassthrough(!session.Passthrough));
         recenter=Row("Recenter",session.Recenter);
+        inside=Row("See inside",()=>session.SetSeeThrough(!session.SeeThrough));
+        // Visual sync: the pictures a little sooner or later than the sound, 10 ms a press.
+        syncLabel=TextBox.Create("",TextAlignmentOptions.Center);syncLabel.transform.SetParent(palm,false);syncLabel.Size=.012f*10*.55f;syncLabel.Color=new Color(.75f,.85f,.95f);syncLabel.TextField.fontMaterial.renderQueue=3200;
+        syncLabel.transform.localPosition=new Vector3(0,y+PalmButton.y*.2f,-.002f);y-=PalmButton.y*.55f;
+        sooner=VrButton.Create(palm,"Sooner",new Vector2(PalmButton.x*.48f,PalmButton.y),1,()=>MidiPlayer.VisualDelayMs-=10);sooner.transform.localPosition=new Vector3(-PalmButton.x*.26f,y,0);
+        later=VrButton.Create(palm,"Later",new Vector2(PalmButton.x*.48f,PalmButton.y),1,()=>MidiPlayer.VisualDelayMs+=10);later.transform.localPosition=new Vector3(PalmButton.x*.26f,y,0);
         palm.gameObject.SetActive(false);
         BuildList();ShowSongs(!session.Midi.Loaded);
     }
@@ -117,9 +123,11 @@ public sealed class VrMenu : MonoBehaviour
         play.SetText(loading?$"Loading {Mathf.RoundToInt(audio.Progress*100)}%":session.Midi.IsPlaying?"Pause":"Play");play.Interactable=session.Midi.Loaded&&!loading;
         mode.SetText(session.Current==VrSession.Mode.Song?"Play the torus":"Song view");
         room.SetText(session.Passthrough?"Blackout":"Passthrough");
+        inside.SetText(session.SeeThrough?"Solid torus":"See inside");
+        string sync=$"Visual sync {MidiPlayer.VisualDelayMs:+0;-0;0} ms";if(syncLabel.TextField.text!=sync)syncLabel.Text=sync;
         if(list.gameObject.activeSelf){foreach(var c in cards)c.Interactable=!loading;if(loading)listStatus.Text=$"Loading {Mathf.RoundToInt(audio.Progress*100)}%";}
         // Pokes: the palm menu only from the right hand (the left carries it); the list from either.
-        if(palm.gameObject.activeSelf)foreach(var b in new[]{songs,play,mode,room,recenter})b.Poke(new[]{hands.Right},1);
+        if(palm.gameObject.activeSelf)foreach(var b in new[]{songs,play,mode,room,recenter,inside,sooner,later})b.Poke(new[]{hands.Right},1);
         if(list.gameObject.activeSelf)foreach(var b in cards.Append(prev).Append(next).Append(close))if(b.gameObject.activeSelf)b.Poke(hands.Both,1);
     }
 }

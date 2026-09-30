@@ -238,6 +238,17 @@ public sealed class VrSession : MonoBehaviour
         Debug.Log("VR passthrough on: "+Diagnostics());
         passthroughCheck=null;
     }
+    // See inside: the torus's depth-only copy stops hiding what lies inside and behind its
+    // surface, and the tonal field's fill thins, so the melody lines and notes show through.
+    public bool SeeThrough {get;private set;}
+    const float SolidField=.7f,SeeThroughField=.25f;
+    public void SetSeeThrough(bool on)
+    {
+        SeeThrough=on;
+        var field=Main.GetComponentInChildren<UmbilicField>(true);if(field==null)return;
+        var fill=field.GetComponent<MeshRenderer>();if(fill!=null&&fill.sharedMaterial!=null)fill.sharedMaterial.SetFloat("_Opacity",on?SeeThroughField:SolidField);
+        foreach(var r in field.GetComponentsInChildren<MeshRenderer>(true))if(r.name=="Torus depth occluder")r.enabled=!on;
+    }
     public void SetMode(Mode mode)
     {
         if(mode==Current)return;Current=mode;
@@ -258,6 +269,8 @@ public sealed class VrSession : MonoBehaviour
         s.Append($"; composition layer provider started {UnityEngine.XR.OpenXR.CompositionLayers.OpenXRLayerProvider.isStarted}");
         s.Append($"; lyrics shown {(lyrics!=null&&lyrics.Shown)} output {(lyrics?.Output!=null?lyrics.Output.width+"x"+lyrics.Output.height:"none")} presence {(lyrics!=null?lyrics.Presence:0):0.00} card {(lyricQuad!=null&&lyricQuad.activeSelf)}");
         s.Append($"; floor origin {floorOrigin} head {Head.transform.localPosition}");
+        AudioSettings.GetDSPBufferSize(out int length,out int count);
+        s.Append($"; audio {AudioSettings.outputSampleRate} Hz, {count} buffers of {length}: visuals {MidiPlayer.OutputLatency*1000:0} ms behind the mixer ({MidiPlayer.VisualDelayMs:+0;-0;0} ms set by hand); see inside {SeeThrough}");
         foreach(var c in Camera.allCameras)if(c!=Head)s.Append($"; camera {c.name} → {(c.targetTexture!=null?c.targetTexture.name:"screen")}");
         foreach(var d in Resources.FindObjectsOfTypeAll<UIDocument>())if(d!=null&&d.panelSettings!=null&&d.panelSettings.targetTexture==null&&d.isActiveAndEnabled)s.Append($"; screen panel {d.name}");
         return s.ToString();

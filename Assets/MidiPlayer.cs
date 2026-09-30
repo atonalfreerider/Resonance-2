@@ -23,7 +23,9 @@ public class MidiPlayer : MonoBehaviour
     public double ScoreDuration { get; private set; }
     public SongAudio Recording => GetComponent<SongAudio>();
     public double Duration => Recording != null && Recording.Ready ? Recording.Source.clip.length : ScoreDuration;
-    public double ScorePosition => Recording != null && Recording.Ready ? Recording.Alignment.ToMidi(Position) : Position;
+    // The score position the pictures follow (every visual reads this): on the desktop the DSP
+    // clock itself; in the headset the smoothed clock delayed by the audio output latency.
+    public double ScorePosition => Recording != null && Recording.Ready ? Recording.Alignment.ToMidi(VisualPosition) : VisualPosition;
     public double AudioTime(double scoreTime) => Recording != null && Recording.Ready ? Recording.Alignment.ToAudio(scoreTime) : scoreTime;
     public PreparedPatternSong Prepared {get;private set;}
     public PreparedPatternSong HarmonicPrepared {get;private set;}
@@ -38,13 +40,20 @@ public class MidiPlayer : MonoBehaviour
     int memoryIndex;
     // PlayScheduled and all visual deadlines use the same continuous DSP clock.
     public static double ScheduledPosition(double start,double dspStart,double dspNow,float speed,double duration)=>Math.Min(duration,start+Math.Max(0,dspNow-dspStart)*speed);
-    public double Position => IsPlaying?ScheduledPosition(originPosition,originDsp,VisualDsp,playbackSpeed,Duration):originPosition;
-    // The DSP clock advances once per audio buffer (1024 samples, about 21 ms), so at a headset's
-    // 72 Hz some frames would see no time pass and the next a whole buffer: melody lines and note
-    // pulses would step. In the headset the clock is carried forward by frame time and eased
-    // toward the DSP clock (about half a buffer ahead of it, where the true time averages), once
-    // per frame, never going backward. Elsewhere it is the DSP clock itself.
+    public double Position => IsPlaying?ScheduledPosition(originPosition,originDsp,AudioSettings.dspTime,playbackSpeed,Duration):originPosition;
+    public double VisualPosition => IsPlaying?ScheduledPosition(originPosition,originDsp,VisualDsp,playbackSpeed,Duration):originPosition;
+    // The DSP clock is the time of the samples being mixed now: they are heard after the output
+    // buffers drain (and the device's own delay), and it advances once per buffer (1024 samples,
+    // about 21 ms), so at a headset's 72 Hz some frames would see no time pass and the next a
+    // whole buffer. In the headset the pictures follow a clock carried forward by frame time and
+    // eased toward the DSP clock minus the output latency, once per frame, never going backward:
+    // smooth, and in step with what is heard. OutputLatency is the buffers' length plus a
+    // correction the viewer can set (VisualDelayMs, saved). Elsewhere it is the DSP clock itself.
     static double smoothDsp,smoothReal;static int smoothFrame=-1;
+    public const string VisualDelayKey="Resonance.VrVisualDelayMs";
+    public static float VisualDelayMs{get=>PlayerPrefs.GetFloat(VisualDelayKey,0);set{PlayerPrefs.SetFloat(VisualDelayKey,value);PlayerPrefs.Save();}}
+    public static double BufferLatency{get{AudioSettings.GetDSPBufferSize(out int length,out int count);return (double)length*Math.Max(1,count)/Math.Max(1,AudioSettings.outputSampleRate);}}
+    public static double OutputLatency=>BufferLatency+VisualDelayMs/1000.0;
     public static double VisualDsp
     {
         get
@@ -52,8 +61,7 @@ public class MidiPlayer : MonoBehaviour
             double dsp=AudioSettings.dspTime;
             if(!VrSession.Active)return dsp;
             if(smoothFrame==Time.frameCount)return smoothDsp;
-            AudioSettings.GetDSPBufferSize(out int length,out _);double target=dsp+.5*length/Math.Max(1,AudioSettings.outputSampleRate);
-            double real=Time.unscaledTimeAsDouble;
+            double target=dsp-OutputLatency,real=Time.unscaledTimeAsDouble;
             if(smoothFrame<0||Math.Abs(target-smoothDsp)>.1)smoothDsp=target;
             else{double next=smoothDsp+(real-smoothReal);next+=(target-next)*.1;smoothDsp=Math.Max(smoothDsp,next);}
             smoothReal=real;smoothFrame=Time.frameCount;return smoothDsp;
