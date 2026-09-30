@@ -397,7 +397,7 @@ public sealed class PatternWheelDeck : VisualElement
             float flash=(float)Math.Exp(-Math.Max(0,midi.Cycles.BeatAt(midi.ScorePosition)-source.Sections[si].Start)*4);
             Line(p,new Vector2(rackX,center.y),new Vector2(center.x-ring,center.y),Ink(.45f+.55f*flash),1.5f);
             Disc(p,new Vector2(rackX,center.y),3.5f,Label(1));bloom.Disk(new Vector2(rackX,center.y),3,Ink(1),flash);
-            ctx.DrawText("DRAG TO SEEK",new Vector2(0,h-30),10,Label(.6f));
+            if(!RecordingMode.Active)ctx.DrawText("DRAG TO SEEK",new Vector2(0,h-30),10,Label(.6f));
         }
         // "V2": the family's short name and which visit this is. A bookend (the intro's
         // material closing the song) keeps its own name.

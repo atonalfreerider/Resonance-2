@@ -181,7 +181,12 @@ public sealed class InstrumentChangers
         for(int i=0;i<dimples.Count;)
         {
             int j=i;p.fillColor=dimples[i].color;p.BeginPath();
-            while(j<dimples.Count&&dimples[j].key==dimples[i].key){var (_,_,at,size)=dimples[j];p.MoveTo(at+new Vector2(size,0));p.Arc(at,size,Angle.Degrees(0),Angle.Degrees(360));j++;}
+            // Bound both path size and overlap tessellation, even for dense long patterns.
+            while(j<dimples.Count&&j-i<16&&dimples[j].key==dimples[i].key){
+                var (_,_,at,size)=dimples[j];
+                for(int k=0;k<12;k++){float angle=k*Mathf.PI/6;var point=at+new Vector2(Mathf.Cos(angle),Mathf.Sin(angle))*size;if(k==0)p.MoveTo(point);else p.LineTo(point);}
+                p.ClosePath();j++;
+            }
             p.Fill();i=j;
         }
         return (d.At(0,(inner+outer)/2),varied);

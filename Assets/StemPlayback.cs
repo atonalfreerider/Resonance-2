@@ -20,6 +20,7 @@ public sealed class StemPlayback : MonoBehaviour
     public float Progress=>!IsLoading?1:Stems.Length==0?1:(prepared+stemProgress)/Stems.Length;
     int prepared;volatile float stemProgress;
     public string SelectedId {get;private set;}="";
+    public string VisualId {get;private set;}="";
     public string Status {get;private set;}="No separated stems in this bundle.";
     sealed class CachedStem { public AudioSource Source;public PreparedPatternSong Score;public float Gain; }
     readonly System.Collections.Generic.Dictionary<string,CachedStem> cache=new();
@@ -32,7 +33,7 @@ public sealed class StemPlayback : MonoBehaviour
     void Awake(){midi=GetComponent<MidiPlayer>();recording=GetComponent<SongAudio>();}
     public IEnumerator Preload(Stem[] stems,string folder)
     {
-        Stems=stems??Array.Empty<Stem>();directory=folder;SelectedId="";MasterGain=1;IsLoading=true;prepared=0;stemProgress=0;int version=++generation;
+        Stems=stems??Array.Empty<Stem>();directory=folder;SelectedId=VisualId="";MasterGain=1;IsLoading=true;prepared=0;stemProgress=0;int version=++generation;
         foreach(var stem in Stems){
             Status="Preparing instant solo: "+stem.name+"…";RefreshUI();
             var task=Task.Run(()=>{
@@ -66,7 +67,7 @@ public sealed class StemPlayback : MonoBehaviour
     public void Clear()
     {
         generation++;IsLoading=false;foreach(var item in cache.Values){if(item.Source!=null){item.Source.Stop();Destroy(item.Source.clip);Destroy(item.Source.gameObject);}}
-        cache.Clear();Stems=Array.Empty<Stem>();SelectedId="";MasterGain=1;Status="Load a prepared song with stems.";RefreshUI();
+        cache.Clear();Stems=Array.Empty<Stem>();SelectedId=VisualId="";MasterGain=1;Status="Load a prepared song with stems.";RefreshUI();
     }
     static string Hash(string path){using var h=System.Security.Cryptography.SHA256.Create();using var s=File.OpenRead(path);return BitConverter.ToString(h.ComputeHash(s)).Replace("-","").ToLowerInvariant();}
     string Verified(string path,string hash)
@@ -77,11 +78,13 @@ public sealed class StemPlayback : MonoBehaviour
     }
     // Extra gain on the soloed stem (a story cue can lift a quiet part); 1 otherwise.
     public float SoloGain=1;
-    public void Select(string id)
+    public void Select(string id,string visualId=null)
     {
-        if(!ReadyToSolo||recording.Busy||id==SelectedId)return;
+        visualId??=id;
+        if(!ReadyToSolo||recording.Busy||(id==SelectedId&&visualId==VisualId))return;
         if(id!=""&&!cache.ContainsKey(id))return;
-        SelectedId=id;midi.SetVisualPrepared(id==""?null:cache[id].Score);
+        if(visualId!=""&&!cache.ContainsKey(visualId))return;
+        SelectedId=id;VisualId=visualId;midi.SetVisualPrepared(visualId==""?null:cache[visualId].Score);
         Status=id==""?"Full mix · original recording and MIDI":"Solo: "+Stems.First(s=>s.id==id).name+" · full-song chord colors";
         RefreshUI();
     }

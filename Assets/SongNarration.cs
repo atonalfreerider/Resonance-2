@@ -9,7 +9,7 @@ using UnityEngine.UIElements;
 public sealed class SongNarration : MonoBehaviour
 {
     // duck: the music gain under this line, measured offline so the voice stands clear of it (0 in older manifests).
-    [Serializable] public sealed class Segment { public int cue;public double start,end;public float duck; }
+    [Serializable] public sealed class Segment { public int cue;public double start,end;public float duck;public float[] wordStarts; }
     [Serializable] public sealed class Manifest { public int version,sampleRate,samples;public string storySha256,audioSha256,audioPath,sha256;public double duration;public Segment[] segments; }
     sealed class Decoded { public Manifest Meta;public float[] Data;public int Channels,Rate; }
     MidiPlayer midi;SongDirector director;AudioSource voice;Toggle toggle;Label status;
@@ -23,6 +23,7 @@ public sealed class SongNarration : MonoBehaviour
     // Still reading this song's voice track (a tour waits for it before it starts).
     public bool Pending=>director!=null&&(pending!=null||revision!=director.Revision);
     public AudioSource Source=>voice;
+    public Segment SegmentFor(int cue)=>manifest?.segments?.FirstOrDefault(s=>s.cue==cue);
     public bool CueFinished(int index,double position)=>!Enabled||!Ready||!manifest.segments.Any(s=>s.cue==index&&position<s.end);
     public void Bind(VisualElement page)
     {

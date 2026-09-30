@@ -12,7 +12,7 @@ public sealed class SongDirector : MonoBehaviour
     // image: a history picture inside the bundle, shown as a pop-up for the cue (StoryPictures).
     [Serializable] public sealed class Cue { public double start,end;public string text,view,stem,annotationTarget,annotationLabel,image,imageCaption,imageCredit,imagePlacement;public bool uncoil,releaseSoloAfterNarration;
         // soloGain: how much louder a quiet stem plays while this cue solos it (1 when absent); narrationEnd: when its voice stops.
-        public float soloGain,narrationEnd; }
+        public float soloGain,narrationEnd; public double soloUntil; public string visualStem; }
     [Serializable] public sealed class Narrator { public string name,voice,language; }
     [Serializable] public sealed class Story {
         public int version;public string title,midiSha256,audioSha256,patternsSha256,model;public double duration;public Cue[] cues;public Narrator narrator;
@@ -47,6 +47,7 @@ public sealed class SongDirector : MonoBehaviour
         gameObject.AddComponent<StoryPictures>().Bind(root,panel);
         footer=new VisualElement{name="song-story-footer",pickingMode=PickingMode.Ignore};root.Add(footer);
         caption=new Label{name="song-story-caption",pickingMode=PickingMode.Ignore,enableRichText=false};footer.Add(caption);
+        gameObject.AddComponent<SongRecordingCaptions>().Bind(root);
         footer.style.display=DisplayStyle.None;toggle.SetEnabled(false);
     }
     static string Hash(string path){using var h=System.Security.Cryptography.SHA256.Create();using var s=File.OpenRead(path);return BitConverter.ToString(h.ComputeHash(s)).Replace("-","").ToLowerInvariant();}
@@ -65,6 +66,8 @@ public sealed class SongDirector : MonoBehaviour
             if(cue==null||!double.IsFinite(cue.start)||!double.IsFinite(cue.end)||cue.start<end||cue.end<=cue.start||cue.end>value.duration+.001||
                 string.IsNullOrWhiteSpace(cue.text)||cue.text.Length>450||!Enum.GetNames(typeof(VisualizationViews.View)).Contains(cue.view)||
                 (cue.uncoil&&cue.view!="Torus")||cue.stem==null||(cue.stem!=""&&!(manifest.stems??Array.Empty<StemPlayback.Stem>()).Any(s=>s.id==cue.stem))||
+                !double.IsFinite(cue.soloUntil)||(cue.soloUntil!=0&&(cue.soloUntil<=cue.start||cue.soloUntil>cue.end||cue.stem==""))||
+                (!string.IsNullOrEmpty(cue.visualStem)&&!(manifest.stems??Array.Empty<StemPlayback.Stem>()).Any(s=>s.id==cue.visualStem))||
                 !Placements.Contains(cue.imagePlacement??"")||(!string.IsNullOrEmpty(cue.image)&&(StoryPictures.Resolve(directory,cue.image)==null||string.IsNullOrWhiteSpace(cue.imageCredit))))
                 throw new InvalidDataException("Invalid story cue; no controls applied.");
             end=cue.end;
@@ -132,8 +135,8 @@ public sealed class SongDirector : MonoBehaviour
             orbit.Turn(-OrbitSpeed*Time.unscaledDeltaTime);
         if(index>=0){
             var active=story.cues[index];var narration=GetComponent<SongNarration>();
-            bool release=active.releaseSoloAfterNarration&&(narration==null||narration.CueFinished(index,now));
-            stems.Select(release?"":active.stem);stems.SoloGain=!release&&active.stem!=""&&active.soloGain>0?active.soloGain:1;
+            bool release=(active.soloUntil>0&&now>=active.soloUntil)||(active.releaseSoloAfterNarration&&(narration==null||narration.CueFinished(index,now)));
+            stems.Select(release?"":active.stem,string.IsNullOrEmpty(active.visualStem)?null:active.visualStem);stems.SoloGain=!release&&active.stem!=""&&active.soloGain>0?active.soloGain:1;
         }
         if(index==current)return;
         current=index;

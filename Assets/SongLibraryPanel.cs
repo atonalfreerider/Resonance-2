@@ -25,7 +25,7 @@ public sealed class SongLibraryPanel : MonoBehaviour
     VisualElement root,panel,list,progress,progressFill;Button tuck,tutorial;Label status;bool hidden;
     // While the tutorial runs the list is out of the way; it comes back when the tour ends.
     public void Hide(){hidden=true;panel.style.display=DisplayStyle.None;tuck.style.display=DisplayStyle.None;}
-    public void Show(){hidden=false;panel.style.display=DisplayStyle.Flex;if(!Intro){SetOpen(true);tuck.style.display=DisplayStyle.Flex;}}
+    public void Show(){hidden=false;panel.style.display=DisplayStyle.Flex;if(!Intro){SetOpen(true);tuck.style.display=DisplayStyle.Flex;}else Rescan();}
     MidiPlayer midi;SongAudio audio;float shown=1,placedShown=-1,placedWidth=-1,placedHeight=-1;bool placedIntro,placedBusy;string loadedScore="";
     const float Width=440;
 
@@ -40,6 +40,8 @@ public sealed class SongLibraryPanel : MonoBehaviour
         var eyebrow=new Label("RESONANCE");eyebrow.style.color=new Color(.52f,.66f,.8f);eyebrow.style.fontSize=11;eyebrow.style.letterSpacing=3;panel.Add(eyebrow);
         var title=new Label("Choose a song");title.style.fontSize=24;title.style.unityFontStyleAndWeight=FontStyle.Bold;title.style.marginBottom=4;title.style.color=Color.white;panel.Add(title);
         var hint=new Label("Fully prepared songs from the library: an aligned recording and its pattern bundle.");hint.style.whiteSpace=WhiteSpace.Normal;hint.style.color=new Color(.64f,.7f,.78f);hint.style.fontSize=12;hint.style.marginBottom=10;panel.Add(hint);
+        var refresh=new Button(()=>{ExplorerInputFocus.ClaimUI();Rescan();}){text="↻  Refresh library",name="refresh-song-library",tooltip="Find newly prepared songs without restarting the player"};
+        refresh.style.marginBottom=8;refresh.style.color=new Color(.72f,.84f,.96f);panel.Add(refresh);
         tutorial=new Button(()=>{ExplorerInputFocus.ClaimUI();GetComponent<TutorialDirector>()?.Play();}){text="▶  Tutorial · how the torus works",name="tutorial-button"};
         tutorial.style.marginBottom=10;tutorial.style.marginRight=0;tutorial.style.backgroundColor=new Color(.16f,.3f,.42f);tutorial.style.borderLeftColor=tutorial.style.borderRightColor=tutorial.style.borderTopColor=tutorial.style.borderBottomColor=new Color(.35f,.55f,.72f);
         tutorial.style.borderTopLeftRadius=tutorial.style.borderTopRightRadius=tutorial.style.borderBottomLeftRadius=tutorial.style.borderBottomRightRadius=7;tutorial.style.paddingTop=9;tutorial.style.paddingBottom=9;tutorial.style.unityTextAlign=TextAnchor.MiddleLeft;panel.Add(tutorial);
@@ -58,7 +60,9 @@ public sealed class SongLibraryPanel : MonoBehaviour
         tuck.style.display=DisplayStyle.None;
         Rescan();
     }
-    public void SetOpen(bool open){Open=open;tuck.text=open?"›":"‹";tuck.tooltip=open?"Tuck away the song list":"Choose a song";if(!open)ExplorerInputFocus.ClaimViewport();}
+    public void SetOpen(bool open){if(open&&!Open&&list!=null)Rescan();Open=open;tuck.text=open?"›":"‹";tuck.tooltip=open?"Tuck away the song list":"Choose a song";if(!open)ExplorerInputFocus.ClaimViewport();}
+
+    void OnApplicationFocus(bool focused){if(focused&&list!=null&&!hidden&&(Intro||Open))Rescan();}
 
     // A song is fully prepared when its folder holds the aligned score, the recording manifest
     // beside it, and a pattern bundle of the current version.

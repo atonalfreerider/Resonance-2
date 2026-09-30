@@ -88,6 +88,7 @@ def preview_mix(bundle,manifest,cues,segments,timeline,path):
         if c['stem'] and c['stem'] in stems:
             solo,_=mono(bundle/stems[c['stem']]['audioPath'])
             a=int(c['start']*rate);end=c['end']
+            if c.get('soloUntil',0)>0:end=min(end,c['soloUntil'])
             if c.get('releaseSoloAfterNarration'):end=min(end,max([s['end'] for s in segments if s['cue']==i],default=end))
             b=min(len(music),int(end*rate));music[a:b]=solo[a:b]*c.get('soloGain',1)
     t=np.arange(len(music))/rate;env=duck_envelope(segments,len(music)/rate)
@@ -105,7 +106,7 @@ def mono(path):
 
 
 PROVIDERS=('openai','cartesia','elevenlabs')
-MODELS=dict(openai='gpt-4o-mini-tts',cartesia='sonic-3.6',elevenlabs='eleven_multilingual_v2')
+MODELS=dict(openai='gpt-4o-mini-tts',cartesia='sonic-3.6',elevenlabs='eleven_v4')
 
 
 def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai',override_voice=None):
@@ -131,7 +132,10 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
         i,cue=item;window=speech_window(cue)
         if window is None:return i,None,1
         if provider=='elevenlabs':
-            body=dict(text=cue.get('speech') or cue['text'],model_id=model,voice_settings=dict(stability=.5,similarity_boost=.75,style=.15,use_speaker_boost=True))
+            settings=dict(stability=.5,similarity_boost=.75)
+            if model not in ('eleven_v4','eleven_v4_turbo'):
+                settings.update(style=.15,use_speaker_boost=True)
+            body=dict(text=cue.get('speech') or cue['text'],model_id=model,language_code=language[:2],voice_settings=settings)
         elif provider=='cartesia':
             body=dict(model_id=model,voice=voice,transcript=cue.get('speech') or cue['text'],language=language,output_format=dict(container='wav',encoding='pcm_s16le',sample_rate=RATE),generation_config=dict(speed=1,volume=1))
         else:body=dict(model=model,voice=voice,input=cue.get('speech') or cue['text'],instructions=DELIVERY,response_format='wav',speed=1.0)
@@ -173,7 +177,7 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
         start=round(speech_window(cues[i])[0]*RATE);end=start+len(signal)
         if end>len(timeline):raise ValueError('Narration exceeds recording')
         timeline[start:end]+=signal
-        solo='' if cues[i].get('releaseSoloAfterNarration') else cues[i]['stem'];under=music.get(solo,music[''])
+        solo='' if cues[i].get('releaseSoloAfterNarration') or cues[i].get('soloUntil',0)>0 else cues[i]['stem'];under=music.get(solo,music[''])
         speech=band_rms(signal,RATE,0,len(signal)/RATE);level=band_rms(under[0],under[1],start/RATE,end/RATE)*(cues[i].get('soloGain',1) if solo else 1)
         segments.append(dict(cue=i,start=start/RATE,end=end/RATE,tempoRatio=ratio,duck=round(duck_gain(speech,level),4)))
     spoken=sum(s['end']-s['start'] for s in segments)
@@ -199,7 +203,7 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
 
 if __name__=='__main__':
     import argparse
-    p=argparse.ArgumentParser();p.add_argument('bundle');p.add_argument('--key-file');p.add_argument('--voice',help="overrides the story's narrator");p.add_argument('--provider',choices=['openai','cartesia'])
+    p=argparse.ArgumentParser();p.add_argument('bundle');p.add_argument('--key-file');p.add_argument('--voice',help="overrides the story's narrator");p.add_argument('--provider',choices=list(PROVIDERS))
     a=p.parse_args();settings=read_json(DATA/'settings.json') or {}
     provider=a.provider or settings.get('narrationProvider','openai')
     key_file=a.key_file or settings.get('cartesiaKeyFile' if provider=='cartesia' else 'storyKeyFile')

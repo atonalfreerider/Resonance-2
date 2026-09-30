@@ -96,6 +96,10 @@ def validate_cues(cues, duration, stems, source_ids=(), bundle=None):
             raise ValueError('Overlapping or out-of-range story cues')
         if cue['view'] not in VIEWS or cue['stem'] not in {'', *stems}:
             raise ValueError('Unavailable view or stem')
+        if cue.get('visualStem','') not in {'', *stems}:
+            raise ValueError('Unavailable visual stem')
+        if 'soloUntil' in cue and (not isinstance(cue['soloUntil'], (int, float)) or isinstance(cue['soloUntil'], bool) or not math.isfinite(cue['soloUntil']) or not start < cue['soloUntil'] <= end or not cue['stem']):
+            raise ValueError('soloUntil must fall within a soloed scene')
         if not isinstance(cue['uncoil'], bool) or (cue['uncoil'] and cue['view'] != 'Torus'):
             raise ValueError('Uncoil requires the Torus view')
         if not isinstance(cue['text'], str) or not 1 <= len(cue['text']) <= 450:

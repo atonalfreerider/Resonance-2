@@ -19,8 +19,6 @@ static class VideoRecorderMenu
 {
     const string Request="Resonance.RecordRequest";
     const int Fps=30;
-    [MenuItem("Tools/Resonance/Record/Tutorial · vertical (1080×1920)")] static void TutorialVertical()=>Begin("",true);
-    [MenuItem("Tools/Resonance/Record/Tutorial · horizontal (1920×1080)")] static void TutorialHorizontal()=>Begin("",false);
     [MenuItem("Tools/Resonance/Record/Tour of the loaded song · vertical")] static void TourVertical()=>Begin(LoadedSong(),true);
     [MenuItem("Tools/Resonance/Record/Tour of the loaded song · horizontal")] static void TourHorizontal()=>Begin(LoadedSong(),false);
 

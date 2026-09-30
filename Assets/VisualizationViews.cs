@@ -78,6 +78,7 @@ public sealed class VisualizationViews : MonoBehaviour
         tuck.style.borderTopLeftRadius=0;tuck.style.borderBottomLeftRadius=0;
         tuck.style.borderTopWidth=tuck.style.borderBottomWidth=tuck.style.borderLeftWidth=tuck.style.borderRightWidth=0;
         panel.style.paddingTop=18;
+        SetVertical(Screen.height>Screen.width);
         SetPanelHidden(true);
         SetView(View.Overview);
     }
@@ -101,18 +102,19 @@ public sealed class VisualizationViews : MonoBehaviour
         if(root==null||camera==null)return;
         uncoil?.SetValueWithoutNotify(GetComponent<Main>().Uncoiled);
         float blend=Main.ReducedMotion?1:1-Mathf.Exp(-Time.unscaledDeltaTime*8);
-        panelOpen=Mathf.Lerp(panelOpen,PanelHidden?0:1,blend);
+        panelOpen=Mathf.Lerp(panelOpen,PanelHidden||RecordingMode.Active?0:1,blend);
         float width=root.resolvedStyle.width,height=root.resolvedStyle.height;
         if(!float.IsFinite(width)||width<1||height<1)return;
         float panelWidth=panel.layout.width;
         panel.style.translate=new Translate(-panelWidth*(1-panelOpen),0);panel.style.opacity=panelOpen;
         panel.style.visibility=panelOpen<.005f?Visibility.Hidden:Visibility.Visible;
-        float left=panelWidth*panelOpen,right=library!=null?library.DockedWidth:0;
+        float left=panelWidth*panelOpen,right=!RecordingMode.Active&&library!=null?library.DockedWidth:0;
         tuck.style.left=left;tuck.style.top=Mathf.Max(90,(height-64)*.5f);
         float available=Mathf.Max(200,width-left-right);
         timelineFocus=Mathf.Lerp(timelineFocus,Current==View.Timeline?1:0,blend);
         timelineOpacity=Mathf.Lerp(timelineOpacity,Current==View.Overview||Current==View.Timeline||Current==View.Lyrics?1:0,blend);
         overviewSplit=Mathf.Lerp(overviewSplit,Current==View.Overview||Current==View.Lyrics?1:0,blend);
+        bool hasLyrics=(GetComponent<MidiPlayer>().HarmonicPrepared?.Lyrics?.Lines?.Length??0)>0;
         bool lyricView=Current==View.Lyrics,portrait=Vertical||available<height*.95f||lyricView;
         Rect dock,strip,scene;float sideFrame;
         if(!portrait)
@@ -135,7 +137,7 @@ public sealed class VisualizationViews : MonoBehaviour
         {
             // Portrait: the torus above, the lyric strip between, the wheels below (in lyric mode
             // the strip and the panel are larger).
-            float sceneHeight=height*(lyricView?.3f:.44f),stripHeight=Mathf.Clamp(height*(lyricView?.26f:.15f),70,400);
+            float sceneHeight=height*(lyricView?.3f:hasLyrics?.44f:.64f),stripHeight=!hasLyrics&&!lyricView?0:Mathf.Clamp(height*(lyricView?.26f:.15f),70,400);
             strip=new Rect(left+12,sceneHeight+4,available-24,stripHeight);
             float dockTop=strip.yMax+8;dock=new Rect(left+12,dockTop,available-24,height-dockTop-10);
             scene=new Rect(left,0,available,strip.yMin-2);
@@ -172,7 +174,7 @@ public sealed class VisualizationViews : MonoBehaviour
         // The lyric strip: between the wheels and the torus in the overview, larger in lyric mode.
         if(lyrics!=null)
         {
-            bool wanted=(Current==View.Overview||lyricView)&&timelineFocus<.5f;
+            bool wanted=hasLyrics&&(Current==View.Overview||lyricView)&&timelineFocus<.5f;
             lyrics.Wanted=wanted;lyrics.Viewport=new Rect(strip.x/width,1-strip.yMax/height,strip.width/width,strip.height/height);
         }
         // Lyric mode focuses on the lyrics: the torus steps back and the drum wheel lies deep behind.

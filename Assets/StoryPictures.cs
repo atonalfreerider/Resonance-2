@@ -123,7 +123,7 @@ public sealed class StoryPictures : MonoBehaviour
         }
     }
     string placement="";
-    VisualizationViews.View placedView;Rect placedStrip;bool placedVertical;
+    VisualizationViews.View placedView;Rect placedStrip;bool placedVertical,placedInstrumental;
     void Fill(SongDirector.Cue cue)
     {
         var texture=textures[shown];picture.style.backgroundImage=new StyleBackground(texture);
@@ -142,12 +142,28 @@ public sealed class StoryPictures : MonoBehaviour
         if(!float.IsFinite(width)||width<1||height<1)return;
         float left=views.PanelHidden?20:controls.resolvedStyle.width+20,dock=library!=null?library.DockedWidth:0;
         var view=views.Current;var strip=views.LyricStrip;
-        if(width==placedWidth&&height==placedHeight&&left==placedLeft&&dock==placedDock&&placement==placedPlacement&&view==placedView&&strip==placedStrip&&views.Vertical==placedVertical)return;
+        bool instrumental=(clock?.HarmonicPrepared?.Lyrics?.Lines?.Length??0)==0;
+        if(width==placedWidth&&height==placedHeight&&left==placedLeft&&dock==placedDock&&placement==placedPlacement&&view==placedView&&strip==placedStrip&&views.Vertical==placedVertical&&instrumental==placedInstrumental)return;
+        placedInstrumental=instrumental;
         placedVertical=views.Vertical;
         placedWidth=width;placedHeight=height;placedLeft=left;placedDock=dock;placedPlacement=placement;placedView=view;placedStrip=strip;
         var texture=shown!=null&&textures.TryGetValue(shown,out var t)?t:null;
         float aspect=texture!=null?Mathf.Clamp(texture.width/(float)Mathf.Max(1,texture.height),.55f,2.2f):1.4f;
         bool stacked=views.Vertical||height>width*1.05f;
+        // Without a lyric column, centre the portrait in the usable viewport in either
+        // orientation. Leave the view selector above and the narration caption below.
+        if(instrumental)
+        {
+            float availableWidth=Mathf.Max(1,width-dock-left-20),availableHeight=Mathf.Max(1,height-Top-110);
+            float iw=Mathf.Min(availableWidth*.65f,stacked?320:400),ih=iw/aspect;
+            float limit=Mathf.Min(availableHeight-Chrome,height*(stacked?.28f:.4f));
+            if(ih>Mathf.Max(1,limit)){ih=Mathf.Max(1,limit);iw=ih*aspect;}
+            float cw=Mathf.Min(availableWidth,Mathf.Max(iw+16,MinCardWidth));
+            picture.style.width=iw;picture.style.height=ih;card.style.width=cw;
+            card.style.left=left+(availableWidth-cw)*.5f;
+            card.style.top=Top+Mathf.Max(0,(availableHeight-ih-Chrome)*.5f);
+            return;
+        }
         bool landscapeOverview=!stacked&&view==VisualizationViews.View.Overview&&strip.width<width*.5f&&strip.height>0;
         bool aboveStrip=strip.height>0&&(view==VisualizationViews.View.Lyrics||(view==VisualizationViews.View.Overview&&!landscapeOverview));
         float maxWidth=Mathf.Clamp(Mathf.Min(width*.26f,height*.42f),200,400),maxHeight=height*.44f;

@@ -12,10 +12,11 @@ public sealed class RecordingMode : MonoBehaviour
     public static bool Active {get;private set;}
     // Where a vertical frame's captions start, as a fraction of the height.
     public const float CaptionTop=.62f;
-    static readonly string[] Hidden={"visualization-views","tuck-side-menu","tuck-song-library","song-library","rack-play-pause","tutorial-back","tutorial-next","tutorial-skip","tutorial-progress"};
+    static readonly string[] Hidden={"controls","visualization-views","tuck-side-menu","tuck-song-library","song-library","rack-play-pause","load-progress","time-rack-seek","tutorial-back","tutorial-next","tutorial-skip","tutorial-progress","song-story-footer"};
     VisualElement root;readonly VisualElement[] found=new VisualElement[Hidden.Length];readonly bool[] hid=new bool[Hidden.Length];
     public void Bind(VisualElement ui){root=ui;}
     public static void Set(bool on){Active=on;}
+    void OnDestroy(){Active=false;}
     void LateUpdate()
     {
         if(root==null)return;

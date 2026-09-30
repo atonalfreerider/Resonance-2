@@ -26,6 +26,15 @@ public sealed class TutorialDirector : MonoBehaviour
     public string StepTitle=>StepIndex>=0&&StepIndex<steps.Length?steps[StepIndex].title:"";
     public string Diagram {get;private set;}="";
     public float StepTime {get;private set;}
+    // The tutorial's clock. Recording, the Recorder renders a constant 30 frames a second with the
+    // sound rendered in step (AudioRenderer), so game time is the video's time and the voice's,
+    // however slowly the editor runs; counted in real time there, a step could end before its
+    // narration had in the video (the credit lost its last words). Otherwise real time, as before.
+    static float Delta=>RecordingMode.Active?Time.deltaTime:Time.unscaledDeltaTime;
+    static float Clock=>RecordingMode.Active?Time.time:Time.unscaledTime;
+    // How long past its clip and pause a step waits for a voice that is still playing (or for a
+    // stalled clock) before it moves on regardless.
+    const float StepOverrun=4;
     // The sweep of the moebius step: how far round the ring the moving triangle is (0..1) and
     // how many of the four triangles it has snapped into place.
     public float Sweep {get;private set;}
@@ -119,7 +128,19 @@ public sealed class TutorialDirector : MonoBehaviour
             PrepareWords(step,(float)length);
             if(clip!=null){voice.clip=clip;voice.Play();}
             var action=StartCoroutine(Act(step.action,(float)length));
-            for(float t=0;t<length+.6f&&jump<0;t+=Time.unscaledDeltaTime){StepTime=t;if(orbit!=null&&orbit.enabled&&step.action!="keychange")orbit.Turn(-.09f*Time.unscaledDeltaTime);yield return null;}
+            // The step lasts its clip and a 0.6 s pause, and never ends while its voice is still
+            // playing: the pause then counts from the voice's end. A voice that never finishes gives
+            // up StepOverrun after the clip, and so does a clock that stops advancing.
+            float limit=(float)length+.6f,afterVoice=0,stalled=0;
+            for(float t=0;jump<0;t+=Delta)
+            {
+                StepTime=t;bool speaking=clip!=null&&voice.isPlaying;
+                if(!speaking&&t>=limit&&afterVoice>=.6f)break;
+                if(t>=limit+StepOverrun||stalled>=limit+StepOverrun)break;
+                if(orbit!=null&&orbit.enabled&&step.action!="keychange")orbit.Turn(-.09f*Delta);
+                yield return null;
+                afterVoice=speaking?0:afterVoice+Delta;if(Delta<=0)stalled+=Time.unscaledDeltaTime;
+            }
             if(action!=null)StopCoroutine(action);
             if(jump>=0){voice.Stop();main.Silence();i=jump-1;}
         }
@@ -177,7 +198,7 @@ public sealed class TutorialDirector : MonoBehaviour
                 yield return Wait(length*.9f);break;
         }
     }
-    static IEnumerator Wait(float s){for(float t=0;t<s;t+=Time.unscaledDeltaTime)yield return null;}
+    static IEnumerator Wait(float s){for(float t=0;t<s;t+=Delta)yield return null;}
     void Light(int[] degrees,bool allOctaves=false)
     {
         var list=new List<Tuple<int,float>>();
@@ -230,7 +251,7 @@ public sealed class TutorialDirector : MonoBehaviour
     // wrapped by a generous estimate, fit above the bottom margin; should the laid-out caption still
     // reach past the frame's edge, FitCaption steps the size down. Landscape and interactive
     // portrait keep SentenceSize.
-    const float MinSentenceSize=24,CaptionBottomMargin=24,CaptionLineHeight=1.5f;
+    const float MinSentenceSize=24,CaptionBottomMargin=44,CaptionLineHeight=1.5f;
     float sentenceSize=SentenceSize;
     bool RecordingVertical=>RecordingMode.Active&&Portrait;
     // The lines `items` take wrapped into `width` at `size`: `perLetter` em a letter, then `gap` em
@@ -255,12 +276,16 @@ public sealed class TutorialDirector : MonoBehaviour
         while(size>MinSentenceSize&&WrappedLines(sentenceWords,size,.58f,.36f,3,inner)*size*CaptionLineHeight>room)size--;
         return size;
     }
-    // The safety net: once laid out, a caption still reaching into the bottom margin shrinks its
-    // words a step at a time (each step lays it out again) until it clears or hits MinSentenceSize.
+    // The safety net: once laid out, a caption still reaching into the bottom margin (44 of the
+    // panel's 1349 at 1080x1920, about 62 px) shrinks its words a step at a time (each step lays it
+    // out again) until it clears or hits MinSentenceSize. Measured in the root's own layout, the
+    // frame Place() positions the caption in.
     void FitCaption(GeometryChangedEvent e)
     {
         if(!Playing||!RecordingVertical||wordLabels.Count==0||sentenceSize<=MinSentenceSize)return;
-        if(caption.worldBound.yMax<=root.worldBound.yMax-CaptionBottomMargin*.5f)return;
+        float bottom=caption.layout.yMax,limit=root.resolvedStyle.height-CaptionBottomMargin;
+        if(!float.IsFinite(bottom)||!float.IsFinite(limit)||bottom<=limit)return;
+        Debug.Log($"Tutorial caption: bottom {bottom:F0} past {limit:F0}, sentence size {sentenceSize} -> {Mathf.Max(MinSentenceSize,sentenceSize-2)}");
         sentenceSize=Mathf.Max(MinSentenceSize,sentenceSize-2);
         foreach(var l in wordLabels){l.style.fontSize=sentenceSize;l.style.marginRight=sentenceSize*.36f;}
     }
@@ -278,10 +303,10 @@ public sealed class TutorialDirector : MonoBehaviour
                 var l=wordLabels[i];int w=firstWord+i;l.style.color=w<k?Spoken:w==k?Lit:Upcoming;
                 if(w==litWord){l.style.scale=new Scale(Vector3.one);l.style.textShadow=new TextShadow{offset=Vector2.zero,blurRadius=0,color=Color.clear};wordGlows[i].style.opacity=0;}
             }
-            litWord=k;litAt=Time.unscaledTime;blooming=true;
+            litWord=k;litAt=Clock;blooming=true;
         }
         int index=litWord-firstWord;if(!blooming||index<0||index>=wordLabels.Count)return;
-        float e=Mathf.Clamp01((Time.unscaledTime-litAt)/.35f),swell=(1-e)*(1-e);
+        float e=Mathf.Clamp01((Clock-litAt)/.35f),swell=(1-e)*(1-e);
         var lit=wordLabels[index];
         lit.style.scale=new Scale(Vector3.one*(Main.ReducedMotion?1.06f:1.06f+.16f*swell));
         lit.style.textShadow=new TextShadow{offset=Vector2.zero,blurRadius=12+16*swell,color=new Color(1,.8f,.35f,.7f+.3f*swell)};
@@ -297,7 +322,7 @@ public sealed class TutorialDirector : MonoBehaviour
         diagrams.MarkDirtyRepaint();
         Place();
         // Between a step with a diagram and one without, the torus glides to its new frame.
-        if(placedPortrait){float target=TopInsetTarget;if(Mathf.Abs(views.SceneTopInset-target)>.5f)views.SceneTopInset=Main.ReducedMotion?target:Mathf.Lerp(views.SceneTopInset,target,1-Mathf.Exp(-Time.unscaledDeltaTime*4));}
+        if(placedPortrait){float target=TopInsetTarget;if(Mathf.Abs(views.SceneTopInset-target)>.5f)views.SceneTopInset=Main.ReducedMotion?target:Mathf.Lerp(views.SceneTopInset,target,1-Mathf.Exp(-Delta*4));}
     }
     float diagramInset;
     float ToolbarInset=>RecordingMode.Active?12:50;
@@ -384,8 +409,8 @@ public sealed class TutorialDirector : MonoBehaviour
         {
             for(int k=0;k<reached;k++)trail[k]=main.EdgePoint(sweepStart+c/3f+(k/(TrailPoints-1f))*u/3f);
             trails[c].positionCount=reached;trails[c].SetPositions(trail);
-            float flicker=Mathf.PerlinNoise(Time.unscaledTime*7f,c*3.1f);
-            var hue=Color.Lerp(TriadColors[(c+Mathf.FloorToInt(Time.unscaledTime*1.5f))%4],Color.white,.25f+.35f*Mathf.Sin(Time.unscaledTime*9+c*2.1f));
+            float flicker=Mathf.PerlinNoise(Clock*7f,c*3.1f);
+            var hue=Color.Lerp(TriadColors[(c+Mathf.FloorToInt(Clock*1.5f))%4],Color.white,.25f+.35f*Mathf.Sin(Clock*9+c*2.1f));
             hue*=1.3f+1.2f*flicker;hue.a=.75f+.25f*flicker;trails[c].startColor=new Color(hue.r,hue.g,hue.b,.25f);trails[c].endColor=hue;
         }
         // Direction of rotation: two arcs round the band's cross-section at the triangle, a little
@@ -394,7 +419,7 @@ public sealed class TutorialDirector : MonoBehaviour
         float du=.004f;Vector3 next0=main.EdgePoint(t+du/3f),next1=main.EdgePoint(t+du/3f+1/3f),next2=main.EdgePoint(t+du/3f+2/3f);
         var nextCentroid=(next0+next1+next2)/3;
         float sense=Mathf.Sign(Vector3.Dot(axis,Vector3.Cross(tri[0]-centroid,next0-nextCentroid)));if(sense==0)sense=1;
-        var radial=(tri[0]-centroid)*1.28f;float phase=Main.ReducedMotion?0:Time.unscaledTime*140f*sense;
+        var radial=(tri[0]-centroid)*1.28f;float phase=Main.ReducedMotion?0:Clock*140f*sense;
         DrawSpin(spinArrow,centroid,axis,radial,phase,sense,gold);DrawSpin(spinArrowBack,centroid,axis,radial,phase+180,sense,gold);
     }
     // The diagrams beside the torus: the chromatic circle, the four triangles, the triangles
