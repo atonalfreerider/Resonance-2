@@ -93,6 +93,10 @@ public static class QuestBuild
             if(feature==null)throw new Exception("Quest: OpenXR feature not found: "+name);
             feature.enabled=true;EditorUtility.SetDirty(feature);
         }
+        // The colour passthrough camera's images (the room behind torus-play takes, VrRoomCapture):
+        // adds the headset-camera permission to the manifest.
+        var cameraFeature=features.FirstOrDefault(f=>f!=null&&f.GetType().FullName=="UnityEngine.XR.OpenXR.Features.Meta.ARCameraFeature");
+        cameraFeature?.GetType().GetProperty("cameraImageSupportEnabled")?.SetValue(cameraFeature,true);
         // Controller profiles would make the runtime ask for controllers; this app is hands only.
         foreach(var f in features)
             if(f is OpenXRInteractionFeature&&f.GetType().FullName!="UnityEngine.XR.OpenXR.Features.Interactions.HandInteractionProfile"&&f.enabled)

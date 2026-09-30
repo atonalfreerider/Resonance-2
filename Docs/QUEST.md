@@ -77,6 +77,14 @@ films two videos at once with the Unity Recorder, 1920×1080 at 30 fps with the 
 - `performance-…-overhead.mp4`: from above the torus, looking down on the ring and your hands.
 
 They land in `Recordings/Videos`, the sound brought to a steady loudness with ffmpeg.
+
+A take is made in passthrough: Record switches it on (and back off afterwards if it was off),
+and the headset's colour passthrough camera is saved beside the take (`VrRoomCapture`: 960×720
+JPEGs, up to 30 a second, in `<take>.frames/` with the camera's intrinsics). The player's-view
+video then shows the room behind the torus and your hands, each frame placed where the camera
+was looking when it was taken and sized by its lens, in the camera's own 4:3 shape. The app asks
+once for permission to use the headset cameras; without it takes have no room. The overhead
+view has no camera above you, so it stays on black.
 *Tools/Resonance/Quest/Pull performances from headset* only copies the takes.
 
 ## Building and installing
@@ -196,6 +204,7 @@ headset's, the mouse is the right index fingertip at arm's length, and the left 
 | `Assets/Quest/PatternWheel3D.cs` | The pattern wheels and instrument stacks as 3D geometry |
 | `Assets/Quest/VrCommands.cs` | Commands from the computer and the performance sweep |
 | `Assets/Quest/VrPerformance.cs` | Recording torus-play takes, and playing them back with glowing hands |
+| `Assets/Quest/VrRoomCapture.cs` | Saving the passthrough camera's frames beside a take |
 | `Assets/Editor/PerformanceRecorderMenu.cs` | Pulls takes and renders the POV and overhead videos |
 | `Assets/Editor/QuestBuild.cs` | Android XR configuration, the headset pipeline, the batch build |
 | `Tools/SongLibrary/deploy_quest.py` | Copies prepared songs to the headset |

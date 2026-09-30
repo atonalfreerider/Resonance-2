@@ -45,6 +45,7 @@ public sealed class VrSession : MonoBehaviour
     public PatternWheel3D Wheels {get;private set;}
     public VrPerformance Performance {get;private set;}
     public TorusTheremin Theremin=>theremin;public VrMenu Menu=>menu;
+    public ARCameraManager CameraManager=>cameraManager;public VrRoomCapture RoomCapture {get;private set;}
     public DrumLyricRack Lyrics=>lyrics;
     public GameObject LyricCard=>lyricQuad;
     public Vector3 TorusCenter=>Main!=null?Main.transform.position:Vector3.zero;
@@ -94,7 +95,7 @@ public sealed class VrSession : MonoBehaviour
         Hands=gameObject.AddComponent<HandInput>();Hands.Rig=Rig;Hands.Head=Head.transform;Hands.Simulated=Simulated;
         Wheels=gameObject.AddComponent<PatternWheel3D>();Wheels.Init(Main,Hands);
         menu=gameObject.AddComponent<VrMenu>();theremin=gameObject.AddComponent<TorusTheremin>();
-        gameObject.AddComponent<VrCommands>();Performance=gameObject.AddComponent<VrPerformance>();
+        gameObject.AddComponent<VrCommands>();Performance=gameObject.AddComponent<VrPerformance>();RoomCapture=gameObject.AddComponent<VrRoomCapture>();
         views.SetView(VisualizationViews.View.Overview);
         ApplyScale();Recenter();SetPassthrough(false);SetSeeThrough(false);
         Debug.Log("VR session: "+Diagnostics());
@@ -225,6 +226,10 @@ public sealed class VrSession : MonoBehaviour
         if(passthroughCheck!=null)StopCoroutine(passthroughCheck);
         passthroughCheck=on?StartCoroutine(CheckPassthrough()):null;
     }
+    // The camera subsystem reads the camera permission only as it starts: once the permission is
+    // granted, a running passthrough restarts so its camera images become available.
+    public void RestartPassthrough(){if(Passthrough&&cameraManager!=null)StartCoroutine(Restart());}
+    IEnumerator Restart(){cameraManager.enabled=false;yield return null;yield return null;cameraManager.enabled=true;}
     // Once passthrough is on, the eye picture must be transparent where nothing is drawn. If
     // post-processing makes it opaque (on the headset its alpha-keeping variant can be missing),
     // passthrough runs without post-processing.

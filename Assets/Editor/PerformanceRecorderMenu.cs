@@ -13,7 +13,8 @@ using Debug=UnityEngine.Debug;
 //  Pull performances from the headset — copies the takes over USB to Recordings/Performances.
 //  Render newest performance — pulls, then plays the newest take in the simulated headset and
 //  films two videos at once with the Unity Recorder, both with the sound: the player's own view
-//  (the recorded head) and an overhead view of the torus with the glowing hands playing it.
+//  (the recorded head, over the room as the headset's colour camera saw it, when the take has
+//  it) and an overhead view of the torus with the glowing hands playing it.
 //  1920×1080 at a constant 30 fps, H.264, in Recordings/Videos, the sound brought to a steady
 //  loudness with ffmpeg when it is on the PATH.
 static class PerformanceRecorderMenu
@@ -73,9 +74,12 @@ static class PerformanceRecorderMenu
         VrPerformance.Take take;
         try{take=VrPerformance.Read(path);}catch(Exception e){Fail(e.Message);return;}
         player=session.Performance;player.Play(take);
-        pov=new RenderTexture(Width,Height,24,RenderTextureFormat.ARGB32){name="Performance · player's view"};pov.Create();
+        // With the room captured, the player's view is shaped like the room camera (4:3) and sees
+        // what it saw; without it, 16:9 at 70 degrees.
+        int povWidth=take.HasRoom?Mathf.RoundToInt(Height*take.RoomAspect/2)*2:Width;
+        pov=new RenderTexture(povWidth,Height,24,RenderTextureFormat.ARGB32){name="Performance · player's view"};pov.Create();
         overhead=new RenderTexture(Width,Height,24,RenderTextureFormat.ARGB32){name="Performance · overhead"};overhead.Create();
-        session.Head.targetTexture=pov;session.Head.fieldOfView=70;
+        session.Head.targetTexture=pov;session.Head.fieldOfView=take.HasRoom?take.RoomVerticalFov*.97f:70;
         player.Overhead.targetTexture=overhead;player.Overhead.enabled=true;
         baseName=Path.Combine(Videos,Path.GetFileNameWithoutExtension(path));Directory.CreateDirectory(Videos);
         var settings=ScriptableObject.CreateInstance<RecorderControllerSettings>();

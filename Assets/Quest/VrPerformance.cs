@@ -26,7 +26,7 @@ public sealed class VrPerformance : MonoBehaviour
     public bool Recording {get;private set;}
     public float Elapsed {get;private set;}
     public string LastSaved {get;private set;}
-    MemoryStream buffer;BinaryWriter writer;GameObject dot;
+    MemoryStream buffer;BinaryWriter writer;GameObject dot;string takePath;bool passthroughBefore;
     public static string Folder=>Path.Combine(Application.persistentDataPath,"Performances");
 
     void Start(){session=GetComponent<VrSession>();}
@@ -40,6 +40,11 @@ public sealed class VrPerformance : MonoBehaviour
         writer.Write(Encoding.ASCII.GetBytes("RPRF"));writer.Write(Version);writer.Write(VrSession.Scale);
         writer.Write(session.Main.currentKey);writer.Write(session.SeeThrough);writer.Write(DateTime.Now.Ticks);
         Recording=true;Elapsed=0;
+        // A take is made in passthrough, and the room seen through it is captured beside it.
+        takePath=Path.Combine(Folder,$"performance-{DateTime.Now:yyyyMMdd-HHmmss}{Extension}");
+        try{Directory.CreateDirectory(Folder);}catch(Exception e){Debug.LogWarning("VR performance: "+e.Message);}
+        passthroughBefore=session.Passthrough;if(!session.Passthrough)session.SetPassthrough(true);
+        session.RoomCapture?.Begin(takePath);
         // A small red dot at the top of the view while a take runs (not part of the take).
         if(dot==null)
         {
@@ -54,10 +59,12 @@ public sealed class VrPerformance : MonoBehaviour
         Recording=false;if(dot!=null)dot.SetActive(false);
         if(writer==null)return;
         writer.Flush();
+        session.RoomCapture?.Stop();
+        if(!passthroughBefore&&session.Passthrough)session.SetPassthrough(false);
         try
         {
             Directory.CreateDirectory(Folder);
-            LastSaved=Path.Combine(Folder,$"performance-{DateTime.Now:yyyyMMdd-HHmmss}{Extension}");
+            LastSaved=takePath;
             File.WriteAllBytes(LastSaved,buffer.ToArray());
             Debug.Log($"VR performance: saved {LastSaved} ({Elapsed:0.0} s, {buffer.Length/1024} KB)");
         }
@@ -96,7 +103,15 @@ public sealed class VrPerformance : MonoBehaviour
         public List<Tuple<int,float>> Notes=new();public int Key;
         public TorusTheremin.HandleState Handle;
     }
-    public sealed class Take{public float Scale;public int StartKey;public bool SeeThrough;public DateTime Taken;public readonly List<Frame> Frames=new();public float Length=>Frames.Count>0?Frames[^1].Time:0;}
+    public sealed class Take
+    {
+        public float Scale;public int StartKey;public bool SeeThrough;public DateTime Taken;public readonly List<Frame> Frames=new();public float Length=>Frames.Count>0?Frames[^1].Time:0;
+        // The room (VrRoomCapture), when the take has it: frame files by time, and the camera.
+        public string RoomFolder;public readonly List<(float time,string file)> Room=new();public VrRoomCapture.CameraFile Camera;
+        public bool HasRoom=>Room.Count>0&&Camera!=null&&Camera.fy>0;
+        public float RoomVerticalFov=>HasRoom?2*Mathf.Atan(Camera.height*.5f/Camera.fy)*Mathf.Rad2Deg:0;
+        public float RoomAspect=>HasRoom?Camera.width/(float)Camera.height:16f/9;
+    }
     public static Take Read(string path)
     {
         using var reader=new BinaryReader(File.OpenRead(path),Encoding.UTF8);
@@ -115,6 +130,17 @@ public sealed class VrPerformance : MonoBehaviour
             if(f.Handle.Shown){f.Handle.At=V();f.Handle.Radial=V();f.Handle.Tangent=V();f.Handle.Tether=V();f.Handle.Hint=reader.ReadString();}
             take.Frames.Add(f);
         }
+        string room=Path.ChangeExtension(path,null)+".frames",list=Path.Combine(room,"index.txt"),camera=Path.Combine(room,"camera.json");
+        if(File.Exists(list)&&File.Exists(camera))
+        {
+            take.RoomFolder=room;take.Camera=JsonUtility.FromJson<VrRoomCapture.CameraFile>(File.ReadAllText(camera));
+            foreach(var line in File.ReadAllLines(list))
+            {
+                var parts=line.Split(' ');if(parts.Length<2)continue;
+                if(float.TryParse(parts[1],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out float t))take.Room.Add((t,Path.Combine(room,parts[0]+".jpg")));
+            }
+            take.Room.Sort((a,b)=>a.time.CompareTo(b.time));
+        }
         return take;
     }
 
@@ -124,6 +150,13 @@ public sealed class VrPerformance : MonoBehaviour
     public bool Finished=>Playing!=null&&PlayTime>Playing.Length+1;
     public Camera Overhead {get;private set;}
     int cursor;string appliedNotes="";readonly List<Tuple<int,float>> notes=new();
+    // The room behind the player's view: each captured frame on a plate far out along the
+    // camera's view at the moment it was taken, sized by the camera's intrinsics, drawn first.
+    // The colour camera sits a little left of the eyes' centre; its image arrives a few
+    // hundredths of a second after the moment it shows.
+    public const int RoomLayer=29;
+    static readonly Vector3 CameraOffset=new(-.032f,-.01f,.05f);const float CameraLatency=.03f,PlateDistance=40;
+    GameObject plate;Material plateMaterial;Texture2D roomTexture;int roomShown=-1;
     HandModel leftHand,rightHand;
     public void Play(Take take)
     {
@@ -143,14 +176,27 @@ public sealed class VrPerformance : MonoBehaviour
         var centre=session.TorusCenter;float s=VrSession.Scale;
         Overhead.transform.position=centre+Vector3.up*2.35f*s-session.ViewDirection*.7f*s;
         Overhead.transform.rotation=Quaternion.LookRotation(centre-Overhead.transform.position,session.ViewDirection);
-        Debug.Log($"VR performance: playing {take.Length:0.0} s, {take.Frames.Count} frames");
+        if(take.HasRoom)
+        {
+            if(plate==null)
+            {
+                plate=GameObject.CreatePrimitive(PrimitiveType.Quad);plate.name="Room (captured)";Destroy(plate.GetComponent<Collider>());plate.layer=RoomLayer;plate.transform.SetParent(transform,false);
+                plateMaterial=VrButton.Panel(Color.white);plateMaterial.SetFloat("_SrcBlend",(float)UnityEngine.Rendering.BlendMode.One);plateMaterial.SetFloat("_DstBlend",(float)UnityEngine.Rendering.BlendMode.Zero);
+                plateMaterial.SetFloat("_ZTest",(float)UnityEngine.Rendering.CompareFunction.Always);plateMaterial.renderQueue=1000;plate.GetComponent<Renderer>().sharedMaterial=plateMaterial;
+                roomTexture=new Texture2D(2,2,TextureFormat.RGB24,false);plateMaterial.mainTexture=roomTexture;
+            }
+            plate.SetActive(true);roomShown=-1;
+            session.Head.cullingMask|=1<<RoomLayer;Overhead.cullingMask&=~(1<<RoomLayer);
+        }
+        else if(plate!=null)plate.SetActive(false);
+        Debug.Log($"VR performance: playing {take.Length:0.0} s, {take.Frames.Count} frames{(take.HasRoom?$", room {take.Room.Count} frames":", no room")}");
     }
     public void EndPlayback()
     {
         Playing=null;
         if(session==null)return;
         session.Theremin.Replaying=false;session.Hands.Replaying=false;session.Menu.Suppressed=false;
-        leftHand?.Show(false);rightHand?.Show(false);session.Main.Silence();
+        leftHand?.Show(false);rightHand?.Show(false);session.Main.Silence();if(plate!=null)plate.SetActive(false);
     }
 
     void LateUpdate()
@@ -173,8 +219,29 @@ public sealed class VrPerformance : MonoBehaviour
         if(a.Key!=session.Main.currentKey)session.Main.ChangeKey(a.Key,.7f);
         var h=a.Handle;if(h.Shown){h.At=World(h.At);h.Tether=World(h.Tether);}
         session.Theremin.ShowReplay(h);
+        if(Playing.HasRoom)ShowRoom(World);
     }
-    void OnDestroy(){if(Recording)Stop();}
+    void ShowRoom(Func<Vector3,Vector3> world)
+    {
+        var room=Playing.Room;int i=roomShown<0?0:roomShown;
+        while(i+1<room.Count&&room[i+1].time<=PlayTime)i++;
+        if(i!=roomShown){roomShown=i;try{roomTexture.LoadImage(File.ReadAllBytes(room[i].file),false);}catch(Exception e){Debug.LogWarning("VR performance: room frame: "+e.Message);}}
+        // Where the camera was when this frame was taken.
+        HeadAt(room[i].time-CameraLatency,out var head,out var rotation);
+        float s=VrSession.Scale,d=PlateDistance;var k=Playing.Camera;
+        var camera=world(head)+rotation*CameraOffset*s;
+        float w=d*k.width/k.fx,hgt=d*k.height/k.fy,ox=d*(k.cx-k.width*.5f)/k.fx,oy=d*(k.height*.5f-k.cy)/k.fy;
+        plate.transform.SetPositionAndRotation(camera+rotation*new Vector3(-ox,-oy,d),rotation);
+        plate.transform.localScale=new Vector3(w,hgt,1);
+    }
+    void HeadAt(float time,out Vector3 position,out Quaternion rotation)
+    {
+        var frames=Playing.Frames;int lo=0,hi=frames.Count-1;
+        while(lo<hi){int mid=(lo+hi+1)/2;if(frames[mid].Time<=time)lo=mid;else hi=mid-1;}
+        var a=frames[lo];var b=lo+1<frames.Count?frames[lo+1]:a;float t=b.Time>a.Time?Mathf.Clamp01((time-a.Time)/(b.Time-a.Time)):0;
+        position=Vector3.Lerp(a.Head,b.Head,t);rotation=Quaternion.Slerp(a.HeadRotation,b.HeadRotation,t);
+    }
+    void OnDestroy(){if(Recording)Stop();if(plateMaterial!=null)Destroy(plateMaterial);if(roomTexture!=null)Destroy(roomTexture);}
 
     // Glowing hands from the joints: a bead at every joint and a stroke along every bone; the
     // index and thumb tips brighter, brighter still while pinching.
