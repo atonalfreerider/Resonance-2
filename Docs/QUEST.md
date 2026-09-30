@@ -58,6 +58,27 @@ Choose *Play the torus* on the palm menu. The song pauses and the torus stands a
   grip to your finger. Steps count from where the pinch began, about 6 cm each, and a step is
   taken only past its middle, so holding still between two steps never flickers.
 
+## Recording a performance
+
+In torus play the palm menu's first button is **Record**. Press it, play, and press it again
+(it shows **Stop** and the time) to save the take; leaving torus play also ends it. A small red
+dot at the top of your view shows while it records. The headset keeps every frame of the take
+(`VrPerformance`): your head's pose, all 26 joints of each hand and the pinch, the notes sounding
+and how loud, the key, and the key-change handles as drawn. Takes are small (about 6 MB a
+minute) and cost the headset nothing to render.
+
+The videos are made on the computer, with the headset plugged in:
+*Tools/Resonance/Quest/Render newest performance · POV + overhead*. It copies the takes to
+`Recordings/Performances`, plays the newest one back in the editor's simulated headset (notes,
+key changes and handles exactly as they happened, glowing hands built from the joints) and
+films two videos at once with the Unity Recorder, 1920×1080 at 30 fps with the sound:
+
+- `performance-…-pov.mp4`: your view, from the recorded head;
+- `performance-…-overhead.mp4`: from above the torus, looking down on the ring and your hands.
+
+They land in `Recordings/Videos`, the sound brought to a steady loudness with ffmpeg.
+*Tools/Resonance/Quest/Pull performances from headset* only copies the takes.
+
 ## Building and installing
 
 The build runs in batch mode in a copy of the project, so the open editor never switches
@@ -174,5 +195,7 @@ headset's, the mouse is the right index fingertip at arm's length, and the left 
 | `Assets/Quest/TorusTheremin.cs` | Torus play: nearest-note theremin and the key-change handles |
 | `Assets/Quest/PatternWheel3D.cs` | The pattern wheels and instrument stacks as 3D geometry |
 | `Assets/Quest/VrCommands.cs` | Commands from the computer and the performance sweep |
+| `Assets/Quest/VrPerformance.cs` | Recording torus-play takes, and playing them back with glowing hands |
+| `Assets/Editor/PerformanceRecorderMenu.cs` | Pulls takes and renders the POV and overhead videos |
 | `Assets/Editor/QuestBuild.cs` | Android XR configuration, the headset pipeline, the batch build |
 | `Tools/SongLibrary/deploy_quest.py` | Copies prepared songs to the headset |

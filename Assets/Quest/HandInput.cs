@@ -15,6 +15,10 @@ public sealed class HandInput : MonoBehaviour
         public bool Tracked, Pinching, PinchStarted, PinchEnded, PalmToward;
         public Vector3 Index, Thumb, Palm, PalmNormal, PreviousIndex;
         public Quaternion PalmRotation=Quaternion.identity;
+        // All 26 joints (XRHandJointID order from the wrist: wrist, palm, thumb 4, then four
+        // joints and a tip for each finger), world space, for recording performances.
+        public const int JointCount=26;
+        public readonly Vector3[] Joints=new Vector3[JointCount];public bool JointsValid;
     }
     public readonly Hand Left=new(),Right=new();
     public IEnumerable<Hand> Both{get{yield return Left;yield return Right;}}
@@ -37,8 +41,12 @@ public sealed class HandInput : MonoBehaviour
             tip.GetComponent<Renderer>().sharedMaterial=tipMaterial;tip.SetActive(false);tips.Add(tip);
         }
     }
+    // While a recorded performance plays back, the hands come from the recording (VrPerformance)
+    // and these stay still and hidden.
+    public bool Replaying;
     void Update()
     {
+        if(Replaying){foreach(var tip in tips)if(tip.activeSelf)tip.SetActive(false);return;}
         if(Simulated)SimulateRight();else ReadHands();
         // Fingertip markers (index and thumb of each hand): the only sign of the hands in blackout.
         int t=0;
@@ -69,6 +77,12 @@ public sealed class HandInput : MonoBehaviour
         {hand.Tracked=false;return;}
         bool wasTracked=hand.Tracked;hand.Tracked=true;
         hand.Index=Rig.TransformPoint(index.position);hand.Thumb=Rig.TransformPoint(thumb.position);hand.Palm=Rig.TransformPoint(palm.position);
+        hand.JointsValid=true;
+        for(int j=0;j<Hand.JointCount;j++)
+        {
+            if(h.GetJoint(XRHandJointIDUtility.FromIndex(j)).TryGetPose(out var joint))hand.Joints[j]=Rig.TransformPoint(joint.position);
+            else hand.JointsValid=false;
+        }
         hand.PalmRotation=Rig.rotation*palm.rotation;
         // The palm faces along the joint's down axis (its up axis points out of the back of the hand).
         hand.PalmNormal=hand.PalmRotation*Vector3.down;
@@ -100,6 +114,17 @@ public sealed class HandInput : MonoBehaviour
         r.Tracked=true;r.Index=ray.GetPoint(SimulatedDepth*Scale*(press?1.06f:1));r.Thumb=r.Index+Head.right*.03f*Scale*(press?.2f:1);
         r.Palm=r.Index-ray.direction*.08f*Scale;r.PalmNormal=ray.direction;
         bool was=r.Pinching;r.Pinching=press;r.PinchStarted=press&&!was;r.PinchEnded=!press&&was;
+        // A rough skeleton behind the fingertip, so recordings made in the editor have hands.
+        var back=-ray.direction;var side=Head.right;var up=Vector3.Cross(back,side);float m=Scale;
+        var wrist=r.Index+back*.17f*m-up*.02f*m;r.Joints[0]=wrist;r.Joints[1]=wrist-back*.07f*m;
+        for(int f=0;f<5;f++)
+        {
+            int first=f==0?2:6+(f-1)*5,count=f==0?4:5;float spread=(f-1.5f)*.022f*m;
+            var knuckle=wrist-back*.09f*m+side*spread;var tipAt=f==1?r.Index:knuckle-back*(.07f+.01f*(f%3))*m-up*.03f*m*(f==0?0:1);
+            if(f==0){knuckle=wrist-back*.03f*m-side*.035f*m;tipAt=r.Thumb;}
+            for(int k=0;k<count;k++)r.Joints[first+k]=Vector3.Lerp(knuckle,tipAt,k/(float)(count-1));
+        }
+        r.JointsValid=true;
         var l=Left;l.PinchStarted=l.PinchEnded=false;l.Tracked=SimulatedPalm;
         if(SimulatedPalm)
         {

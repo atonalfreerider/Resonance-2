@@ -43,6 +43,8 @@ public sealed class VrSession : MonoBehaviour
     public MidiPlayer Midi {get;private set;}
     public SongAudio Audio {get;private set;}
     public PatternWheel3D Wheels {get;private set;}
+    public VrPerformance Performance {get;private set;}
+    public TorusTheremin Theremin=>theremin;public VrMenu Menu=>menu;
     public DrumLyricRack Lyrics=>lyrics;
     public GameObject LyricCard=>lyricQuad;
     public Vector3 TorusCenter=>Main!=null?Main.transform.position:Vector3.zero;
@@ -92,7 +94,7 @@ public sealed class VrSession : MonoBehaviour
         Hands=gameObject.AddComponent<HandInput>();Hands.Rig=Rig;Hands.Head=Head.transform;Hands.Simulated=Simulated;
         Wheels=gameObject.AddComponent<PatternWheel3D>();Wheels.Init(Main,Hands);
         menu=gameObject.AddComponent<VrMenu>();theremin=gameObject.AddComponent<TorusTheremin>();
-        gameObject.AddComponent<VrCommands>();
+        gameObject.AddComponent<VrCommands>();Performance=gameObject.AddComponent<VrPerformance>();
         views.SetView(VisualizationViews.View.Overview);
         ApplyScale();Recenter();SetPassthrough(false);SetSeeThrough(false);
         Debug.Log("VR session: "+Diagnostics());
@@ -255,6 +257,7 @@ public sealed class VrSession : MonoBehaviour
     public void SetMode(Mode mode)
     {
         if(mode==Current)return;Current=mode;
+        if(mode!=Mode.TorusPlay&&Performance!=null&&Performance.Recording)Performance.Toggle();   // a take ends with torus play
         if(mode==Mode.TorusPlay){Midi.Pause();views.SetView(VisualizationViews.View.Torus);}
         else{Main.Silence();views.SetView(VisualizationViews.View.Overview);}
         ApplyScale();Recenter();
@@ -303,7 +306,7 @@ public sealed class VrSession : MonoBehaviour
         // keep driving the desktop's), and panels made since the last sweep are silenced.
         if(Camera.allCamerasCount>cameras.Length)cameras=new Camera[Camera.allCamerasCount*2];
         int count=Camera.GetAllCameras(cameras);
-        for(int i=0;i<count;i++){var c=cameras[i];if(c!=Head&&c.enabled)c.enabled=false;}
+        for(int i=0;i<count;i++){var c=cameras[i];if(c!=Head&&c.enabled&&(Performance==null||c!=Performance.Overhead))c.enabled=false;}
         if((sweep-=Time.unscaledDeltaTime)<=0){sweep=1;SweepPanels();}
         bool song=Current==Mode.Song;
         Wheels.Visible=song&&Midi.Loaded;

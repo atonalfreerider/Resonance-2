@@ -5,7 +5,7 @@ using TMPro;
 using UnityEngine;
 
 // The headset's menus, made for fingertips. Turn the left palm toward you and a column of
-// buttons stands above it: Songs, Play/Pause (a loading percentage while a song loads), Play the
+// buttons stands above it: Songs (Record / Stop in torus play), Play/Pause (a loading percentage while a song loads), Play the
 // torus or Song view, Passthrough or Blackout, See inside or Solid torus. Poke one with the right
 // index finger. Recentring follows the headset's own (hold the Meta button). Songs opens the song
 // list in front of you: the fully prepared songs on the headset, one card each with its chord
@@ -25,7 +25,8 @@ public sealed class VrMenu : MonoBehaviour
         session=GetComponent<VrSession>();hands=session.Hands;
         palm=new GameObject("Palm menu").transform;palm.SetParent(transform,false);
         float y=0;VrButton Row(string text,System.Action action){var b=VrButton.Create(palm,text,PalmButton,1,action);b.transform.localPosition=new Vector3(0,y,0);y-=PalmButton.y+.008f;return b;}
-        songs=Row("Songs",()=>ShowSongs(!list.gameObject.activeSelf));
+        // The first row: the song list in song mode, recording in torus play.
+        songs=Row("Songs",()=>{if(session.Current==VrSession.Mode.TorusPlay)session.Performance.Toggle();else ShowSongs(!list.gameObject.activeSelf);});
         play=Row("Play",TogglePlay);
         mode=Row("Play the torus",()=>session.SetMode(session.Current==VrSession.Mode.Song?VrSession.Mode.TorusPlay:VrSession.Mode.Song));
         room=Row("Passthrough",()=>session.SetPassthrough(!session.Passthrough));
@@ -95,9 +96,12 @@ public sealed class VrMenu : MonoBehaviour
         if(midi.IsPlaying)midi.Pause();else midi.Play();
     }
 
+    // While a recorded performance plays back, the menus stay away.
+    public bool Suppressed;
     void Update()
     {
         if(session==null||hands==null||palm==null)return;
+        if(Suppressed){if(palm.gameObject.activeSelf)palm.gameObject.SetActive(false);if(list.gameObject.activeSelf)list.gameObject.SetActive(false);return;}
         palm.localScale=list.localScale=Vector3.one*S;
         // The palm menu follows the left palm while it faces the head (and a moment after, so a
         // finger can reach it as the hand turns).
@@ -117,6 +121,8 @@ public sealed class VrMenu : MonoBehaviour
         play.SetText(loading?$"Loading {Mathf.RoundToInt(audio.Progress*100)}%":session.Midi.IsPlaying?"Pause":"Play");play.Interactable=session.Midi.Loaded&&!loading;
         mode.SetText(session.Current==VrSession.Mode.Song?"Play the torus":"Song view");
         room.SetText(session.Passthrough?"Blackout":"Passthrough");
+        var take=session.Performance;
+        songs.SetText(session.Current!=VrSession.Mode.TorusPlay?"Songs":take!=null&&take.Recording?$"Stop  {(int)take.Elapsed/60}:{(int)take.Elapsed%60:00}":"Record");
         inside.SetText(session.SeeThrough?"Solid torus":"See inside");
         if(list.gameObject.activeSelf){foreach(var c in cards)c.Interactable=!loading;if(loading)listStatus.Text=$"Loading {Mathf.RoundToInt(audio.Progress*100)}%";}
         // Pokes: the palm menu only from the right hand (the left carries it); the list from either.

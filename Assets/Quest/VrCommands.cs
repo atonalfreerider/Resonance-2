@@ -103,7 +103,7 @@ public sealed class VrCommands : MonoBehaviour
     {
         var head=session.Head;
         var go=new GameObject("Alpha probe camera");var cam=go.AddComponent<Camera>();
-        cam.CopyFrom(head);cam.stereoTargetEye=StereoTargetEyeMask.None;cam.fieldOfView=90;cam.aspect=1;cam.clearFlags=CameraClearFlags.SolidColor;cam.backgroundColor=Color.clear;cam.enabled=false;
+        cam.CopyFrom(head);cam.fieldOfView=90;cam.aspect=1;cam.clearFlags=CameraClearFlags.SolidColor;cam.backgroundColor=Color.clear;cam.enabled=false;
         go.transform.SetPositionAndRotation(head.transform.position,head.transform.rotation);
         var data=cam.GetUniversalAdditionalCameraData();var from=head.GetUniversalAdditionalCameraData();
         data.renderPostProcessing=post;data.volumeLayerMask=from.volumeLayerMask;data.antialiasing=from.antialiasing;

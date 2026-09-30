@@ -44,10 +44,28 @@ public sealed class TorusTheremin : MonoBehaviour
         var go=new GameObject(name);go.transform.SetParent(handle,false);var l=go.AddComponent<LineRenderer>();l.sharedMaterial=glow;l.useWorldSpace=true;l.widthMultiplier=width;l.numCapVertices=3;widths[l]=width;return l;
     }
     readonly Dictionary<LineRenderer,float> widths=new();
+    // The key-change handles as drawn this frame, for recording, and a replay switch: while a
+    // recorded performance plays back, the notes, keys and handles come from the recording.
+    public struct HandleState{public bool Shown,Held;public Vector3 At,Radial,Tangent,Tether;public string Hint;}
+    public HandleState Handle;
+    public IReadOnlyList<System.Tuple<int,float>> Sounding=>sounding;
+    public bool Replaying;
+    public void ShowReplay(HandleState state)
+    {
+        if(handle==null)return;
+        if(handle.gameObject.activeSelf!=state.Shown)handle.gameObject.SetActive(state.Shown);
+        if(!state.Shown)return;
+        foreach(var (line,width) in widths)line.widthMultiplier=width*S;
+        hint.transform.localScale=Vector3.one*S/2;
+        Draw(state.At,state.Radial,state.Tangent,state.Held);
+        if(state.Held){tether.positionCount=2;tether.SetPosition(0,state.At);tether.SetPosition(1,state.Tether);}else tether.positionCount=0;
+        if(hint.TextField.text!=state.Hint)hint.Text=state.Hint??"";
+        hint.transform.position=state.At+Vector3.up*(state.Held?.09f:.07f)*S;hint.Billboard();
+    }
     void Update()
     {
-        if(session==null||main==null)return;
-        if(session.Current!=VrSession.Mode.TorusPlay){if(left.Note>=0||right.Note>=0){left.Note=right.Note=-1;Sound();}handle.gameObject.SetActive(false);grabbing=null;return;}
+        if(session==null||main==null||Replaying)return;
+        if(session.Current!=VrSession.Mode.TorusPlay){if(left.Note>=0||right.Note>=0){left.Note=right.Note=-1;Sound();}handle.gameObject.SetActive(false);grabbing=null;Handle.Shown=false;return;}
         rimRadius=session.TorusRim;
         Play(hands.Left,left);Play(hands.Right,right);Sound();
         Handles();
@@ -108,7 +126,7 @@ public sealed class TorusTheremin : MonoBehaviour
         foreach(var h in hands.Both)if(OnRim(h,out var r)){near=h;radial=r;lastOnRim=h;lastRadial=r;lastOnRimTime=Time.unscaledTime;break;}
         // A pinch that begins just after the finger left the rim still takes the handle.
         if(near==null&&lastOnRim!=null&&lastOnRim.Tracked&&lastOnRim.PinchStarted&&Time.unscaledTime-lastOnRimTime<GrabGrace){near=lastOnRim;radial=lastRadial;}
-        if(near==null){if(handle.gameObject.activeSelf&&Time.unscaledTime-lastOnRimTime>GrabGrace)handle.gameObject.SetActive(false);return;}
+        if(near==null){if(handle.gameObject.activeSelf&&Time.unscaledTime-lastOnRimTime>GrabGrace)handle.gameObject.SetActive(false);Handle.Shown=handle.gameObject.activeSelf;return;}
         if(!handle.gameObject.activeSelf)handle.gameObject.SetActive(true);
         var at=session.TorusCenter+radial*(rimRadius+.03f*S);at.y=near.Index.y;
         var tangent=Vector3.Cross(radial,Vector3.up).normalized;
@@ -120,6 +138,7 @@ public sealed class TorusTheremin : MonoBehaviour
         Draw(at,radial,tangent,false);tether.positionCount=0;
         hint.Text=$"pinch · drag ↻ fifths · ↕ thirds";
         hint.transform.position=at+Vector3.up*.07f*S;hint.Billboard();
+        Handle=new HandleState{Shown=true,Held=false,At=at,Radial=radial,Tangent=tangent,Tether=at,Hint=hint.TextField.text};
     }
     // While held: the grip stays where it was taken; the drag from the pinch's start, in metres
     // along the frozen tangent and up, sets how many steps of each kind are applied.
@@ -136,6 +155,7 @@ public sealed class TorusTheremin : MonoBehaviour
         tether.positionCount=2;tether.SetPosition(0,grabAnchor);tether.SetPosition(1,grabbing.Index);
         hint.Text=Preview(along-appliedAlong*Step,up-appliedUp*Step,appliedAlong,appliedUp);
         hint.transform.position=grabAnchor+Vector3.up*.09f*S;hint.Billboard();
+        Handle=new HandleState{Shown=true,Held=true,At=grabAnchor,Radial=grabRadial,Tangent=grabTangent,Tether=grabbing.Index,Hint=hint.TextField.text};
     }
     static int Steps(float metres,int current)
     {
