@@ -14,7 +14,7 @@ public sealed class TorusTheremin : MonoBehaviour
 {
     VrSession session;Main main;HandInput hands;
     const float S=VrSession.Scale;
-    const float Reach=.045f,Switch=.8f,Step=.05f;   // metres; a new note must be this fraction as far to take over
+    const float Reach=.09f,Switch=.8f,Step=.06f,RimZone=.18f,RimHeight=.22f;   // metres; a new note must be this fraction as far to take over
     sealed class Voice {public int Note=-1;public float Amplitude;}
     readonly Voice left=new(),right=new();
     readonly List<System.Tuple<int,float>> sounding=new();int lastA=-2,lastB=-2;float lastAmpA,lastAmpB;
@@ -88,7 +88,7 @@ public sealed class TorusTheremin : MonoBehaviour
     {
         var d=hand.Index-session.TorusCenter;float y=d.y;d.y=0;float r=d.magnitude;radial=r>1e-4f?d/r:Vector3.forward;
         if(!hand.Tracked||rimRadius<=0)return false;
-        bool zone=r>rimRadius*1.0f&&r<rimRadius+.1f*S&&Mathf.Abs(y)<.09f*S;
+        bool zone=r>rimRadius&&r<rimRadius+RimZone*S&&Mathf.Abs(y)<RimHeight*S;
         if(!zone)return false;
         for(int i=0;i<main.NoteCount;i++)if(Vector3.Distance(hand.Index,main.NotePosition(i))<Reach*S*.7f)return false;
         return true;

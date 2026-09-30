@@ -6,13 +6,22 @@ editor's simulation is switched on).
 
 ## What you see
 
-- **The torus** floats in front of you, a little below eye level, about 75 cm across.
+- **The torus** stands in front of you at chest height, about 2.2 m across. Its near rim is
+  about 35 cm from you, so you can reach into it or walk around it.
 - **The drum wheel** stands under it.
-- **The lyric line** floats just above the torus. The rhyme graph is not shown in the headset.
-- **The pattern wheels** are a large backdrop behind the torus, facing you.
+- **The lyric line** floats just above it. The rhyme graph is not shown in the headset.
+- **The pattern wheels** stand behind the torus as a solid object facing you, their lowest edge
+  just above the torus so nothing hides them (`PatternWheel3D`). The pinion is a thick toothed
+  ring, the song wound once around, one slab per section visit; a family's relief and stripe
+  spacing stand in for the desktop's hatch. The rack runs down its left side. The orbit carriers
+  float at their own depths in front of the ring, with each family as a small planet, and the
+  section playing is the planet at the centre, nearest you, its loop rolling inside it as a moon.
+  The instrument stacks stand in a grid to the right, under the caption.
 - **The room** shows through (passthrough), or everything outside the scene is black (blackout).
 
-The scene is seen through a rig scaled so 1 m in the room is 6 scene units (`VrSession.Scale`).
+The scene is seen through a rig scaled so 1 m in the room is 2 scene units (`VrSession.Scale`).
+The desktop's flat panels are switched off in the headset. They cost most of a frame on the
+headset's CPU, and nothing in the headset shows them.
 
 ## Hands
 
@@ -22,6 +31,7 @@ The scene is seen through a rig scaled so 1 m in the room is 6 scene units (`VrS
 - **Song list.** Opens by itself when no song is loaded, and from the palm menu. Each card shows
   the title and the song's chord progression as a strip of colours, ten to a page. Poke a card
   to load it.
+- **Seek.** Pinch the rack beside the pattern wheels and drag up to go forward, down to go back.
 - **Recenter** puts the torus back in front of you, wherever you are facing.
 
 ## Torus play
@@ -82,6 +92,24 @@ asset without HDR, with 4x MSAA, and with alpha kept through post-processing so 
 shows where nothing is drawn. Make it again after changing the desktop pipeline with
 *Tools/Resonance/Quest/Make headset pipeline*.
 
+Only the eye camera and the lyric strip's own camera render. Every UI Toolkit panel is given a
+copy of its settings that renders into a tiny unseen texture with its content hidden, so no
+panel can draw over the eye buffer and the desktop's assets stay unchanged.
+
+The app logs what decides passthrough when a session starts and when passthrough is switched
+on: the pipeline, the eye camera's clear colour and formats, the AR session state, and anything
+else still drawing to the screen.
+
+```bash
+adb logcat -s Unity | grep "VR session\|VR passthrough"
+```
+
+Frame rate, from the headset's own counter:
+
+```bash
+adb logcat -s VrApi | grep FPS
+```
+
 ## Trying it without a headset
 
 Tick *Tools/Resonance/Quest/Simulate in editor* and enter play mode. The view becomes the
@@ -97,5 +125,6 @@ headset's, the mouse is the right index fingertip at arm's length, and the left 
 | `Assets/Quest/VrButton.cs` | A button pressed by pushing a fingertip through it |
 | `Assets/Quest/VrMenu.cs` | The palm menu and the song list |
 | `Assets/Quest/TorusTheremin.cs` | Torus play: nearest-note theremin and the key-change handles |
+| `Assets/Quest/PatternWheel3D.cs` | The pattern wheels and instrument stacks as 3D geometry |
 | `Assets/Editor/QuestBuild.cs` | Android XR configuration, the headset pipeline, the batch build |
 | `Tools/SongLibrary/deploy_quest.py` | Copies prepared songs to the headset |

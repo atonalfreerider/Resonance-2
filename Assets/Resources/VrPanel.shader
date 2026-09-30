@@ -15,7 +15,9 @@ Shader "Resonance/VrPanel"
         Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
         Pass
         {
-            Blend [_SrcBlend] [_DstBlend]
+            // Colour as configured; alpha accumulates as coverage, so passthrough shows the room
+            // exactly where nothing is drawn.
+            Blend [_SrcBlend] [_DstBlend], One OneMinusSrcAlpha
             ZWrite Off
             ZTest [_ZTest]
             Cull Off
