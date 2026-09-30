@@ -38,6 +38,9 @@ public sealed class DrumLyricRack : MonoBehaviour
     float visible;
     // The views say where on the screen the strip is (normalized) and whether it is wanted.
     public Rect Viewport=new(0,0,0,0);public bool Wanted;
+    // In a headset the strip is shown on a card in the scene instead of its own screen panel:
+    // Headless hides the panel, PixelSize fixes the texture's size, Output is the texture.
+    public bool Headless;public Vector2Int PixelSize;public Texture Output=>texture;
     public bool Shown=>visible>.5f;
     public float Visibility=>visible;
     // Stage geometry: the line at Center, the groove's depth, the strip Tall units high.
@@ -148,15 +151,17 @@ public sealed class DrumLyricRack : MonoBehaviour
         bool want=Wanted&&Viewport.width>.01f&&Viewport.height>.01f&&midi.Prepared!=null&&HasLyricsLoaded();
         visible=Main.ReducedMotion?(want?1:0):Mathf.MoveTowards(visible,want?1:0,Time.unscaledDeltaTime*3);
         if(visible<=0){if(root.gameObject.activeSelf){root.gameObject.SetActive(false);stage.enabled=false;displayRoot.style.display=DisplayStyle.None;}return;}
-        if(!root.gameObject.activeSelf){root.gameObject.SetActive(true);stage.enabled=true;displayRoot.style.display=DisplayStyle.Flex;}
+        if(!root.gameObject.activeSelf){root.gameObject.SetActive(true);stage.enabled=true;displayRoot.style.display=Headless?DisplayStyle.None:DisplayStyle.Flex;}
         if(source!=midi.Prepared)Load();
         // The strip's texture matches its part of the screen; the image sits there in its own panel.
         float panelWidth=displayRoot.resolvedStyle.width,panelHeight=displayRoot.resolvedStyle.height;
-        if(!float.IsFinite(panelWidth)||panelWidth<1)return;
-        int w=Mathf.Max(8,Mathf.RoundToInt(Viewport.width*Screen.width)),h=Mathf.Max(8,Mathf.RoundToInt(Viewport.height*Screen.height));
+        // Headless (the headset shows the texture on its own card), the hidden panel has no size.
+        if(!Headless&&(!float.IsFinite(panelWidth)||panelWidth<1))return;
+        int w=PixelSize.x>0?PixelSize.x:Mathf.Max(8,Mathf.RoundToInt(Viewport.width*Screen.width)),h=PixelSize.y>0?PixelSize.y:Mathf.Max(8,Mathf.RoundToInt(Viewport.height*Screen.height));
+        if(Headless&&displayRoot.style.display!=DisplayStyle.None)displayRoot.style.display=DisplayStyle.None;
         if(hdr==null||Mathf.Abs(hdr.width-w)>w*.1f||Mathf.Abs(hdr.height-h)>h*.1f)Resize(w,h);
         var place=new Rect(Viewport.x*panelWidth,(1-Viewport.y-Viewport.height)*panelHeight,Viewport.width*panelWidth,Viewport.height*panelHeight);
-        if(place!=placed){placed=place;image.style.left=place.x;image.style.top=place.y;image.style.width=place.width;image.style.height=place.height;}
+        if(!Headless&&place!=placed){placed=place;image.style.left=place.x;image.style.top=place.y;image.style.width=place.width;image.style.height=place.height;}
         // The camera frames Tall stage units of the strip, looking straight down at the line.
         float aspect=w/(float)h;
         float tan=Mathf.Tan(stage.fieldOfView*.5f*Mathf.Deg2Rad),distance=Tall*.5f/tan;

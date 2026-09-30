@@ -37,7 +37,8 @@ public sealed class DrumPatternDeck : MonoBehaviour
         Beat=new(.36f,.54f,.53f),Upbeat=new(.2f,.3f,.3f),Needle=new(.5f,.74f,.72f),Count=new(.6f,.78f,.76f),Wave=new(.5f,.74f,.72f);
     const float Hub=.16f,Edge=1.15f;
     // Low enough that the torus hides only the plate's far edge, leaving the struck dimples in view.
-    public const float DeckDepth=4.3f;
+    // How far below the torus the deck sits (closer in a headset, where the floor is real).
+    public static float DeckDepth=4.3f;
     // Drawn after the torus and its depth occluder, so the torus hides the plate behind it.
     const int PlateQueue=3100,GlowQueue=3101;
     sealed class DiscView

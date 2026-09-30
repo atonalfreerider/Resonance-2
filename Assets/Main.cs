@@ -37,6 +37,11 @@ public class Main : MonoBehaviour
     public float TensionAmount=>tensionAmount;
     public int TensionKey=>tensionKey;
     public int KeyFrom=>uncoilKeyFrom;
+    // The notes as objects in the world (the headset's torus play reaches for them), and the
+    // labels turned to the camera (in a headset the head moves every frame).
+    public int NoteCount=>notes.Count;
+    public Vector3 NotePosition(int index)=>notes[index].transform.position;
+    public void BillboardLabels()=>UpdateText();
     // Where a pitch class's label sits on the torus (world space), for the key-shift pointer.
     public Vector3 LabelPosition(int pitchClass){int i=HarmonyModel.Mod(pitchClass);return i<noteTextLabels.Count?noteTextLabels[i].transform.position:transform.position;}
     static float PoseRotation(int key)=>pathMap[HarmonyModel.Mod(key)].x/(float)Tones;

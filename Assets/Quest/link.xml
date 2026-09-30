@@ -1,0 +1,5 @@
+<linker>
+  <!-- Primitives (CreatePrimitive) add colliders the code never names, so engine-code stripping
+       would remove the physics module and every sphere, cube and quad would log an error. -->
+  <assembly fullname="UnityEngine.PhysicsModule" preserve="all"/>
+</linker>

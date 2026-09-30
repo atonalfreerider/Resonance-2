@@ -12,7 +12,7 @@ using UnityEngine.UIElements;
 // its own tuck button, and can be pulled out again to change song.
 public sealed class SongLibraryPanel : MonoBehaviour
 {
-    public static string LibraryRoot=>Path.GetFullPath(Path.Combine(Application.dataPath,"../PreparedSongs/Library"));
+    public static string LibraryRoot=>Application.platform==RuntimePlatform.Android?Path.Combine(Application.persistentDataPath,"Library"):Path.GetFullPath(Path.Combine(Application.dataPath,"../PreparedSongs/Library"));
     public sealed class Song {public string Folder,Title,Details,Score;public bool Lyrics,Stems,Tour;public Color[] Stripes;public VisualElement StripeRow;}
     // A song's chord progression as colour stripes, sampled evenly over its length, cached beside the bundle.
     [Serializable] sealed class ChordStripes {public int version=1;public int key;public Color[] stripes;}

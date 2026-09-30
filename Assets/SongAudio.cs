@@ -116,7 +116,8 @@ public sealed class SongAudio : MonoBehaviour
             Status=$"Prepared song · {manifest.featureResolutionMs:0} ms fingerprint grid\n{manifest.status}\nRecording is the sole audio source; no runtime timing warp.";
         }
         catch(Exception e){Status="Song loaded; section map: "+e.Message;}
-        yield return GetComponent<StemPlayback>().Preload(manifest.stems,Path.GetDirectoryName(Path.GetFullPath(score)));
+        // A headset keeps only the recording: decoded stems would not fit its memory.
+        yield return GetComponent<StemPlayback>().Preload(Application.platform==RuntimePlatform.Android?null:manifest.stems,Path.GetDirectoryName(Path.GetFullPath(score)));
         if(version!=generation)yield break;
         Busy=false;midi.Seek(0);
         audioField?.SetValueWithoutNotify(AudioPath);midiField?.SetValueWithoutNotify(score);
