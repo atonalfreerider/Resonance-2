@@ -82,6 +82,9 @@ public static class QuestBuild
             "UnityEngine.XR.OpenXR.Features.Interactions.HandInteractionProfile",
             "UnityEngine.XR.OpenXR.Features.Meta.ARSessionFeature",
             "UnityEngine.XR.OpenXR.Features.Meta.ARCameraFeature",
+            // Passthrough is a composition layer under the eye buffer: without this feature the
+            // camera subsystem creates the layer but nothing ever submits it.
+            "UnityEngine.XR.OpenXR.Features.CompositionLayers.OpenXRCompositionLayersFeature",
         };
         var features=settings.GetFeatures();
         foreach(var name in wanted)
@@ -110,6 +113,8 @@ public static class QuestBuild
         PlayerSettings.defaultInterfaceOrientation=UIOrientation.LandscapeLeft;
         PlayerSettings.colorSpace=ColorSpace.Linear;
         EditorUserBuildSettings.androidBuildSubtarget=MobileTextureSubtarget.ASTC;
+        // CPU and GPU frame times for the headset's own performance sweep (VrCommands).
+        PlayerSettings.enableFrameTimingStats=true;
     }
 
     // The headset's render pipeline: the desktop one without HDR (a big cost on a mobile GPU),

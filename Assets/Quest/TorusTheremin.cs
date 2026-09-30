@@ -13,14 +13,18 @@ using UnityEngine;
 public sealed class TorusTheremin : MonoBehaviour
 {
     VrSession session;Main main;HandInput hands;
-    const float S=VrSession.Scale;
+    static float S=>VrSession.Scale;
     const float Reach=.09f,Switch=.8f,Step=.06f,RimZone=.18f,RimHeight=.22f;   // metres; a new note must be this fraction as far to take over
     sealed class Voice {public int Note=-1;public float Amplitude;}
     readonly Voice left=new(),right=new();
     readonly List<System.Tuple<int,float>> sounding=new();int lastA=-2,lastB=-2;float lastAmpA,lastAmpB;
     // Handles.
-    Transform handle;LineRenderer ring,around,updown;TextBox hint;Material glow;
-    HandInput.Hand grabbing,lastOnRim;Vector3 grabFrom,grabTangent,lastRadial;float rimRadius,lastOnRimTime=-1;
+    Transform handle;LineRenderer ring,around,updown,tether;TextBox hint;Material glow;
+    HandInput.Hand grabbing,lastOnRim;Vector3 lastRadial;float rimRadius,lastOnRimTime=-1;
+    // A grab freezes its own frame on the rim: where it was taken, the radial and tangent there,
+    // and how many steps it has applied. The torus twisting into each new key moves the notes,
+    // not the grip, and steps are counted from where the pinch began so they never drift.
+    Vector3 grabAnchor,grabStart,grabRadial,grabTangent;int appliedAlong,appliedUp;
     const float GrabGrace=.3f;   // seconds: pinching pulls the fingertip in a little, off the rim
     public string Hint=>hint!=null&&hint.gameObject.activeSelf?hint.TextField.text:"";
     public int LeftNote=>left.Note;public int RightNote=>right.Note;
@@ -31,19 +35,20 @@ public sealed class TorusTheremin : MonoBehaviour
         session=GetComponent<VrSession>();main=session.Main;hands=session.Hands;
         glow=new Material(Resources.Load<Shader>("HarmonicGlowOverlay"));glow.SetColor("_BaseColor",Color.white*1.6f);
         handle=new GameObject("Key handles").transform;handle.SetParent(transform,false);
-        ring=Line("Rim grip",.012f);around=Line("Around the ring · fifths",.016f);updown=Line("Around the tube · thirds",.016f);
+        ring=Line("Rim grip",.012f);around=Line("Around the ring · fifths",.016f);updown=Line("Around the tube · thirds",.016f);tether=Line("Drag",.006f);
         hint=TextBox.Create("",TextAlignmentOptions.Center);hint.transform.SetParent(handle,false);hint.Size=.8f;hint.Color=new Color(.9f,.95f,1f);hint.TextField.fontMaterial.renderQueue=3200;
         handle.gameObject.SetActive(false);
     }
     LineRenderer Line(string name,float width)
     {
-        var go=new GameObject(name);go.transform.SetParent(handle,false);var l=go.AddComponent<LineRenderer>();l.sharedMaterial=glow;l.useWorldSpace=true;l.widthMultiplier=width*S;l.numCapVertices=3;return l;
+        var go=new GameObject(name);go.transform.SetParent(handle,false);var l=go.AddComponent<LineRenderer>();l.sharedMaterial=glow;l.useWorldSpace=true;l.widthMultiplier=width;l.numCapVertices=3;widths[l]=width;return l;
     }
+    readonly Dictionary<LineRenderer,float> widths=new();
     void Update()
     {
         if(session==null||main==null)return;
         if(session.Current!=VrSession.Mode.TorusPlay){if(left.Note>=0||right.Note>=0){left.Note=right.Note=-1;Sound();}handle.gameObject.SetActive(false);grabbing=null;return;}
-        rimRadius=RimRadius();
+        rimRadius=session.TorusRim;
         Play(hands.Left,left);Play(hands.Right,right);Sound();
         Handles();
     }
@@ -95,46 +100,69 @@ public sealed class TorusTheremin : MonoBehaviour
     }
     void Handles()
     {
+        foreach(var (line,width) in widths)line.widthMultiplier=width*S;
+        hint.transform.localScale=Vector3.one*S/2;
+        if(grabbing!=null&&(!grabbing.Tracked||!grabbing.Pinching))grabbing=null;
+        if(grabbing!=null){Drag();return;}
         HandInput.Hand near=null;Vector3 radial=Vector3.forward;
-        if(grabbing!=null){if(!grabbing.Tracked||!grabbing.Pinching){grabbing=null;}else{near=grabbing;var d=grabbing.Index-session.TorusCenter;d.y=0;radial=d.normalized;}}
-        if(near==null)foreach(var h in hands.Both)if(OnRim(h,out var r)){near=h;radial=r;lastOnRim=h;lastRadial=r;lastOnRimTime=Time.unscaledTime;break;}
+        foreach(var h in hands.Both)if(OnRim(h,out var r)){near=h;radial=r;lastOnRim=h;lastRadial=r;lastOnRimTime=Time.unscaledTime;break;}
         // A pinch that begins just after the finger left the rim still takes the handle.
-        if(near==null&&grabbing==null&&lastOnRim!=null&&lastOnRim.Tracked&&lastOnRim.PinchStarted&&Time.unscaledTime-lastOnRimTime<GrabGrace){near=lastOnRim;radial=lastRadial;}
+        if(near==null&&lastOnRim!=null&&lastOnRim.Tracked&&lastOnRim.PinchStarted&&Time.unscaledTime-lastOnRimTime<GrabGrace){near=lastOnRim;radial=lastRadial;}
         if(near==null){if(handle.gameObject.activeSelf&&Time.unscaledTime-lastOnRimTime>GrabGrace)handle.gameObject.SetActive(false);return;}
         if(!handle.gameObject.activeSelf)handle.gameObject.SetActive(true);
-        var centre=session.TorusCenter;var at=centre+radial*(rimRadius+.03f*S);
-        // Clockwise seen from above is the tangent that turns right when looking down.
+        var at=session.TorusCenter+radial*(rimRadius+.03f*S);at.y=near.Index.y;
         var tangent=Vector3.Cross(radial,Vector3.up).normalized;
-        if(grabbing==null&&near.PinchStarted){grabbing=near;grabFrom=near.Index;grabTangent=tangent;}
-        Draw(at,radial,tangent);
-        if(grabbing!=null)
+        if(near.PinchStarted)
         {
-            var delta=grabbing.Index-grabFrom;float along=Vector3.Dot(delta,grabTangent)/S,vertical=delta.y/S;
-            if(Mathf.Abs(along)>=Step&&Mathf.Abs(along)>=Mathf.Abs(vertical)){Turn(along>0?7:-7);grabFrom=grabbing.Index;}
-            else if(Mathf.Abs(vertical)>=Step){Turn(vertical>0?4:-4);grabFrom=grabbing.Index;}
-            hint.Text=Preview(along,vertical);
+            grabbing=near;grabAnchor=at;grabStart=near.Index;grabRadial=radial;grabTangent=tangent;appliedAlong=appliedUp=0;
+            Drag();return;
         }
-        else hint.Text="pinch · drag ↻ fifths · ↕ thirds";
+        Draw(at,radial,tangent,false);tether.positionCount=0;
+        hint.Text=$"pinch · drag ↻ fifths · ↕ thirds";
         hint.transform.position=at+Vector3.up*.07f*S;hint.Billboard();
     }
-    string Preview(float along,float vertical)
+    // While held: the grip stays where it was taken; the drag from the pinch's start, in metres
+    // along the frozen tangent and up, sets how many steps of each kind are applied.
+    void Drag()
+    {
+        var delta=(grabbing.Index-grabStart)/S;float along=Vector3.Dot(delta,grabTangent),up=delta.y;
+        // One axis at a time: whichever the drag favours; steps come with hysteresis so a
+        // held position between two steps does not flicker.
+        bool horizontal=Mathf.Abs(along)>=Mathf.Abs(up);
+        int wantAlong=horizontal?Steps(along,appliedAlong):appliedAlong,wantUp=horizontal?appliedUp:Steps(up,appliedUp);
+        if(wantAlong!=appliedAlong){Turn(7*(wantAlong-appliedAlong));appliedAlong=wantAlong;}
+        if(wantUp!=appliedUp){Turn(4*(wantUp-appliedUp));appliedUp=wantUp;}
+        Draw(grabAnchor,grabRadial,grabTangent,true);
+        tether.positionCount=2;tether.SetPosition(0,grabAnchor);tether.SetPosition(1,grabbing.Index);
+        hint.Text=Preview(along-appliedAlong*Step,up-appliedUp*Step,appliedAlong,appliedUp);
+        hint.transform.position=grabAnchor+Vector3.up*.09f*S;hint.Billboard();
+    }
+    static int Steps(float metres,int current)
+    {
+        float x=metres/Step;
+        // Move to a new step only once past its middle by a margin.
+        if(x>current+.6f)return Mathf.FloorToInt(x+.4f);
+        if(x<current-.6f)return Mathf.CeilToInt(x-.4f);
+        return current;
+    }
+    string Preview(float along,float vertical,int fifths,int thirds)
     {
         int key=main.currentKey;string N(int k)=>main.PitchName(HarmonyModel.Mod(k));
-        // Until the drag picks a direction, both destinations.
-        if(Mathf.Max(Mathf.Abs(along),Mathf.Abs(vertical))<Step*.25f)return $"↻ {N(key+7)}  ·  ↑ {N(key+4)}";
-        if(Mathf.Abs(along)>=Mathf.Abs(vertical))return along>=0?$"↻ {N(key+7)}  (up a fifth)":$"↺ {N(key-7)}  (down a fifth)";
-        return vertical>=0?$"↑ {N(key+4)}  (up a third)":$"↓ {N(key-4)}  (down a third)";
+        string done=fifths==0&&thirds==0?"":$"{N(key)}  ·  ";
+        if(Mathf.Max(Mathf.Abs(along),Mathf.Abs(vertical))<Step*.25f)return done+$"↻ {N(key+7)}  ·  ↑ {N(key+4)}";
+        if(Mathf.Abs(along)>=Mathf.Abs(vertical))return done+(along>=0?$"↻ {N(key+7)}  (up a fifth)":$"↺ {N(key-7)}  (down a fifth)");
+        return done+(vertical>=0?$"↑ {N(key+4)}  (up a third)":$"↓ {N(key-4)}  (down a third)");
     }
     void Turn(int semitones){main.ChangeKey(main.currentKey+semitones,.7f);}
     readonly Vector3[] points=new Vector3[24];
-    void Draw(Vector3 at,Vector3 radial,Vector3 tangent)
+    void Draw(Vector3 at,Vector3 radial,Vector3 tangent,bool held)
     {
         float s=S;var up=Vector3.up;
         // A small grip ring on the rim, an arc along the ring (fifths) and one up and over the tube (thirds).
         ring.positionCount=17;for(int i=0;i<17;i++){float a=i/16f*Mathf.PI*2;ring.SetPosition(i,at+(tangent*Mathf.Cos(a)+up*Mathf.Sin(a))*.012f*s);}
         around.positionCount=13;for(int i=0;i<13;i++){float u=(i/12f-.5f)*.14f*s;around.SetPosition(i,at+tangent*u-radial*(u*u/(rimRadius+.03f*s))*.5f);}
         updown.positionCount=13;for(int i=0;i<13;i++){float a=(i/12f-.5f)*1.6f;updown.SetPosition(i,at-radial*.05f*s+(radial*Mathf.Cos(a)+up*Mathf.Sin(a))*.05f*s);}
-        float live=grabbing!=null?1.8f:1;var c=new Color(.7f,.9f,1f)*live;c.a=.9f;
+        float live=held?1.8f:1;var c=new Color(.7f,.9f,1f)*live;c.a=.9f;
         ring.startColor=ring.endColor=around.startColor=around.endColor=updown.startColor=updown.endColor=c;
     }
     void OnDestroy(){if(glow!=null)Destroy(glow);}

@@ -19,7 +19,7 @@ public sealed class HandInput : MonoBehaviour
     public readonly Hand Left=new(),Right=new();
     public IEnumerable<Hand> Both{get{yield return Left;yield return Right;}}
     public Transform Rig,Head;
-    public float Scale=1;          // scene units per metre (the rig's scale)
+    public float Scale=>VrSession.Active?VrSession.Scale:1;   // scene units per metre (the rig's scale, per mode)
     public bool Simulated;
     // The simulated hand's reach in front of the head, metres, and whether the left palm faces up.
     public float SimulatedDepth=.5f;public bool SimulatedPalm;public bool SimulatedPinch;public Vector2? SimulatedScreen;

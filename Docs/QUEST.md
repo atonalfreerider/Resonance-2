@@ -6,9 +6,9 @@ editor's simulation is switched on).
 
 ## What you see
 
-- **The torus** stands in front of you at chest height, about 2.2 m across. Its near rim is
+- **The torus** stands in front of you at waist height, about 1.65 m across. Its near rim is
   about 35 cm from you, so you can reach into it or walk around it.
-- **The drum wheel** stands under it.
+- **The drum wheel** stands under it, above the floor.
 - **The lyric line** floats just above it. The rhyme graph is not shown in the headset.
 - **The pattern wheels** stand behind the torus as a solid object facing you, their lowest edge
   just above the torus so nothing hides them (`PatternWheel3D`). The pinion is a thick toothed
@@ -19,7 +19,11 @@ editor's simulation is switched on).
   The instrument stacks stand in a grid to the right, under the caption.
 - **The room** shows through (passthrough), or everything outside the scene is black (blackout).
 
-The scene is seen through a rig scaled so 1 m in the room is 2 scene units (`VrSession.Scale`).
+The scene is seen through a rig whose scale sets how big the world is around you
+(`VrSession.Scale`): 1 m in the room is 2.67 scene units in song mode and 2 in torus play, so the
+torus is 25% smaller in song mode. Menus, fingertips and handles are sized in metres and keep
+their size. The tracking origin is the floor, and the app places everything once the first head
+pose arrives (and again after a system recentre), so the torus never starts on the floor.
 The desktop's flat panels are switched off in the headset. They cost most of a frame on the
 headset's CPU, and nothing in the headset shows them.
 
@@ -36,7 +40,8 @@ headset's CPU, and nothing in the headset shows them.
 
 ## Torus play
 
-Choose *Play the torus* on the palm menu. The song pauses and the torus stands alone.
+Choose *Play the torus* on the palm menu. The song pauses and the torus stands alone, about
+2.2 m across, with you at its centre and the tube around you at chest height.
 
 - **Play notes.** Move a fingertip over the torus. The note nearest the finger sounds, louder
   the closer you are. It never bends: a new note takes over only once it is clearly nearer.
@@ -46,6 +51,9 @@ Choose *Play the torus* on the palm menu. The song pauses and the torus stands a
   - around the ring (clockwise seen from above) for a fifth up per step, back for a fifth down;
   - up or down around the tube for a major third up or down per step.
   Every step twists the torus into the new key. Keep dragging for more steps.
+  The grip stays where you took it while the torus turns under it, and a line runs from the
+  grip to your finger. Steps count from where the pinch began, about 6 cm each, and a step is
+  taken only past its middle, so holding still between two steps never flickers.
 
 ## Building and installing
 
@@ -66,7 +74,7 @@ adb install -r ../Resonance-quest/Builds/Quest/Resonance.apk
 
 `QuestBuild.Build` configures the Android side first (menu: *Tools/Resonance/Quest/Configure
 Android XR*): the OpenXR loader, the Meta Quest, hand tracking, hand interaction and
-passthrough features, and IL2CPP / ARM64 / Vulkan / ASTC player settings. Controller
+passthrough features (with Composition Layers Support, which submits the passthrough layer), and IL2CPP / ARM64 / Vulkan / ASTC player settings. Controller
 interaction profiles are switched off, since the app is hands only. The package is
 `com.primitive.resonance`. `adb` ships with Unity's Android support under
 `Editor/Data/PlaybackEngines/AndroidPlayer/SDK/platform-tools`.
@@ -82,6 +90,8 @@ python Tools/SongLibrary/deploy_quest.py
 ```
 
 It takes `--only <part of a folder name>`, `--list`, `--remove <name>` and `--dry-run`.
+It also drives the running app (`--command`) and prints the last performance sweep (`--perf`);
+see below.
 Files already on the headset at the same size are skipped. The headset reads them from
 `/sdcard/Android/data/com.primitive.resonance/files/Library/`.
 
@@ -110,6 +120,40 @@ Frame rate, from the headset's own counter:
 adb logcat -s VrApi | grep FPS
 ```
 
+## Driving the headset from the computer
+
+While the app runs on the headset (and someone wears it, or it pauses), it reads commands from
+`vr-commands.txt` in its data folder (`VrCommands`):
+
+| Command | Does |
+| --- | --- |
+| `passthrough on` / `off` | Switches passthrough |
+| `mode song` / `torus` | Song mode or torus play |
+| `load <part of a folder>` | Loads a song (the first one without a name) |
+| `play`, `pause`, `seek <seconds>` | Transport |
+| `recenter` | Places everything around the head again |
+| `dump` | Logs the render and passthrough state |
+| `post on` / `off`, `msaa 1`/`2`/`4`, `eyescale <0.5–1>` | Rendering switches for testing |
+| `sweep` | Measures what each part of the picture costs |
+
+```bash
+python Tools/SongLibrary/deploy_quest.py --command "passthrough on" --command dump
+```
+
+The sweep plays a song in song mode and records the app's own GPU and CPU frame times with
+everything on. It then repeats the measurement with each suspect switched off in turn: post-processing, MSAA, 80% eye
+resolution, the lyric strip's camera, and every group of visible renderers that share a shader.
+It lists the savings largest first, in the log ("VR perf") and in `vr-perf.txt`. It takes about a
+minute, and the picture changes as parts switch off.
+
+```bash
+python Tools/SongLibrary/deploy_quest.py --command sweep
+```
+
+```bash
+python Tools/SongLibrary/deploy_quest.py --perf
+```
+
 ## Trying it without a headset
 
 Tick *Tools/Resonance/Quest/Simulate in editor* and enter play mode. The view becomes the
@@ -126,5 +170,6 @@ headset's, the mouse is the right index fingertip at arm's length, and the left 
 | `Assets/Quest/VrMenu.cs` | The palm menu and the song list |
 | `Assets/Quest/TorusTheremin.cs` | Torus play: nearest-note theremin and the key-change handles |
 | `Assets/Quest/PatternWheel3D.cs` | The pattern wheels and instrument stacks as 3D geometry |
+| `Assets/Quest/VrCommands.cs` | Commands from the computer and the performance sweep |
 | `Assets/Editor/QuestBuild.cs` | Android XR configuration, the headset pipeline, the batch build |
 | `Tools/SongLibrary/deploy_quest.py` | Copies prepared songs to the headset |

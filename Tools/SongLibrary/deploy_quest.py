@@ -10,6 +10,11 @@ Stems, narration and analysis files stay on the computer.
   python Tools/SongLibrary/deploy_quest.py --only fire     # folders containing "fire"
   python Tools/SongLibrary/deploy_quest.py --list          # what is on the headset
   python Tools/SongLibrary/deploy_quest.py --remove Drank  # delete a song from the headset
+  python Tools/SongLibrary/deploy_quest.py --command "passthrough on" --command dump
+  python Tools/SongLibrary/deploy_quest.py --command sweep  # measure what the picture costs
+  python Tools/SongLibrary/deploy_quest.py --perf           # print the last sweep's result
+
+Commands run in the headset app (VrCommands) while it is running and worn; see Docs/QUEST.md.
 
 Files already on the headset with the same size are skipped, so re-running is cheap.
 Install and run the app once first so the headset has made its data folder.
@@ -120,6 +125,8 @@ def main():
     parser.add_argument("--fixtures", action="store_true", help="include the lyric test fixtures")
     parser.add_argument("--list", action="store_true", help="list the songs on the headset and stop")
     parser.add_argument("--remove", nargs="+", help="remove song folders containing any of these from the headset")
+    parser.add_argument("--command", action="append", help="send a command line to the running app (repeatable)")
+    parser.add_argument("--perf", action="store_true", help="print the last performance sweep from the headset")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -130,6 +137,23 @@ def main():
     if not args.serial and len(devices) > 1:
         sys.exit(f"Several devices ({', '.join(devices)}): pick one with --serial.")
     remote_root = f"/sdcard/Android/data/{args.package}/files/Library"
+    remote_files = f"/sdcard/Android/data/{args.package}/files"
+
+    if args.command or args.perf:
+        if args.command:
+            import tempfile
+            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8", newline="\n") as handle:
+                handle.write("\n".join(args.command) + "\n")
+            # Pushed as the shell user: opened so the app can read and delete it, then renamed
+            # into place so the app never reads it half written.
+            staging = f"{remote_files}/vr-commands.txt.tmp"
+            device.run("push", handle.name, staging)
+            os.unlink(handle.name)
+            device.shell(f"chmod 666 {staging} && mv {staging} {remote_files}/vr-commands.txt")
+            print(f"Sent {len(args.command)} command(s); the app runs them within half a second while it is running.")
+        if args.perf:
+            print(device.shell(f"cat {remote_files}/vr-perf.txt 2>/dev/null", check=False) or "No sweep result on the headset yet.")
+        return
 
     if args.list or args.remove:
         folders = [l.strip() for l in device.shell(f"ls '{remote_root}' 2>/dev/null", check=False).splitlines() if l.strip()]
