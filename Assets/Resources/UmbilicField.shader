@@ -28,7 +28,7 @@ Shader "Resonance/UmbilicField"
             // is added over the room, covering it only as much as it is bright, so hands and the room
             // show through the torus. Unset (0) the alpha is 1 as before.
             float _PassthroughGlow;
-            half Coverage(half3 c){return lerp(1,saturate(max(c.r,max(c.g,c.b)))*.5,_PassthroughGlow);}
+            half Coverage(half3 c){return lerp(1,max(.2,saturate(max(c.r,max(c.g,c.b)))*.6),_PassthroughGlow);}   // the fill dims the room seen through it a little
             struct A { float4 positionOS:POSITION; float2 uv:TEXCOORD0; float2 coverage:TEXCOORD1; float4 color:COLOR;float3 original:TEXCOORD2; };
             struct V { float4 positionCS:SV_POSITION; float3 positionOS:TEXCOORD0; float2 uv:TEXCOORD1; float2 coverage:TEXCOORD2; float3 local:TEXCOORD3; };
             V Vert(A i) { V o; o.positionCS=TransformObjectToHClip(i.positionOS.xyz);o.positionOS=i.original;o.uv=i.uv;o.coverage=i.coverage;o.local=i.color.rgb;return o; }

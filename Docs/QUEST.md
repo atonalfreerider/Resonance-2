@@ -9,7 +9,8 @@ editor's simulation is switched on).
 - **The torus** stands in front of you at waist height, about 1.65 m across. Its near rim is
   about 35 cm from you, so you can reach into it or walk around it.
 - **The drum wheel** stands under it, above the floor.
-- **The lyric line** floats just above it. The rhyme graph is not shown in the headset.
+- **The lyric line** floats above it (the strip's stage itself, drawn in the scene: the word,
+  its trail, the groove slashes and strikes). The rhyme graph is not shown in the headset.
 - **The pattern wheels** stand behind the torus as a solid object facing you, their lowest edge
   just above the torus so nothing hides them (`PatternWheel3D`). The pinion is a thick toothed
   ring, the song wound once around, one slab per section visit; a family's relief and stripe
@@ -31,12 +32,14 @@ headset's CPU, and nothing in the headset shows them.
 
 - **Palm menu.** Turn your left palm toward your face. A column of buttons stands above it:
   Songs, Play/Pause (a loading percentage while a song loads), Play the torus / Song view,
-  Passthrough / Blackout, Recenter. Push a button with your right index fingertip.
+  Passthrough / Blackout, See inside / Solid torus. Push a button with your right index
+  fingertip. See inside lets the torus's interior show through its surface.
 - **Song list.** Opens by itself when no song is loaded, and from the palm menu. Each card shows
   the title and the song's chord progression as a strip of colours, ten to a page. Poke a card
   to load it.
 - **Seek.** Pinch the rack beside the pattern wheels and drag up to go forward, down to go back.
-- **Recenter** puts the torus back in front of you, wherever you are facing.
+- **Recenter** with the headset's own recentre (hold the Meta button): the torus comes back in
+  front of you, wherever you are facing.
 
 ## Torus play
 

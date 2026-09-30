@@ -60,7 +60,7 @@ public sealed class VrSession : MonoBehaviour
     // Layout in metres. Song mode: the torus centre below the eyes (waist height) and the gap
     // between the viewer and its near rim; the wheels behind and above it; the lyric line above
     // it. Torus play: the torus centre below the eyes (chest height), the viewer at its centre.
-    const float SongBelow=.92f,NearGap=.35f,WheelsBehind=.9f,WheelsClear=.3f,WheelRadius=.9f,LyricAbove=.42f,LyricWidth=1.3f,DrumBelow=.7f,
+    const float SongBelow=.92f,NearGap=.35f,WheelsBehind=.9f,WheelsClear=.3f,WheelRadius=.9f,LyricAbove=.72f,LyricWidth=1.3f,DrumBelow=.7f,DrumDrop=.3f,
         PlayBelow=.42f;
     static readonly Vector2Int LyricPixels=new(1400,360);
 
@@ -94,7 +94,7 @@ public sealed class VrSession : MonoBehaviour
         menu=gameObject.AddComponent<VrMenu>();theremin=gameObject.AddComponent<TorusTheremin>();
         gameObject.AddComponent<VrCommands>();
         views.SetView(VisualizationViews.View.Overview);
-        ApplyScale();Recenter();SetPassthrough(false);
+        ApplyScale();Recenter();SetPassthrough(false);SetSeeThrough(false);
         Debug.Log("VR session: "+Diagnostics());
     }
     void BuildRig()
@@ -203,6 +203,7 @@ public sealed class VrSession : MonoBehaviour
         if(drums==null||drums.WheelTransform==null)return;
         float above=(TorusCenter.y-FloorY)/Scale,below=DrumBelow;
         if(!Simulated&&floorOrigin)below=Mathf.Clamp(above-.18f,.3f,DrumBelow);
+        below+=DrumDrop;   // lower, clear of the torus
         // The deck places itself each frame from DeckDepth (in the torus's own units).
         DrumPatternDeck.DeckDepth=below*Scale/Mathf.Max(1e-4f,Main.transform.lossyScale.y);
     }
@@ -243,7 +244,7 @@ public sealed class VrSession : MonoBehaviour
     // See inside: the torus's depth-only copy stops hiding what lies inside and behind its
     // surface, and the tonal field's fill thins, so the melody lines and notes show through.
     public bool SeeThrough {get;private set;}
-    const float SolidField=.7f,SeeThroughField=.25f;
+    const float SolidField=.55f,SeeThroughField=.2f;
     public void SetSeeThrough(bool on)
     {
         SeeThrough=on;
