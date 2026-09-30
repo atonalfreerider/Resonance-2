@@ -39,6 +39,9 @@ public sealed class DrumPatternDeck : MonoBehaviour
     // Low enough that the torus hides only the plate's far edge, leaving the struck dimples in view.
     // How far below the torus the deck sits (closer in a headset, where the floor is real).
     public static float DeckDepth=4.3f;
+    // The headset: Hidden takes the deck away (torus play); Lite keeps only the playing disc, its
+    // beats and strikes, and drops the ripple rings and the stacked discs below.
+    public static bool Hidden,Lite;
     // Drawn after the torus and its depth occluder, so the torus hides the plate behind it.
     const int PlateQueue=3100,GlowQueue=3101;
     sealed class DiscView
@@ -194,7 +197,7 @@ public sealed class DrumPatternDeck : MonoBehaviour
         if(midi==null)midi=GetComponent<MidiPlayer>();
         if(midi==null||midi.Cycles==null||midi.Prepared==null){deck.gameObject.SetActive(false);source=null;return;}
         if(discMaterial.renderQueue!=PlateQueue)discMaterial.renderQueue=PlateQueue;
-        if(source!=midi.Prepared)Load();bool ready=source?.DrumBars?.Length>0&&hits.Length>0;deck.gameObject.SetActive(ready);if(!ready)return;
+        if(source!=midi.Prepared)Load();bool ready=source?.DrumBars?.Length>0&&hits.Length>0&&!Hidden;if(deck.gameObject.activeSelf!=ready)deck.gameObject.SetActive(ready);if(!ready)return;
         double beat=midi.Cycles.BeatAt(midi.ScorePosition),now=midi.ScorePosition;
         int barIndex=Array.FindLastIndex(source.DrumBars,b=>b.Start<=beat);barIndex=Math.Max(0,barIndex);var bar=source.DrumBars[barIndex];
         if(barIndex!=lastBar){Select(bar);lastBar=barIndex;}
@@ -202,6 +205,7 @@ public sealed class DrumPatternDeck : MonoBehaviour
             // Only the playing disc is lit and labelled: the stacked discs below would read
             // through it as a second, rotated clock.
             bool on=view==active;Tint(view.Detail,on?1.4f:.45f);
+            if(view.Root.gameObject.activeSelf!=(on||!Lite))view.Root.gameObject.SetActive(on||!Lite);
             for(int i=0;i<view.Beats.Count;i++){bool show=on&&view.Bar!=null&&i<Math.Max(1,view.Bar.Numerator)*2;if(view.Beats[i].enabled!=show)view.Beats[i].enabled=show;}
             for(int i=0;i<view.Counts.Count;i++){var label=view.Counts[i];bool show=on&&view.Bar!=null&&i<view.Bar.Numerator;if(label.gameObject.activeSelf!=show)label.gameObject.SetActive(show);if(show)Upright(label);}
             bool named=on&&view.Name.Length>0;if(view.Label.gameObject.activeSelf!=named)view.Label.gameObject.SetActive(named);if(named)Upright(view.Label);}
@@ -212,7 +216,7 @@ public sealed class DrumPatternDeck : MonoBehaviour
         bool jump=now<previous||Math.Abs(now-previous)>.3||(!wasPlaying&&midi.IsPlaying);
         if(jump){ripples.Clear();nextHit=Array.FindIndex(hits,h=>h.Beat>=beat-.00001);if(nextHit<0)nextHit=hits.Length;}
         if(midi.IsPlaying)while(nextHit<hits.Length&&hits[nextHit].Beat<=beat){var hit=hits[nextHit++];ripples.Add(new Ripple{Start=midi.Cycles.SecondsAt(hit.Beat),Frequency=hit.RippleFrequency,Decay=hit.RippleFrequency==4?.24f:hit.DecaySeconds,Velocity=hit.Velocity,Radius=hit.RippleRadius,Width=hit.RippleWidth,Origin=new Vector3(0,.015f,hit.StrikeRadius)});}
-        if(!midi.IsPlaying)ripples.Clear();previous=now;wasPlaying=midi.IsPlaying;
+        if(!midi.IsPlaying||Lite)ripples.Clear();previous=now;wasPlaying=midi.IsPlaying;
         ripples.RemoveAll(r=>now-r.Start>r.Decay*1.3f);
         if(ripples.Count>waves.Count/3)ripples.RemoveRange(0,ripples.Count-waves.Count/3);
         for(int n=0;n<waves.Count;n++)

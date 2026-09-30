@@ -38,7 +38,27 @@ public class MidiPlayer : MonoBehaviour
     int memoryIndex;
     // PlayScheduled and all visual deadlines use the same continuous DSP clock.
     public static double ScheduledPosition(double start,double dspStart,double dspNow,float speed,double duration)=>Math.Min(duration,start+Math.Max(0,dspNow-dspStart)*speed);
-    public double Position => IsPlaying?ScheduledPosition(originPosition,originDsp,AudioSettings.dspTime,playbackSpeed,Duration):originPosition;
+    public double Position => IsPlaying?ScheduledPosition(originPosition,originDsp,VisualDsp,playbackSpeed,Duration):originPosition;
+    // The DSP clock advances once per audio buffer (1024 samples, about 21 ms), so at a headset's
+    // 72 Hz some frames would see no time pass and the next a whole buffer: melody lines and note
+    // pulses would step. In the headset the clock is carried forward by frame time and eased
+    // toward the DSP clock (about half a buffer ahead of it, where the true time averages), once
+    // per frame, never going backward. Elsewhere it is the DSP clock itself.
+    static double smoothDsp,smoothReal;static int smoothFrame=-1;
+    public static double VisualDsp
+    {
+        get
+        {
+            double dsp=AudioSettings.dspTime;
+            if(!VrSession.Active)return dsp;
+            if(smoothFrame==Time.frameCount)return smoothDsp;
+            AudioSettings.GetDSPBufferSize(out int length,out _);double target=dsp+.5*length/Math.Max(1,AudioSettings.outputSampleRate);
+            double real=Time.unscaledTimeAsDouble;
+            if(smoothFrame<0||Math.Abs(target-smoothDsp)>.1)smoothDsp=target;
+            else{double next=smoothDsp+(real-smoothReal);next+=(target-next)*.1;smoothDsp=Math.Max(smoothDsp,next);}
+            smoothReal=real;smoothFrame=Time.frameCount;return smoothDsp;
+        }
+    }
     double frameScorePosition;int sampledFrame=-1;
     public double VisualScorePosition=>sampledFrame==Time.frameCount?frameScorePosition:ScorePosition;
 

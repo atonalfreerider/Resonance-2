@@ -12,7 +12,10 @@ using UnityEngine.XR;
 // Driving the headset app from the computer over USB, for testing without hands: the app reads
 // vr-commands.txt in its data folder (pushed with adb), runs each line and deletes the file.
 //   passthrough on|off · mode song|torus · load <part of a song folder> · play · pause ·
-//   seek <seconds> · recenter · dump · sweep · post on|off · msaa 1|2|4 · eyescale <0.5–1>
+//   seek <seconds> · recenter · dump · probe · sweep · post on|off · msaa 1|2|4 · eyescale <0.5–1>
+// "probe" checks what passthrough and the lyric line depend on: the eye camera's picture
+// rendered once into a texture (how much of it is transparent, with and without post-processing),
+// every composition layer with its order and blending, and whether the lyric texture has content.
 // "sweep" measures what each part of the picture costs: with a song playing it records the
 // app's own GPU and CPU frame times with everything on, then with each suspect switched off in
 // turn (post-processing, MSAA, eye resolution, the lyric strip's camera, and every group of
@@ -56,6 +59,7 @@ public sealed class VrCommands : MonoBehaviour
                 case "msaa":if(Pipeline!=null)Pipeline.msaaSampleCount=int.Parse(arg);break;
                 case "eyescale":XRSettings.eyeTextureResolutionScale=float.Parse(arg,System.Globalization.CultureInfo.InvariantCulture);break;
                 case "sweep":if(!sweeping)StartCoroutine(Sweep());break;
+                case "probe":Probe();break;
                 default:Debug.LogWarning("VR command unknown: "+line);break;
             }
         }
@@ -67,6 +71,42 @@ public sealed class VrCommands : MonoBehaviour
         var song=SongLibraryPanel.Scan().FirstOrDefault(s=>string.IsNullOrEmpty(part)||s.Folder.IndexOf(part,StringComparison.OrdinalIgnoreCase)>=0);
         if(song==null){Debug.LogWarning("VR command: no song matching "+part);return false;}
         session.SetMode(VrSession.Mode.Song);session.Audio.LoadPair("",song.Score);GetComponent<VrMenu>()?.ShowSongs(false);return true;
+    }
+
+    // ---------- the probe ----------
+    void Probe()
+    {
+        var head=session.Head;var text=new StringBuilder();
+        foreach(bool post in new[]{true,false})
+        {
+            var go=new GameObject("Alpha probe camera");var cam=go.AddComponent<Camera>();
+            cam.CopyFrom(head);cam.stereoTargetEye=StereoTargetEyeMask.None;cam.fieldOfView=90;cam.aspect=1;cam.clearFlags=CameraClearFlags.SolidColor;cam.backgroundColor=Color.clear;   // as in passthrough
+            go.transform.SetPositionAndRotation(head.transform.position,head.transform.rotation);
+            var data=cam.GetUniversalAdditionalCameraData();var from=head.GetUniversalAdditionalCameraData();
+            data.renderPostProcessing=post;data.volumeLayerMask=from.volumeLayerMask;data.antialiasing=from.antialiasing;
+            var rt=new RenderTexture(256,256,24,RenderTextureFormat.ARGB32){antiAliasing=1};rt.Create();cam.targetTexture=rt;
+            cam.Render();
+            var stats=Stats(rt);text.Append($"eye picture (post {(post?"on":"off")}): {stats}; ");
+            cam.targetTexture=null;rt.Release();Destroy(rt);Destroy(go);
+        }
+        var output=session.Lyrics!=null?session.Lyrics.Output as RenderTexture:null;
+        text.Append(output!=null?$"lyric texture {output.width}x{output.height} {output.format}: {Stats(output)}; ":"lyric texture none; ");
+        var card=session.LyricCard;
+        if(card!=null){var v=head.WorldToViewportPoint(card.transform.position);text.Append($"lyric card active {card.activeInHierarchy} at viewport ({v.x:0.00},{v.y:0.00}) {v.z/VrSession.Scale:0.00} m, scale {card.transform.lossyScale/VrSession.Scale}; ");}
+        foreach(var layer in FindObjectsByType<Unity.XR.CompositionLayers.CompositionLayer>(FindObjectsInactive.Include))
+            text.Append($"layer {layer.name} order {layer.Order} {layer.LayerData?.GetType().Name} blend {layer.LayerData?.BlendType} enabled {layer.isActiveAndEnabled}; ");
+        Debug.Log("VR probe: "+text);
+    }
+    // How much of a texture is transparent (alpha under 0.05), its mean alpha and brightest pixel.
+    static string Stats(RenderTexture rt)
+    {
+        var previous=RenderTexture.active;RenderTexture.active=rt;
+        var read=new Texture2D(rt.width,rt.height,TextureFormat.RGBAFloat,false);read.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);read.Apply();
+        RenderTexture.active=previous;
+        var px=read.GetPixels();int clear=0;double alpha=0;float bright=0;
+        foreach(var c in px){if(c.a<.05f)clear++;alpha+=c.a;bright=Mathf.Max(bright,Mathf.Max(c.r,Mathf.Max(c.g,c.b)));}
+        Destroy(read);
+        return $"{100f*clear/px.Length:0}% transparent, mean alpha {alpha/px.Length:0.00}, brightest {bright:0.00}";
     }
 
     // ---------- the sweep ----------

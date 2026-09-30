@@ -85,6 +85,7 @@ public sealed class VrSession : MonoBehaviour
         yield return null;yield return null;
         Midi=Main.GetComponent<MidiPlayer>();Audio=Main.GetComponent<SongAudio>();views=Main.GetComponent<VisualizationViews>();
         lyrics=Main.GetComponent<DrumLyricRack>();library=Main.GetComponent<SongLibraryPanel>();drums=Main.GetComponent<DrumPatternDeck>();
+        DrumPatternDeck.Lite=true;   // the drum wheel is the lowest priority in the headset's frame
         // On the headset: the lighter pipeline (no HDR, 4x MSAA, alpha kept for passthrough).
         if(!Simulated){var pipeline=Resources.Load<RenderPipelineAsset>("QuestPipeline");if(pipeline!=null)QualitySettings.renderPipeline=pipeline;}
         BuildRig();SilenceFlatUi();BuildLyrics();
@@ -202,7 +203,8 @@ public sealed class VrSession : MonoBehaviour
         if(drums==null||drums.WheelTransform==null)return;
         float above=(TorusCenter.y-FloorY)/Scale,below=DrumBelow;
         if(!Simulated&&floorOrigin)below=Mathf.Clamp(above-.18f,.3f,DrumBelow);
-        drums.WheelTransform.localPosition=new Vector3(0,-below*Scale/Mathf.Max(1e-4f,Main.transform.lossyScale.y),0);
+        // The deck places itself each frame from DeckDepth (in the torus's own units).
+        DrumPatternDeck.DeckDepth=below*Scale/Mathf.Max(1e-4f,Main.transform.lossyScale.y);
     }
     public void SetPassthrough(bool on)
     {
@@ -253,7 +255,7 @@ public sealed class VrSession : MonoBehaviour
         bool song=Current==Mode.Song;
         Wheels.Visible=song&&Midi.Loaded;
         // Torus play is the torus alone: the drum wheel would stand at the viewer's feet.
-        if(drums!=null&&drums.WheelTransform!=null&&drums.WheelTransform.gameObject.activeSelf!=song)drums.WheelTransform.gameObject.SetActive(song);
+        DrumPatternDeck.Hidden=!song;
         // The lyric line above the torus, from the strip's own transparent texture.
         if(lyrics!=null)
         {
@@ -265,6 +267,7 @@ public sealed class VrSession : MonoBehaviour
     void OnDestroy()
     {
         if(Instance==this)Instance=null;
+        DrumPatternDeck.Hidden=DrumPatternDeck.Lite=false;DrumPatternDeck.DeckDepth=4.3f;
         foreach(var copy in copies)if(copy!=null)Destroy(copy);
         if(sink!=null){sink.Release();Destroy(sink);}
         if(lyricMaterial!=null)Destroy(lyricMaterial);
