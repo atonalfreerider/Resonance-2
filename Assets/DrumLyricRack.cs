@@ -41,6 +41,9 @@ public sealed class DrumLyricRack : MonoBehaviour
     // In a headset the strip is shown on a card in the scene instead of its own screen panel:
     // Headless hides the panel, PixelSize fixes the texture's size, Output is the texture.
     public bool Headless;public Vector2Int PixelSize;public Texture Output=>texture;
+    // In the headset the stage itself stands in the scene (the eye camera draws it directly) and
+    // its own camera stays off: StageRoot is placed by the headset, StageLayer drawn by its eyes.
+    public Transform StageRoot=>root;public Camera StageCamera=>stage;public const int StageLayerIndex=StageLayer;
     public bool Shown=>visible>.5f;
     public float Visibility=>visible;
     // Stage geometry: the line at Center, the groove's depth, the strip Tall units high.

@@ -18,13 +18,18 @@ Shader "Resonance/HarmonicGlowOverlay"
             float4 _BaseColor;
             CBUFFER_END
             float _ViewOpacity;
+            // _PassthroughGlow (global, set only by the headset while passthrough is on): the glow
+            // is added over the room, covering it only as much as it is bright, so hands and the room
+            // show through the torus. Unset (0) the alpha is 1 as before.
+            float _PassthroughGlow;
+            half Coverage(half3 c){return lerp(1,saturate(max(c.r,max(c.g,c.b)))*.5,_PassthroughGlow);}
             struct A { float4 positionOS:POSITION; float4 color:COLOR; float2 uv:TEXCOORD0; };
             struct V { float4 positionCS:SV_POSITION; float4 color:COLOR; float2 uv:TEXCOORD0; };
             V Vert(A i) { V o; o.positionCS=TransformObjectToHClip(i.positionOS.xyz); o.color=i.color; o.uv=i.uv; return o; }
             half4 Frag(V i):SV_Target
             {
                 float soft=pow(saturate(1-abs(i.uv.y*2-1)),.65);
-                return half4(i.color.rgb*_BaseColor.rgb*soft*_ViewOpacity,1);
+                half3 glow=i.color.rgb*_BaseColor.rgb*soft*_ViewOpacity;return half4(glow,Coverage(glow));
             }
             ENDHLSL
         }

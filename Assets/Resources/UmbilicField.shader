@@ -24,6 +24,11 @@ Shader "Resonance/UmbilicField"
             float _Dominance;
             CBUFFER_END
             float _ViewOpacity;
+            // _PassthroughGlow (global, set only by the headset while passthrough is on): the glow
+            // is added over the room, covering it only as much as it is bright, so hands and the room
+            // show through the torus. Unset (0) the alpha is 1 as before.
+            float _PassthroughGlow;
+            half Coverage(half3 c){return lerp(1,saturate(max(c.r,max(c.g,c.b)))*.5,_PassthroughGlow);}
             struct A { float4 positionOS:POSITION; float2 uv:TEXCOORD0; float2 coverage:TEXCOORD1; float4 color:COLOR;float3 original:TEXCOORD2; };
             struct V { float4 positionCS:SV_POSITION; float3 positionOS:TEXCOORD0; float2 uv:TEXCOORD1; float2 coverage:TEXCOORD2; float3 local:TEXCOORD3; };
             V Vert(A i) { V o; o.positionCS=TransformObjectToHClip(i.positionOS.xyz);o.positionOS=i.original;o.uv=i.uv;o.coverage=i.coverage;o.local=i.color.rgb;return o; }
@@ -69,7 +74,7 @@ Shader "Resonance/UmbilicField"
                 float ambient=lerp(.18,0,_SoundingOnly);
                 float3 field=hue*(ambient+.025*ribbon*lerp(1,saturate(energy),_SoundingOnly))+light*(.55+.25*ribbon);
                 field+=localHue*(.28*_Unfold);
-                return half4(field*_Opacity*_ViewOpacity*density*lerp(saturate(i.coverage.x),smoothstep(0,.05,i.uv.y)*smoothstep(0,.07,1-i.uv.y)*.22,_Unfold),1);
+                half3 glow=field*_Opacity*_ViewOpacity*density*lerp(saturate(i.coverage.x),smoothstep(0,.05,i.uv.y)*smoothstep(0,.07,1-i.uv.y)*.22,_Unfold);return half4(glow,Coverage(glow));
             }
             ENDHLSL
         }

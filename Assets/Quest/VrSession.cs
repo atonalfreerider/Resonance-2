@@ -104,7 +104,7 @@ public sealed class VrSession : MonoBehaviour
         var go=new GameObject("Head");go.transform.SetParent(Rig,false);Head=go.AddComponent<Camera>();
         Head.clearFlags=CameraClearFlags.SolidColor;Head.backgroundColor=Color.black;
         if(Simulated)Head.fieldOfView=90;   // about the headset's own
-        Head.cullingMask=(desktop!=null?desktop.cullingMask:~0)&~(1<<30)&~(1<<31);Head.allowHDR=Simulated;Head.allowMSAA=!Simulated;
+        Head.cullingMask=((desktop!=null?desktop.cullingMask:~0)&~(1<<30)&~(1<<31))|(1<<DrumLyricRack.StageLayerIndex);   // the lyric stage, drawn directlyHead.allowHDR=Simulated;Head.allowMSAA=!Simulated;
         var data=Head.GetUniversalAdditionalCameraData();
         if(desktop!=null){var from=desktop.GetUniversalAdditionalCameraData();data.renderPostProcessing=from.renderPostProcessing;data.volumeLayerMask=from.volumeLayerMask;data.antialiasing=AntialiasingMode.None;}
         data.renderShadows=false;
@@ -212,6 +212,8 @@ public sealed class VrSession : MonoBehaviour
     public void SetPassthrough(bool on)
     {
         Passthrough=on;
+        // Glow is added over the room rather than covering it (see HarmonicGlow).
+        Shader.SetGlobalFloat("_PassthroughGlow",on?1:0);
         // Transparent where nothing is drawn lets the room through; opaque black blacks it out.
         Head.clearFlags=CameraClearFlags.SolidColor;Head.backgroundColor=on?new Color(0,0,0,0):Color.black;
         Head.GetUniversalAdditionalCameraData().renderPostProcessing=!on||postForPassthrough;
@@ -283,16 +285,10 @@ public sealed class VrSession : MonoBehaviour
     {
         if((lyricReport-=Time.unscaledDeltaTime)>0)return;lyricReport=15;
         if(lyrics==null||!Midi.IsPlaying)return;
-        var output=lyrics.Output as RenderTexture;string content="none";
-        if(output!=null)
-        {
-            var small=RenderTexture.GetTemporary(175,45,0,RenderTextureFormat.ARGB32);Graphics.Blit(output,small);
-            var previous=RenderTexture.active;RenderTexture.active=small;var read=new Texture2D(175,45,TextureFormat.RGBA32,false);read.ReadPixels(new Rect(0,0,175,45),0,0);read.Apply();RenderTexture.active=previous;
-            var px=read.GetPixels32();int lit=0;float bright=0;foreach(var c in px){if(c.a>25)lit++;bright=Mathf.Max(bright,Mathf.Max(c.r,Mathf.Max(c.g,c.b))/255f);}
-            Destroy(read);RenderTexture.ReleaseTemporary(small);content=$"{100f*lit/px.Length:0.0}% lit, brightest {bright:0.00}";
-        }
+        var stage=lyrics.StageRoot;int visible=0,drawn=0;
+        if(stage!=null)foreach(var r in stage.GetComponentsInChildren<Renderer>()){if(!r.enabled)continue;drawn++;if(r.isVisible)visible++;}
         var v=Head.WorldToViewportPoint(lyricQuad.transform.position);
-        Debug.Log($"VR lyrics: wanted {lyrics.Wanted} shown {lyrics.Shown} presence {lyrics.Presence:0.00} has lyrics {lyrics.HasLyrics} texture {content}; card {lyricQuad.activeInHierarchy} at viewport ({v.x:0.00},{v.y:0.00}) {v.z/Scale:0.00} m");
+        Debug.Log($"VR lyrics: wanted {lyrics.Wanted} shown {lyrics.Shown} presence {lyrics.Presence:0.00} has lyrics {lyrics.HasLyrics}; stage {(stage!=null&&stage.gameObject.activeInHierarchy)} renderers {drawn} seen {visible}, layer in eye mask {(Head.cullingMask&(1<<DrumLyricRack.StageLayerIndex))!=0}; place at viewport ({v.x:0.00},{v.y:0.00}) {v.z/Scale:0.00} m");
     }
 
     void LateUpdate()
@@ -302,28 +298,41 @@ public sealed class VrSession : MonoBehaviour
         // The first valid head pose (and any system recentre) puts the torus where it belongs:
         // before tracking starts the head reads as the floor.
         if(awaitingPose&&(Simulated||Head.transform.localPosition.sqrMagnitude>.01f)){awaitingPose=false;Recenter();}
-        // Only the eye camera and the lyric strip's own camera render (the views would otherwise
+        // Only the eye camera renders (the lyric stage is drawn by it directly; the views would otherwise
         // keep driving the desktop's), and panels made since the last sweep are silenced.
         if(Camera.allCamerasCount>cameras.Length)cameras=new Camera[Camera.allCamerasCount*2];
         int count=Camera.GetAllCameras(cameras);
-        for(int i=0;i<count;i++){var c=cameras[i];if(c!=Head&&c.enabled&&!(c.targetTexture!=null&&c.targetTexture.name.StartsWith("Lyric strip")))c.enabled=false;}
+        for(int i=0;i<count;i++){var c=cameras[i];if(c!=Head&&c.enabled)c.enabled=false;}
         if((sweep-=Time.unscaledDeltaTime)<=0){sweep=1;SweepPanels();}
         bool song=Current==Mode.Song;
         Wheels.Visible=song&&Midi.Loaded;
         // Torus play is the torus alone: the drum wheel would stand at the viewer's feet.
         DrumPatternDeck.Hidden=!song;
-        // The lyric line above the torus, from the strip's own transparent texture.
+        // The lyric line above the torus: the strip's stage itself (reader, groove slashes and
+        // strikes), turned to face the viewer and sized to the card's place. The stage lies in
+        // its own XZ plane seen from above with +Z up the strip, so its +Y turns toward the
+        // viewer and its +Z up. The card itself only marks the place.
         if(lyrics!=null)
         {
             lyrics.Wanted=song;lyrics.Viewport=new Rect(0,0,.5f,.25f);
-            lyricMaterial.mainTexture=lyrics.Output;bool show=song&&lyrics.Shown&&lyrics.Output!=null;if(lyricQuad.activeSelf!=show)lyricQuad.SetActive(show);
-            if(show){var toHead=Head.transform.position-lyricQuad.transform.position;toHead.y=0;if(toHead.sqrMagnitude>1e-4f)lyricQuad.transform.rotation=Quaternion.LookRotation(-toHead,Vector3.up);}
+            if(lyricQuad.activeSelf)lyricQuad.SetActive(false);
+            var stage=lyrics.StageRoot;
+            if(stage!=null&&stage.gameObject.activeSelf)
+            {
+                var at=lyricQuad.transform.position;var toHead=Head.transform.position-at;toHead.y=0;
+                if(toHead.sqrMagnitude>1e-4f)
+                {
+                    var rotation=Quaternion.LookRotation(Vector3.up,toHead.normalized);
+                    float height=LyricWidth*LyricPixels.y/LyricPixels.x*Scale,size=height/DrumLyricRack.Tall;
+                    stage.SetPositionAndRotation(at-rotation*new Vector3(0,0,DrumLyricRack.Center)*size,rotation);stage.localScale=Vector3.one*size;
+                }
+            }
         }
     }
     void OnDestroy()
     {
         if(Instance==this)Instance=null;
-        DrumPatternDeck.Hidden=DrumPatternDeck.Lite=false;DrumPatternDeck.DeckDepth=4.3f;
+        DrumPatternDeck.Hidden=DrumPatternDeck.Lite=false;DrumPatternDeck.DeckDepth=4.3f;Shader.SetGlobalFloat("_PassthroughGlow",0);
         foreach(var copy in copies)if(copy!=null)Destroy(copy);
         if(sink!=null){sink.Release();Destroy(sink);}
         if(lyricMaterial!=null)Destroy(lyricMaterial);
