@@ -16,6 +16,7 @@ from story import validate_cues
 RATE=24000
 # Music under a spoken line is ducked until the voice stands this far above it.
 SPEECH_OVER_MUSIC_DB=10
+STEM_CROSSFADE_SECONDS=.45
 DUCK_RANGE=(.14,.8)
 DELIVERY='Deep masculine baritone, resonant lower register, warm and grounded music-documentary narration. Maintain the same low vocal placement throughout. No impersonation of any real person. Conversational and quietly engaged, never theatrical. Natural neutral English. Keep a flowing, fairly brisk pace with short pauses. Read only the supplied words. No singing, music, sound effects, introductions or added words.'
 
@@ -90,7 +91,20 @@ def preview_mix(bundle,manifest,cues,segments,timeline,path):
             a=int(c['start']*rate);end=c['end']
             if c.get('soloUntil',0)>0:end=min(end,c['soloUntil'])
             if c.get('releaseSoloAfterNarration'):end=min(end,max([s['end'] for s in segments if s['cue']==i],default=end))
-            b=min(len(music),int(end*rate));music[a:b]=solo[a:b]*c.get('soloGain',1)
+            b=min(len(music),int(end*rate));isolated=solo[a:b]*c.get('soloGain',1)
+            # Match Unity's editorial stem transition instead of making a hard cut in the preview.
+            count=b-a;fade=min(count//2,max(1,int(STEM_CROSSFADE_SECONDS*rate)))
+            blend=np.ones(count,dtype='float32')
+            previous=cues[i-1] if i>0 else None;following=cues[i+1] if i+1<len(cues) else None
+            continues_from_previous=previous is not None and previous['stem']==c['stem'] and not previous.get('releaseSoloAfterNarration') and not previous.get('soloUntil',0) and abs(previous['end']-c['start'])<1e-6
+            continues_to_following=following is not None and following['stem']==c['stem'] and not c.get('releaseSoloAfterNarration') and not c.get('soloUntil',0) and abs(c['end']-following['start'])<1e-6
+            if not continues_from_previous:blend[:fade]=np.linspace(0,1,fade,endpoint=True,dtype='float32')
+            music[a:b]=music[a:b]*(1-blend)+isolated*blend
+            # Unity begins its return to the full mix at the editorial boundary. Carry the
+            # outgoing stem forward through the fade instead of finishing the fade early.
+            if not continues_to_following and b<len(music):
+                tail=min(fade,len(music)-b);out=np.linspace(1,0,tail,endpoint=True,dtype='float32')
+                music[b:b+tail]=music[b:b+tail]*(1-out)+solo[b:b+tail]*c.get('soloGain',1)*out
     t=np.arange(len(music))/rate;env=duck_envelope(segments,len(music)/rate)
     music=music*np.interp(t,np.arange(len(env))/100,env)
     voice=np.interp(t,np.arange(len(timeline))/RATE,timeline)*.95

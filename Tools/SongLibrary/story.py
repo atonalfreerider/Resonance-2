@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from common import atomic_json, read_json, sha, validate_bundle
 
-VIEWS = ('Overview', 'Torus', 'Timeline', 'Drums', 'Lyrics')
+VIEWS = ('Overview', 'Torus', 'TorusLyrics', 'Timeline', 'Drums', 'Lyrics')
 PLACEMENTS = ('right', 'left', 'center')
 IMAGE_TYPES = ('.jpg', '.jpeg', '.png')
 
@@ -200,7 +200,8 @@ def generate(bundle, key_file, model='gpt-4.1'):
         'hold a vocal solo through the first bridge in uncoiled view and return to that image in coiled view at the next bridge. '
         'Audio AND visuals solo together, but chord colors retain full-song context. '
         'Overview shows all; Timeline features nested pattern wheels; Drums shows overhead percussion; Torus shows '
-        'harmony. Use Torus uncoil=true for one sustained passage of at least 14 seconds, as transition takes 6 seconds. '
+        'harmony; TorusLyrics shows only the torus and lyric sawtooth for music-only passages where harmony remains the focus. '
+        'Use Torus uncoil=true for one sustained passage of at least 14 seconds, as transition takes 6 seconds. '
         'Leave ample time between view changes. Begin with Overview full mix and finish full mix. '
         'For captions containing historical facts, put the supporting context source ids in sourceIds; '
         'pure listening interpretations and score observations use an empty array. Do not print citation codes in caption text. '

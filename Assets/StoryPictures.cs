@@ -132,8 +132,10 @@ public sealed class StoryPictures : MonoBehaviour
     }
     // Placed where the featured view leaves room, below the view bar and above the caption:
     // in the overview, the lyric column above the strip (between the wheels and the torus); in
-    // lyric mode, the top right, down to the strip's midline; otherwise the top right, beside the torus, the
-    // drum wheel or the pattern wheels. A cue can ask for right, left or centre instead.
+    // lyric mode, the top right, down to the strip's midline; otherwise the top right, beside the
+    // drum wheel or the pattern wheels. In a stacked torus view, a compact card uses the upper
+    // corner instead of covering either the coiled torus or the uncoiled circle of fifths.
+    // A cue can ask for right, left or centre instead.
     // Styles are written only when the viewport, the view, the side panels or the picture change.
     const float Top=64,Chrome=74,MinCardWidth=250;
     void Place(SongDirector.Cue cue)
@@ -164,8 +166,23 @@ public sealed class StoryPictures : MonoBehaviour
             card.style.top=Top+Mathf.Max(0,(availableHeight-ih-Chrome)*.5f);
             return;
         }
-        bool landscapeOverview=!stacked&&view==VisualizationViews.View.Overview&&strip.width<width*.5f&&strip.height>0;
-        bool aboveStrip=strip.height>0&&(view==VisualizationViews.View.Lyrics||(view==VisualizationViews.View.Overview&&!landscapeOverview));
+        // A portrait torus is centred well below the top chrome. Keep history pictures compact
+        // in that unused upper corner so neither the torus nor its uncoiled fifths are obscured.
+        if(stacked&&(view==VisualizationViews.View.Torus||view==VisualizationViews.View.TorusLyrics||view==VisualizationViews.View.Overview))
+        {
+            float maxImageWidth=Mathf.Clamp(width*.2f,150,230),maxImageHeight=Mathf.Clamp(height*.115f,110,220);
+            float cornerImageWidth=maxImageWidth,cornerImageHeight=cornerImageWidth/aspect;
+            if(cornerImageHeight>maxImageHeight){cornerImageHeight=maxImageHeight;cornerImageWidth=cornerImageHeight*aspect;}
+            float cornerCardWidth=Mathf.Max(cornerImageWidth+16,Mathf.Min(210,maxImageWidth+16));
+            picture.style.width=cornerImageWidth;picture.style.height=cornerImageHeight;card.style.width=cornerCardWidth;
+            float cornerRight=width-dock-cornerCardWidth-20;
+            float cornerX=placement=="right"?cornerRight:placement=="center"?(width-cornerCardWidth)*.5f:Mathf.Max(12,left);
+            card.style.left=Mathf.Clamp(cornerX,8,Mathf.Max(8,width-cornerCardWidth-8));card.style.top=Top;
+            return;
+        }
+        bool lyricLayout=view==VisualizationViews.View.Overview||view==VisualizationViews.View.TorusLyrics;
+        bool landscapeOverview=!stacked&&lyricLayout&&strip.width<width*.5f&&strip.height>0;
+        bool aboveStrip=strip.height>0&&(view==VisualizationViews.View.Lyrics||(lyricLayout&&!landscapeOverview));
         float maxWidth=Mathf.Clamp(Mathf.Min(width*.26f,height*.42f),200,400),maxHeight=height*.44f;
         if(landscapeOverview&&placement==""){maxWidth=Mathf.Max(170,strip.width*1.3f);maxHeight=strip.yMin-Top-Chrome-8;}
         // The strip's right end carries only the incoming groove, so the card may reach its midline.

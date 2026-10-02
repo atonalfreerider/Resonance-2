@@ -167,8 +167,9 @@ running workshop after configuring it.
 
 Review the generated `story.json` captions before presentation: generated musical
 interpretations can be wrong even with valid JSON. Timings are recording seconds;
-`stem: ""` means full mix. Views are `Overview`, `Torus`, `Timeline`, `Drums`.
-Only Torus supports `uncoil`. Short uncoil passages are suppressed so the animation
+`stem: ""` means full mix. Views are `Overview`, `Torus`, `TorusLyrics`, `Timeline`,
+`Drums`, and `Lyrics`. `TorusLyrics` keeps harmony primary while showing only the lyric
+sawtooth beneath it. Only Torus supports `uncoil`. Short uncoil passages are suppressed so the animation
 can settle. The script is bound to audio, MIDI and pattern-analysis hashes; edits
 to the analysis require regenerating the story. Existing valid stories survive a
 failed request. Exports include the story automatically.

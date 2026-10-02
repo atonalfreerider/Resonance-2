@@ -5,6 +5,7 @@ Uses the same local MMS word aligner as the tutorial captions.
 """
 import argparse
 import os
+import re
 import tempfile
 from pathlib import Path
 import soundfile as sf
@@ -29,7 +30,10 @@ def prepare(folder):
         for segment in manifest['segments']:
             cue = story['cues'][segment['cue']]
             shown = cue['text'].split()
-            spoken = (cue.get('speech') or cue['text']).split()
+            # Eleven v4 uses a leading bracketed direction as performance control; it is not
+            # spoken. Exclude it before comparing and aligning the words shown on screen.
+            spoken_text = re.sub(r'^\s*\[[^\]]*\]\s*', '', cue.get('speech') or cue['text'])
+            spoken = spoken_text.split()
             if len(shown) != len(spoken):
                 # Keep the player's clock-based fallback for rewritten speech.
                 segment.pop('wordStarts', None)

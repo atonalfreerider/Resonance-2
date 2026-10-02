@@ -131,7 +131,7 @@ public sealed class SongDirector : MonoBehaviour
         // Orbit the torus in the views that show it, whenever the camera is free (not moving between
         // views, not uncoiling, not unrolled flat).
         orbit??=Camera.main!=null?Camera.main.GetComponent<CameraControl>():null;
-        if(midi.IsPlaying&&orbit!=null&&orbit.enabled&&!main.Uncoiled&&!main.UncoilMoving&&(views.Current==VisualizationViews.View.Torus||views.Current==VisualizationViews.View.Overview))
+        if(midi.IsPlaying&&orbit!=null&&orbit.enabled&&!main.Uncoiled&&!main.UncoilMoving&&(views.Current==VisualizationViews.View.Torus||views.Current==VisualizationViews.View.TorusLyrics||views.Current==VisualizationViews.View.Overview))
             orbit.Turn(-OrbitSpeed*Time.unscaledDeltaTime);
         if(index>=0){
             var active=story.cues[index];var narration=GetComponent<SongNarration>();

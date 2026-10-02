@@ -13,7 +13,7 @@ using UnityEngine.UIElements;
 [DefaultExecutionOrder(1000)]
 public sealed class VisualizationViews : MonoBehaviour
 {
-    public enum View { Overview,Torus,Timeline,Drums,Lyrics }
+    public enum View { Overview,Torus,TorusLyrics,Timeline,Drums,Lyrics }
     public View Current {get;private set;}
     public bool PanelHidden {get;private set;}
     public float TorusOpacity {get;private set;}=1;
@@ -59,7 +59,7 @@ public sealed class VisualizationViews : MonoBehaviour
         toolbar.style.borderTopLeftRadius=18;toolbar.style.borderTopRightRadius=18;toolbar.style.borderBottomLeftRadius=18;toolbar.style.borderBottomRightRadius=18;
         toolbar.style.paddingLeft=16;toolbar.style.paddingRight=8;root.Add(toolbar);
         var label=new Label("VIEW");label.style.color=new Color(.43f,.63f,.78f);label.style.fontSize=10;label.style.letterSpacing=2;toolbar.Add(label);
-        viewChoice=new DropdownField(new List<string>{"Overview","Torus","Pattern timeline","Drum wheel","Lyrics"},0){name="view-selector",tooltip="Choose the featured visualization"};
+        viewChoice=new DropdownField(new List<string>{"Overview","Torus","Torus + lyrics","Pattern timeline","Drum wheel","Lyrics"},0){name="view-selector",tooltip="Choose the featured visualization"};
         viewChoice.style.width=168;viewChoice.style.minHeight=32;viewChoice.style.height=32;viewChoice.style.marginLeft=8;viewChoice.style.marginTop=3;viewChoice.style.marginBottom=3;
         var input=viewChoice.Q(className:"unity-base-field__input");if(input!=null){input.style.backgroundColor=Color.clear;input.style.borderTopWidth=input.style.borderBottomWidth=input.style.borderLeftWidth=input.style.borderRightWidth=0;input.style.color=new Color(.9f,.95f,1);}
         viewChoice.RegisterValueChangedCallback(_=>SetView((View)viewChoice.index));toolbar.Add(viewChoice);
@@ -84,7 +84,7 @@ public sealed class VisualizationViews : MonoBehaviour
     }
     public void SetVertical(bool on){Vertical=on;vertical?.SetValueWithoutNotify(on);}
     public void SetPanelHidden(bool hidden){PanelHidden=hidden;tuck.text=hidden?"›":"‹";tuck.tooltip=hidden?"Show side menu":"Tuck away side menu";if(hidden)ExplorerInputFocus.ClaimViewport();}
-    public void ReframeTorus(){if(Current==View.Torus){cameraMoving=true;if(orbit!=null)orbit.enabled=false;}}
+    public void ReframeTorus(){if(Current==View.Torus||Current==View.TorusLyrics){cameraMoving=true;if(orbit!=null)orbit.enabled=false;}}
     public void SetView(View view)
     {
         if(camera==null)return;
@@ -92,7 +92,7 @@ public sealed class VisualizationViews : MonoBehaviour
         if(Current!=view){cameraMoving=true;if(view==View.Overview){orbit?.OverviewFraming();orbit?.RestoreOrbit(overviewAngles);}}
         if(view!=View.Torus&&GetComponent<Main>().Uncoiled){GetComponent<Main>().SetUncoiled(false);uncoil?.SetValueWithoutNotify(false);}
         if(uncoil!=null)uncoil.style.display=view==View.Torus?DisplayStyle.Flex:DisplayStyle.None;
-        Current=view;if(orbit!=null)orbit.enabled=(view==View.Overview||view==View.Torus)&&!cameraMoving;
+        Current=view;if(orbit!=null)orbit.enabled=(view==View.Overview||view==View.Torus||view==View.TorusLyrics)&&!cameraMoving;
         viewChoice?.SetValueWithoutNotify(viewChoice.choices[(int)view]);
         ExplorerInputFocus.ClaimViewport();
     }
@@ -111,9 +111,10 @@ public sealed class VisualizationViews : MonoBehaviour
         float left=panelWidth*panelOpen,right=!RecordingMode.Active&&library!=null?library.DockedWidth:0;
         tuck.style.left=left;tuck.style.top=Mathf.Max(90,(height-64)*.5f);
         float available=Mathf.Max(200,width-left-right);
+        bool torusLyrics=Current==View.TorusLyrics;
         timelineFocus=Mathf.Lerp(timelineFocus,Current==View.Timeline?1:0,blend);
         timelineOpacity=Mathf.Lerp(timelineOpacity,Current==View.Overview||Current==View.Timeline||Current==View.Lyrics?1:0,blend);
-        overviewSplit=Mathf.Lerp(overviewSplit,Current==View.Overview||Current==View.Lyrics?1:0,blend);
+        overviewSplit=Mathf.Lerp(overviewSplit,Current==View.Overview||Current==View.Lyrics||torusLyrics?1:0,blend);
         bool hasLyrics=(GetComponent<MidiPlayer>().HarmonicPrepared?.Lyrics?.Lines?.Length??0)>0;
         bool lyricView=Current==View.Lyrics,portrait=Vertical||available<height*.95f||lyricView;
         Rect dock,strip,scene;float sideFrame;
@@ -174,22 +175,22 @@ public sealed class VisualizationViews : MonoBehaviour
         // The lyric strip: between the wheels and the torus in the overview, larger in lyric mode.
         if(lyrics!=null)
         {
-            bool wanted=hasLyrics&&(Current==View.Overview||lyricView)&&timelineFocus<.5f;
+            bool wanted=hasLyrics&&(Current==View.Overview||lyricView||torusLyrics)&&timelineFocus<.5f;
             lyrics.Wanted=wanted;lyrics.Viewport=new Rect(strip.x/width,1-strip.yMax/height,strip.width/width,strip.height/height);
         }
         // Lyric mode focuses on the lyrics: the torus steps back and the drum wheel lies deep behind.
-        TorusOpacity=Mathf.Lerp(TorusOpacity,(Current==View.Overview||Current==View.Torus?1:0)*Mathf.Clamp01(TorusOpacityCap),blend);
+        TorusOpacity=Mathf.Lerp(TorusOpacity,(Current==View.Overview||Current==View.Torus||torusLyrics?1:0)*Mathf.Clamp01(TorusOpacityCap),blend);
         var shape=GetComponent<Main>();
         bool showDrums=Current==View.Overview||Current==View.Drums||Current==View.Lyrics||(Current==View.Torus&&shape.Uncoiled&&!shape.UncoilMoving&&shape.UncoilAmount>.9999f);
         DrumOpacity=showDrums?Mathf.Lerp(DrumOpacity,1,blend):0;
         if(Current==View.Drums||Current==View.Timeline||Current==View.Lyrics||cameraMoving){
             Vector3 position=overviewPosition;Quaternion rotation=overviewRotation;
-            if(Current==View.Torus){float distance=4.3f/Mathf.Min(1,camera.aspect)/Mathf.Max(.25f,TorusZoom);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);float unfold=GetComponent<Main>().UncoilAmount;position=Vector3.Slerp(position-target,-transform.forward*(6f/Mathf.Min(1,camera.aspect)),unfold)+target;position=target+(position-target)*(1+.55f*GetComponent<Main>().TransitionWiden);rotation=Quaternion.LookRotation(target-position,transform.up);}
+            if(Current==View.Torus||torusLyrics){float distance=4.3f/Mathf.Min(1,camera.aspect)/Mathf.Max(.25f,TorusZoom);Vector3 target=transform.position;position=target+new Vector3(.51f,.75f,.51f).normalized*distance;rotation=Quaternion.LookRotation(target-position);float unfold=GetComponent<Main>().UncoilAmount;position=Vector3.Slerp(position-target,-transform.forward*(6f/Mathf.Min(1,camera.aspect)),unfold)+target;position=target+(position-target)*(1+.55f*GetComponent<Main>().TransitionWiden);rotation=Quaternion.LookRotation(target-position,transform.up);}
             if(Current==View.Drums||Current==View.Lyrics){Vector3 target=drums?.WheelTransform!=null?drums.WheelTransform.position:transform.position+Vector3.down*DrumPatternDeck.DeckDepth;position=target+Vector3.up*((Current==View.Lyrics?4.6f:3.6f)/Mathf.Min(1,camera.aspect));rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);}
             if(Current==View.Timeline){position=overviewPosition+Vector3.right*5;rotation=overviewRotation;}
             camera.transform.position=Vector3.Lerp(camera.transform.position,position,blend);camera.transform.rotation=Quaternion.Slerp(camera.transform.rotation,rotation,blend);
             orbit?.MovementUpdater?.Invoke();
-            if((Current==View.Overview||Current==View.Torus)&&Vector3.Distance(camera.transform.position,position)<.005f&&Quaternion.Angle(camera.transform.rotation,rotation)<.1f){cameraMoving=GetComponent<Main>().UncoilMoving;if(orbit!=null&&!cameraMoving){if(Current==View.Torus)orbit.AdoptView(transform.position,true);orbit.enabled=true;}}
+            if((Current==View.Overview||Current==View.Torus||torusLyrics)&&Vector3.Distance(camera.transform.position,position)<.005f&&Quaternion.Angle(camera.transform.rotation,rotation)<.1f){cameraMoving=GetComponent<Main>().UncoilMoving;if(orbit!=null&&!cameraMoving){if(Current==View.Torus||torusLyrics)orbit.AdoptView(transform.position,true);orbit.enabled=true;}}
         }
         TorusOpacity=Snap(TorusOpacity);DrumOpacity=Snap(DrumOpacity);
         // Opacity only needs reapplying when it changes, when renderers come and go, or while

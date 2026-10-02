@@ -9,6 +9,9 @@ using UnityEngine.UIElements;
 // All separation and transcription are offline. Solo swaps a sample-aligned recording and score.
 public sealed class StemPlayback : MonoBehaviour
 {
+    // Long enough to make editorial stem changes feel musical instead of like a switch,
+    // while remaining short enough to reveal the isolated part promptly.
+    public const float CrossfadeSeconds=.45f;
     [Serializable] public sealed class Stem
     {
         public string id,name,audioPath,audioSha256,midiPath,midiSha256,patternsPath,patternsSha256,method;
@@ -96,7 +99,7 @@ public sealed class StemPlayback : MonoBehaviour
     public void Stop(){foreach(var item in cache.Values)item.Source.Stop();}
     void Update()
     {
-        float step=Time.unscaledDeltaTime/.025f,volume=GetComponent<Main>().Synth?.Volume??0;
+        float step=Time.unscaledDeltaTime/CrossfadeSeconds,volume=GetComponent<Main>().Synth?.Volume??0;
         volume*=GetComponent<SongNarration>()?.MusicGain??1;
         MasterGain=Mathf.MoveTowards(MasterGain,SelectedId==""?1:0,step);
         recording.Source.volume=MasterGain*volume;

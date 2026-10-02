@@ -14,7 +14,7 @@ public static class VisualizationViewValidation
         VisualizationViews view=null;
         try{
             var main=UnityEngine.Object.FindAnyObjectByType<Main>();view=main.GetComponent<VisualizationViews>();var midi=main.GetComponent<MidiPlayer>();
-            midi.Recording.LoadPair("",Path.GetFullPath("PreparedSongs/TicketToRide-Restored/aligned.mid"));
+            midi.Recording.LoadPair("",Path.GetFullPath("PreparedSongs/Library/Ticket-to-Ride---The-Beatles/aligned.mid"));
             for(int i=0;i<100&&!midi.Recording.Ready;i++)await Task.Delay(100);
             Check(midi.Recording.Ready,"Recording ready");midi.Seek(18);midi.Play();
             var root=main.GetComponent<UIDocument>().rootVisualElement;
@@ -27,6 +27,10 @@ public static class VisualizationViewValidation
             Check(Vector3.Distance(before,Camera.main.transform.position)>.1f,"Torus orbit movement survives view-controller updates");
             Check(view.TorusOpacity>.99f&&view.DrumOpacity<.001f,"Torus focus fades drum deck");
             ScreenCapture.CaptureScreenshot("Temp/ResonanceChecks/focus-torus.png");await Task.Delay(150);
+            view.SetView(VisualizationViews.View.TorusLyrics);await Task.Delay(1400);
+            Check(view.TorusOpacity>.99f&&view.DrumOpacity<.001f,"Torus + lyrics keeps the torus and excludes the drum deck");
+            Check(view.LyricStrip.height>0&&root.Q("pattern-wheel-overlay").resolvedStyle.visibility==Visibility.Hidden,"Torus + lyrics reserves a lyric strip without pattern wheels");
+            ScreenCapture.CaptureScreenshot("Temp/ResonanceChecks/focus-torus-lyrics.png");await Task.Delay(150);
             view.SetView(VisualizationViews.View.Drums);await Task.Delay(1400);
             Check(Vector3.Dot(Camera.main.transform.forward,Vector3.down)>.999f,"Drum focus is overhead");
             Check(view.TorusOpacity<.001f&&view.DrumOpacity>.99f,"Drum focus excludes torus");
