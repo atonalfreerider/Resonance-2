@@ -22,6 +22,8 @@ This opens the loopback-only manager at http://127.0.0.1:8765. Upload an MP3/WAV
 
 ## Playback and review
 
+Authored instrument solos can also use MIDI synthesis in the engine, with the recording as full mix. Run `midi_solos.py <bundle> <groups.json>` after alignment; the groups file is a list of objects with `id`, `name`, and zero-based aligned MIDI `tracks` (alignment inserts a conductor track). These solos preserve authored note timing and use the engine's tonal synth, without Demucs audio or neural transcription. They work on desktop and Android. The manifest marks them `midi-synthesis` and verifies MIDI/pattern hashes without requiring solo WAVs.
+
 Completed imports live in `PreparedSongs/Library`. Restart Unity playback to refresh its prepared-song choices, select the new bundle, and load it. All expensive processing happens ahead of playback. Unity plays `recording.wav`, not synthesized MIDI. **Listen / visualize** selects a solo stem and its prepared pattern data. Full mix restores the original recording and score. Audio and visual stem data preload with the song. Solo changes crossfade synchronized sources without pausing or loading; stems use the same sample rate and exact sample count. The authoritative full-song key, chord progression and region shading remain in force, including while a stem is silent.
 
 Automatic section boundaries are initially eight-bar candidates, with repeated-family and chord-cycle analysis. They do **not** reliably identify semantic verse/chorus/bridge roles. Review the recording and enter one section start per line:

@@ -2,6 +2,7 @@
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><RollForward>Major</RollForward><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
   <ItemGroup>
     <Compile Include="../../Assets/PreparedPatternSong.cs" Link="PreparedPatternSong.cs" />
+    <Compile Include="../../Assets/MelodySelection.cs" Link="MelodySelection.cs" />
     <Compile Include="../../Assets/MidiCycleAnalysis.cs" Link="MidiCycleAnalysis.cs" />
     <Compile Include="../../Assets/SongFormAnalysis.cs" Link="SongFormAnalysis.cs" />
     <Compile Include="../../Assets/HarmonyModel.cs" Link="HarmonyModel.cs" />

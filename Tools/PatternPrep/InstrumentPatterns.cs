@@ -151,6 +151,7 @@ public static class InstrumentPatterns
     // The song's loop passes as windows, cut shorter where the lane's chords repeat inside a pass.
     static List<Window> Windows(PreparedPatternSong song, ChordTimeline.Grid g)
     {
+        if(song.Style=="classical")return ClassicalWindows(song,g);
         var windows = new List<Window>();
         int Step(double beat) { int i = Array.BinarySearch(g.Start, beat - 1e-6); if (i < 0) i = ~i; return Math.Clamp(i, 0, g.Count); }
         foreach (var section in song.Sections)
@@ -178,12 +179,39 @@ public static class InstrumentPatterns
         return windows;
     }
 
+    // Classical phrases can cross the short harmonic cells used by the form grammar.
+    // Prefer a nearby section boundary around 32 bars, allowing spans up to 64.
+    static List<Window> ClassicalWindows(PreparedPatternSong song,ChordTimeline.Grid g)
+    {
+        var result=new List<Window>();int from=0;
+        while(from<g.Count){
+            int firstBar=g.Bar[from];
+            int BarAt(int i)=>i==g.Count?g.Bar[^1]+1:g.Bar[i];
+            var edges=song.Sections.Select(s=>Array.FindIndex(g.Start,x=>x>=s.End-1e-6))
+                .Select(i=>i<0?g.Count:i).Distinct()
+                .Where(i=>i>from&&BarAt(i)-firstBar>=16&&BarAt(i)-firstBar<=64).ToArray();
+            int to=edges.Length>0?edges.OrderBy(i=>Math.Abs(BarAt(i)-firstBar-32)).First():g.Count;
+            if(to==g.Count&&g.Bar[^1]-firstBar>=64){to=Array.FindIndex(g.Bar,from,b=>b>=firstBar+32);if(to<0)to=g.Count;}
+            result.Add(new Window{From=from,To=to,Loop=to-from,Start=g.Start[from],End=g.End[to-1]});from=to;
+        }
+        return result;
+    }
+
+    public static void TestClassicalWindows()
+    {
+        var g=new ChordTimeline.Grid{Start=Enumerable.Range(0,384).Select(i=>(double)i).ToArray(),End=Enumerable.Range(1,384).Select(i=>(double)i).ToArray(),Bar=Enumerable.Range(0,384).Select(i=>i/4).ToArray()};
+        var song=new PreparedPatternSong{Style="classical",Sections=Enumerable.Range(0,24).Select(i=>new PreparedPatternSong.Section{Start=i*16,End=(i+1)*16}).ToArray()};
+        var w=ClassicalWindows(song,g);
+        if(w.Count!=3||w.Any(x=>x.Length!=128)||w[0].From!=0||w[^1].To!=384)throw new Exception("Classical phrase wheels lost continuous 32-bar coverage");
+        Console.WriteLine("PASS: Classical wheels span 32 bars across short form cells and cover the complete score");
+    }
+
     // The shortest whole number of bars the lane's chords repeat at, exactly, across the window.
     static int Period(ChordTimeline.Grid g, int from, int to)
     {
         var bars = Enumerable.Range(from, to - from).GroupBy(i => g.Bar[i]).Select(b => b.ToArray()).ToList();
         if (Enumerable.Range(from, to - from).All(i => g.State[i] < 0)) return to - from;
-        foreach (int p in new[] { 1, 2, 3, 4, 6, 8 })
+        foreach (int p in Enumerable.Range(1,bars.Count/2))
         {
             if (p >= bars.Count || bars.Count % p != 0) continue;
             int steps = bars.Take(p).Sum(b => b.Length);

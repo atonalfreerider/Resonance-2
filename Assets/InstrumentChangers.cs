@@ -172,7 +172,8 @@ public sealed class InstrumentChangers
             double elapsed=beat-onset;bool played=elapsed>=0;bool sounding=played&&beat<onset+n.Length;
             float size=Mathf.Clamp(d.Radius*.035f,1.2f,3.2f)*(sounding?1.5f:1);
             var hue=CyclicOrrery.ChordColor(chord,main.currentKey);
-            var color=played?Alpha(featured?Color.white:Color.Lerp(hue,Color.white,sounding?.6f:.15f),alpha):Alpha(FormHatch.Ink(.4f),alpha);
+            bool melodyNote=main.GetComponent<FeaturedInstrument>().IsMelodyNote(n.Track,n.Channel,n.Pitch,midi.Cycles.SecondsAt(n.Beat));
+            var color=played?Alpha(featured||melodyNote?Color.white:Color.Lerp(hue,Color.white,sounding?.6f:.15f),alpha):Alpha(FormHatch.Ink(.4f),alpha);
             Color32 key=color;dimples.Add((key.r|key.g<<8|key.b<<16|key.a<<24,color,at,size));
             float energy=midi.IsPlaying&&played?Mathf.Exp(-(float)elapsed*5):0;
             if(energy>.04f)bloom.Disk(at,size*1.2f,hue,energy*.8f*alpha);

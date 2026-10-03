@@ -11,6 +11,16 @@ using Util;
 /// </summary>
 public class Main : MonoBehaviour
 {
+    public bool VisualOnly;
+    public Camera VisualCamera;
+    public void UseSharedSynth(MusicSynth synth){Synth=synth;}
+    public void MatchVisualPose(Main other)
+    {
+        bool changed=currentKey!=other.currentKey||currentVisualRotation!=other.currentVisualRotation||currentVisualTwist!=other.currentVisualTwist||UncoilAmount!=other.UncoilAmount||transform.hasChanged;
+        currentKey=other.currentKey;visualKeyForRendering=other.visualKeyForRendering;baseRotation=other.baseRotation;baseTwist=other.baseTwist;currentVisualRotation=other.currentVisualRotation;currentVisualTwist=other.currentVisualTwist;
+        tensionKey=other.tensionKey;tensionTarget=tensionAmount=other.tensionAmount;Uncoiled=other.Uncoiled;UncoilAmount=other.UncoilAmount;unfoldProgress=other.unfoldProgress;keyBlend=other.keyBlend;uncoilKeyFrom=other.uncoilKeyFrom;
+        if(changed){RefreshView();transform.hasChanged=false;}
+    }
     public Material BloomMat;
 
     public const int Tones = 12;
@@ -229,6 +239,7 @@ public class Main : MonoBehaviour
     {
         UpdateText();
         UpdateLabelStyles();
+        if(VisualOnly){SetNotes(new(),false);return;}
         cameraControl = Camera.main.GetComponent<CameraControl>(); if (cameraControl != null) cameraControl.MovementUpdater += UpdateText;
         Camera.main.transform.LookAt(Vector3.zero);
         
@@ -541,7 +552,7 @@ public class Main : MonoBehaviour
         tonalField?.ClearMemory();foreach(var note in notes)note.ClearTail();
         foreach(var chord in chordLineRenderers.Values)if(chord.Releasing)chord.ClearTail();
     }
-    void OnApplicationFocus(bool focus) { if (!focus && Synth != null) Silence(); }
+    void OnApplicationFocus(bool focus) { if (!VisualOnly&&!focus && Synth != null) Silence(); }
     void OnDestroy()
     {
         if (cameraControl != null) cameraControl.MovementUpdater -= UpdateText;
@@ -574,11 +585,11 @@ public class Main : MonoBehaviour
         };
     }
 
-    void UpdateText()
+    public void UpdateText()
     {
         foreach (TextBox textLabel in noteTextLabels)
         {
-            textLabel.Billboard();
+            if(VisualCamera!=null){textLabel.transform.LookAt(VisualCamera.transform);textLabel.transform.Rotate(Vector3.up*180f);}else textLabel.Billboard();
         }
     }
 

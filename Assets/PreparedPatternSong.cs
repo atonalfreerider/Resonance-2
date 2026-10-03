@@ -14,6 +14,7 @@ using System.Linq;
     // repetitions and variations) and a lyric sheet synced to the music, with meter and rhyme.
     public const int CurrentVersion=5;
     public int Version=CurrentVersion,TrackCount,LeadVocalTrack=-1;
+    public MelodyStrand[] PianoMelody=Array.Empty<MelodyStrand>(),OrchestraMelody=Array.Empty<MelodyStrand>();
     public string Style="",FormName="",Summary="",FormGrammar="";
     public int SongBars,FundamentalBars;
     public Pattern[] Patterns=Array.Empty<Pattern>();
@@ -169,8 +170,12 @@ using System.Linq;
     public SongFormAnalysis.ChordStep[] RegionPhases=Array.Empty<SongFormAnalysis.ChordStep>();
     public Frame[] Frames;
     public MelodyStrand[] MelodyStrands=Array.Empty<MelodyStrand>();
+    public MelodyStrand[] Melody=Array.Empty<MelodyStrand>();
+    public string MelodySource="";
+    public bool PianoConcerto;
+    public int[] PianoTracks=Array.Empty<int>(),OrchestraTracks=Array.Empty<int>();
     [Serializable] public sealed class MelodyStrand { public int Track,Channel,Rank;public MelodyNote[] Notes; }
-    [Serializable] public sealed class MelodyNote { public int Pitch;public double Start,End;public float Velocity; }
+    [Serializable] public sealed class MelodyNote { public int Pitch,SourceTrack,SourceChannel;public bool Accent;public double Start,End;public float Velocity; }
     public DrumBar[] DrumBars=Array.Empty<DrumBar>();
     public DrumFamily[] DrumFamilies=Array.Empty<DrumFamily>();
     [Serializable] public sealed class DrumFamily { public int Id,Numerator,Denominator;public MidiCycleAnalysis.Hit[] Slots; }

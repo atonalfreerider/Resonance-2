@@ -92,11 +92,18 @@ def encodable_time_map(tempo_ticks, tempo_times, score_times, audio_times, ppq):
 
 def retime(midi, events, tempo_ticks, tempo_times, score_times, audio_times, output):
     """Replace the tempo map, preserving musical ticks and all other event payloads."""
-    factor = max(1, min(32767//midi.ticks_per_beat, int(np.ceil(15360/midi.ticks_per_beat))))
+    factor = max(1, 32767//midi.ticks_per_beat)
     ppq = midi.ticks_per_beat * factor
+    # Retain original tempo boundaries that fall between fingerprint knots.
+    knots = np.union1d(score_times, tempo_times[(tempo_times>=score_times[0]) & (tempo_times<=score_times[-1])])
+    audio_times = np.interp(knots, score_times, audio_times)
+    score_times = knots
     ticks = np.rint(np.interp(score_times, tempo_times, tempo_ticks)*factor).astype(int)
     unique = np.r_[True, np.diff(ticks) > 0]
     ticks, targets = ticks[unique], audio_times[unique]
+    # A full silent measure keeps subsequent notated bar boundaries intact.
+    lead_ticks=ppq*4 if targets[0]>0 else 0
+    ticks=ticks+lead_ticks
     if ticks[0] != 0 or targets[0] != 0:
         ticks = np.r_[0, ticks]; targets = np.r_[0., targets]
     result = mido.MidiFile(type=1, ticks_per_beat=ppq)
@@ -117,7 +124,7 @@ def retime(midi, events, tempo_ticks, tempo_times, score_times, audio_times, out
         for tick, index, _, msg in events:
             if index != track or msg.type in ('set_tempo', 'end_of_track'):
                 continue
-            absolute = tick*factor
+            absolute = tick*factor+lead_ticks
             target.append(msg.copy(time=absolute-previous)); previous = absolute
         target.append(mido.MetaMessage('end_of_track', time=max(0, int(ticks[-1])-previous)))
     result.save(output)
@@ -133,6 +140,53 @@ def normalize(features):
     return features/np.maximum(1e-9, np.linalg.norm(features, axis=0, keepdims=True))
 
 
+def refine_opening(mono, notes, tuning, score_times, audio_times, seconds=15., rate=200):
+    """Recompute only the opening at a finer clock, pinned to the full-song join."""
+    end_audio=min(seconds,audio_times[-1]);end_score=float(np.interp(end_audio,audio_times,score_times))
+    import librosa
+    initial=mono[:round(end_audio*22050)]
+    detected=librosa.onset.onset_detect(y=initial,sr=22050,hop_length=110,units='time',wait=35,pre_max=12,post_max=12,delta=.07)
+    first=float(detected[0]) if len(detected) else 0.
+    # Only remove an actual quiet prefix; recordings starting with sound stay at zero.
+    peak=float(np.max(np.abs(initial)))
+    leading=first if first>.15 and np.max(np.abs(initial[:max(1,int((first-.1)*22050))]))<peak*.01 else 0.
+    excerpt=mono[round(leading*22050):round(end_audio*22050)]
+    ap=audio_to_pitch_features(excerpt,Fs=22050,tuning_offset=tuning,feature_rate=rate)
+    grid=np.arange(round((end_audio-leading)*rate)+1)/rate
+    ap=np.array([np.interp(grid,np.arange(ap.shape[1])*int(22050/rate)/22050,row) for row in ap])
+    ca=quantize_chroma(pitch_to_chroma(ap))
+    oa=pitch_onset_features_to_DLNCO(audio_to_pitch_onset_features(excerpt,Fs=22050,tuning_offset=tuning),feature_rate=rate,feature_sequence_length=ca.shape[1])
+    short=notes[notes.start<end_score].copy();short.duration=np.minimum(short.duration,end_score-short.start)
+    mp=df_to_pitch_features(short,feature_rate=rate);cm=quantize_chroma(pitch_to_chroma(mp))
+    om=pitch_onset_features_to_DLNCO(df_to_pitch_onset_features(short),feature_rate=rate,feature_sequence_length=cm.shape[1])
+    # Low piano fundamentals can be missing from pitch-onset features. Include
+    # broadband attacks, so repeated opening chords cannot simply stay diagonal.
+    attacks=librosa.onset.onset_detect(y=excerpt,sr=22050,hop_length=110,units='time',wait=35,pre_max=12,post_max=12,delta=.07)
+    def attack_row(times,length):
+        row=np.zeros(length)
+        for t in times:
+            at=round(t*rate)
+            if at>=length:continue
+            end=min(length,at+round(.12*rate));row[at:end]=np.maximum(row[at:end],2*np.exp(-np.arange(end-at)/(rate*.04)))
+        return row
+    oa=np.vstack([oa,attack_row(np.r_[0.,attacks],oa.shape[1])]);om=np.vstack([om,attack_row(np.unique(short.start),om.shape[1])])
+    path=sync_via_mrmsdtw(f_chroma1=ca,f_chroma2=cm,f_onset1=oa,f_onset2=om,input_feature_rate=rate,threshold_rec=10000000,step_weights=np.array([1.,1.,1.]),alpha=.2,verbose=False)
+    local=make_path_strictly_monotonic(path)/rate;local[0]+=leading
+    keep=(local[1]>0)&(local[1]<end_score)&(local[0]>0)&(local[0]<end_audio)
+    # Encode the refined match at musical attacks rather than every DTW step.
+    # Flat/vertical path runs between attacks otherwise create extreme MIDI tempi.
+    sx=local[1,keep];ay=local[0,keep]
+    candidates=np.unique(short.start.to_numpy());candidates=candidates[(candidates>0)&(candidates<end_score)]
+    x=[0.];y=[leading]
+    for at in candidates:
+        mapped=float(np.interp(at,sx,ay))
+        if at-x[-1]>=.04 and mapped-y[-1]>=.04 and end_audio-mapped>=.04:
+            x.append(float(at));y.append(mapped)
+    x=np.r_[x,end_score];y=np.r_[y,end_audio]
+    after=score_times>end_score
+    return np.r_[x,score_times[after]],np.r_[y,audio_times[after]],dict(audioEnd=end_audio,scoreEnd=end_score,leadingSilenceSeconds=leading,featureResolutionMs=1000/rate,maxCorrectionSeconds=float(np.max(np.abs(y-np.interp(x,score_times,audio_times)))))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--audio', required=True, type=Path)
@@ -141,6 +195,9 @@ def main():
     parser.add_argument('--anchors', type=Path, help='Optional CSV: score_seconds,audio_seconds (matching musical cues)')
     parser.add_argument('--ffmpeg', default='ffmpeg')
     parser.add_argument('--feature-rate', type=int, default=100, choices=[50, 100])
+    parser.add_argument('--opening-seconds',type=float,default=15,help='Fine 200 Hz opening refinement for recordings longer than three minutes; 0 disables')
+    parser.add_argument('--mscz',type=Path,help='Original MuseScore score for timed accent extraction; MIDI must omit simplified/orchestral-piano staves')
+    parser.add_argument('--formatter',type=Path,default=Path.home()/'Desktop/PianoVisionFormatter',help='PianoVisionFormatter source folder')
     args = parser.parse_args()
     output = args.output.resolve(); output.mkdir(parents=True, exist_ok=True)
     audio_path, midi_path = args.audio.resolve(), args.midi.resolve()
@@ -199,6 +256,10 @@ def main():
     keep = (score_times > 0) & (score_times < tempo_times[-1]) & (audio_times > 0) & (audio_times < duration)
     score_times = np.r_[0., score_times[keep], tempo_times[-1]]
     audio_times = np.r_[0., audio_times[keep], duration]
+    opening=None
+    if duration>=180 and args.opening_seconds>0 and not args.anchors:
+        print('Refining opening locally at 5 ms; preserving the rest of the movement',flush=True)
+        score_times,audio_times,opening=refine_opening(mono,notes,tuning,score_times,audio_times,args.opening_seconds)
     score_times,audio_times,merged_knots,regularization_error = encodable_time_map(tempo_ticks,tempo_times,score_times,audio_times,midi.ticks_per_beat)
     print(f'Merged {merged_knots} unencodable fingerprint knots; maximum map adjustment {regularization_error:.3f}s',flush=True)
     print('4/5 Bake recording timing into MIDI tempo events; verify all note/controller payloads', flush=True)
@@ -211,7 +272,8 @@ def main():
     np.savetxt(output/'timing-map.csv', np.c_[score_times, audio_times], delimiter=',', header='score_seconds,audio_seconds', comments='', fmt='%.6f')
     # Compare matched pitch fingerprints and inspect local slopes; these are diagnostics,
     # not independent ground-truth timing measurements or a promise of exact transcription.
-    aindex = path[0].astype(int); mindex = path[1].astype(int)
+    aindex = np.arange(ca.shape[1])
+    mindex = np.clip(np.rint(np.interp(aindex/rate,audio_times,score_times)*rate).astype(int),0,cm.shape[1]-1)
     matches = np.sum(normalize(ca)[:, aindex]*normalize(cm)[:, mindex], axis=0)
     linear_idx = np.clip(np.rint(np.arange(cm.shape[1])*duration/tempo_times[-1]).astype(int), 0, ca.shape[1]-1)
     before = np.sum(normalize(ca)[:, linear_idx]*normalize(cm), axis=0)
@@ -222,7 +284,7 @@ def main():
         if similarity < .7:
             windows.append(dict(start=float(start), end=float(min(duration,start+5)), pitchSimilarity=similarity))
     metrics = dict(sourceDuration=float(tempo_times[-1]), audioDuration=duration, noteCount=len(notes),
-                   featureResolutionMs=1000/rate, tuningCents=float(tuning), suggestedPitchClassShift=shift,
+                   featureResolutionMs=1000/rate, openingRefinement=opening, tuningCents=float(tuning), suggestedPitchClassShift=shift,
                    linearPitchSimilarity=float(before.mean()), alignedPitchSimilarity=float(matches.mean()),
                    maxMidiExportErrorMs=float(errors.max()*1000), mergedFingerprintKnots=merged_knots, maxTimingRegularizationSeconds=regularization_error, weakWindows=windows, verifiedPerfect=False)
     (output/'analysis.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
@@ -261,6 +323,14 @@ def main():
     settings = midi_path.parent/'song.json'
     if settings.exists() and not (output/'song.json').exists():
         (output/'song.json').write_bytes(settings.read_bytes())
+    song_settings=json.loads((output/'song.json').read_text()) if (output/'song.json').exists() else {}
+    song_settings['ScoreLeadInBeats']=4 if audio_times[0]>0 else 0
+    (output/'song.json').write_text(json.dumps(song_settings),encoding='utf-8')
+    if args.mscz:
+        from mscz_accents import extract
+        marks,provenance=extract(args.mscz,midi_path,args.formatter)
+        (output/'score-accents.json').write_text(json.dumps(marks),encoding='utf-8')
+        (output/'score-accents.provenance.json').write_text(json.dumps(provenance),encoding='utf-8')
     authored = midi_path.parent/'authored-patterns.json'
     if authored.exists(): pattern_command.append(str(authored))
     subprocess.run(pattern_command, check=True)

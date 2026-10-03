@@ -46,6 +46,19 @@ class PipelineTests(unittest.TestCase):
             (bundle/'aligned.mid').write_bytes(b'changed')
             with self.assertRaises(ValueError):validate_bundle(bundle)
 
+    def test_midi_only_solo_needs_no_audio_and_checks_score_hash(self):
+        with tempfile.TemporaryDirectory() as folder:
+            bundle,_=self.synthetic_bundle(folder)
+            manifest=json.loads((bundle/'aligned.mid.prepared.json').read_text())
+            manifest['stems']=[dict(id='piano',method='midi-synthesis',midiPath='aligned.mid',
+                midiSha256=sha(bundle/'aligned.mid'),patternsPath='aligned.mid.patterns.json',
+                patternsSha256=sha(bundle/'aligned.mid.patterns.json'))]
+            atomic_json(bundle/'aligned.mid.prepared.json',manifest)
+            validate_bundle(bundle)
+            manifest['stems'][0]['midiSha256']='incorrect'
+            atomic_json(bundle/'aligned.mid.prepared.json',manifest)
+            with self.assertRaises(ValueError):validate_bundle(bundle)
+
     def test_catalog_exact_recording_and_title(self):
         with tempfile.TemporaryDirectory() as folder:
             bundle,audio_hash=self.synthetic_bundle(Path(folder)/'bundle')

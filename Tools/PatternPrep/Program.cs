@@ -1,6 +1,17 @@
 using NAudio.Midi;
 using System.Security.Cryptography;
 using System.Text.Json;
+if(args.Length==1&&args[0]=="--test-melody"){MelodySelection.SelfTest();return;}
+if(args.Length==1&&args[0]=="--test-classical-wheels"){InstrumentPatterns.TestClassicalWindows();return;}
+
+if(args.Length==2&&args[0]=="--melody-only"){
+    var options=new JsonSerializerOptions{IncludeFields=true};var song=JsonSerializer.Deserialize<PreparedPatternSong>(File.ReadAllText(args[1]),options);
+    var melodyFolder=Path.GetDirectoryName(Path.GetFullPath(args[1]));var accentFile=Path.Combine(melodyFolder,"score-accents.json");
+    var melodyAccents=File.Exists(accentFile)?JsonSerializer.Deserialize<MelodySelection.Accent[]>(File.ReadAllText(accentFile),options):null;
+    var settingsFile=Path.Combine(melodyFolder,"song.json");var melodySettings=File.Exists(settingsFile)?JsonSerializer.Deserialize<SongSettings>(File.ReadAllText(settingsFile),options):new SongSettings();
+    if(melodyAccents!=null)foreach(var a in melodyAccents)a.Beat+=melodySettings.ScoreLeadInBeats;
+    MelodySelection.Build(song,melodyAccents);File.WriteAllText(args[1],JsonSerializer.Serialize(song,options));return;
+}
 
 if(args.Length==1&&args[0]=="--test-harmony"){KeyContext.SelfTest();KeyAnalysis.SelfTest();return;}
 if(args.Length==2&&args[0]=="--fixture"){SelfTests.Fixture(args[1]);return;}
@@ -36,6 +47,7 @@ if(data.LeadVocalTrack<0)data.LeadVocalTrack=Array.FindIndex(data.TrackNames,n=>
 data.Key=settings.Key;data.Minor=settings.Minor;data.KeySource=settings.KeySource;
 if(!string.IsNullOrWhiteSpace(settings.SectionSource))data.Provenance=settings.SectionSource;
 data.Title=SongTitle(path);data.TrackCount=midi.Tracks;
+data.PianoConcerto=settings.PianoConcerto;data.PianoTracks=settings.PianoTracks;data.OrchestraTracks=settings.OrchestraTracks;
 data.MidiSha256=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
 if(args.Length>1){var authored=JsonSerializer.Deserialize<PreparedPatternSong>(File.ReadAllText(args[1]),jsonOptions);
     if(authored.Disks?.Length>0){data.Disks=authored.Disks;foreach(var disk in data.Disks)foreach(var visit in disk.Visits)visit.Seconds=cycles.SecondsAt(visit.Beat);data.Provenance="Legacy authored pattern sequences; section boundaries estimated offline";}}
@@ -88,6 +100,10 @@ RegionPhases.Build(data);
 string folder=Path.GetDirectoryName(path);
 Lyrics.Build(data,cycles,midi,Path.Combine(folder,string.IsNullOrWhiteSpace(settings.Lyrics)?"lyrics.txt":settings.Lyrics),Path.Combine(folder,string.IsNullOrWhiteSpace(settings.LyricTiming)?"lyrics.timing.json":settings.LyricTiming),settings.PitchBendRange);
 MelodyStratification.Build(data,cycles.SecondsAt);
+var accentPath=Path.Combine(folder,"score-accents.json");
+var accents=File.Exists(accentPath)?JsonSerializer.Deserialize<MelodySelection.Accent[]>(File.ReadAllText(accentPath),jsonOptions):null;
+if(accents!=null)foreach(var accent in accents)accent.Beat+=settings.ScoreLeadInBeats;
+MelodySelection.Build(data,accents);
 string output=path+".patterns.json",temporary=output+".tmp";File.WriteAllText(temporary,JsonSerializer.Serialize(data,jsonOptions));File.Move(temporary,output,true);
 Console.WriteLine($"{output}: {data.FormName}\n  {data.Summary}\n  lossless reconstruction verified");
 foreach(var part in data.Parts)Console.WriteLine($"  {part.Name}: {part.Grammar} ({part.Bars} bars → {part.Patterns.Length} patterns of {part.FundamentalBars} bars)");

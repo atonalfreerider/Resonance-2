@@ -7,6 +7,23 @@ from prepare_song import read_score, retime, encodable_time_map
 
 
 class RetimingTests(unittest.TestCase):
+    def test_original_tempo_boundary_between_alignment_knots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source=Path(directory)/'source.mid';output=Path(directory)/'aligned.mid'
+            midi=mido.MidiFile(ticks_per_beat=480)
+            midi.tracks.append(mido.MidiTrack([
+                mido.MetaMessage('set_tempo',tempo=500000),
+                mido.MetaMessage('set_tempo',tempo=1000000,time=480),
+                mido.MetaMessage('end_of_track',time=480)]))
+            midi.tracks.append(mido.MidiTrack([
+                mido.Message('note_on',note=60,velocity=80,time=240),
+                mido.Message('note_off',note=60,time=480)]))
+            midi.save(source)
+            midi,events,notes,ticks,times=read_score(source)
+            result=retime(midi,events,ticks,times,np.array([0.,1.5]),np.array([0.,3.]),output)
+            np.testing.assert_allclose(result.start,notes.start*2,atol=.001)
+            np.testing.assert_allclose(result.start+result.duration,(notes.start+notes.duration)*2,atol=.001)
+
     def test_tempo_changes_preserve_payloads_and_durations(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory)/'source.mid'; output = Path(directory)/'aligned.mid'
@@ -44,6 +61,15 @@ class RetimingTests(unittest.TestCase):
         self.assertTrue(np.all(np.diff(a)>0));self.assertTrue(np.all(np.diff(b)>0))
         ticks=np.interp(a,seconds,t)
         self.assertTrue(np.all(np.diff(b)*480*1e6/np.diff(ticks)<0xffffff))
+
+    def test_recording_leading_silence_delays_score_without_moving_later_targets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source=Path(directory)/'in.mid';output=Path(directory)/'out.mid'
+            m=mido.MidiFile();m.tracks.append(mido.MidiTrack([mido.Message('note_on',note=60,velocity=70),mido.Message('note_off',note=60,time=960)]));m.save(source)
+            midi,events,notes,ticks,times=read_score(source)
+            result=retime(midi,events,ticks,times,np.array([0.,1.]),np.array([1.32,2.5]),output)
+            self.assertAlmostEqual(result.start.iloc[0],1.32,places=5)
+            self.assertAlmostEqual(result.start.iloc[0]+result.duration.iloc[0],2.5,places=5)
 
     def test_one_shot_percussion_can_end_at_eof(self):
         with tempfile.TemporaryDirectory() as directory:

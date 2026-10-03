@@ -81,6 +81,7 @@ public sealed class VisualizationViews : MonoBehaviour
         SetVertical(Screen.height>Screen.width);
         SetPanelHidden(true);
         SetView(View.Overview);
+        if(GetComponent<ConcertoTori>()==null)gameObject.AddComponent<ConcertoTori>();
     }
     public void SetVertical(bool on){Vertical=on;vertical?.SetValueWithoutNotify(on);}
     public void SetPanelHidden(bool hidden){PanelHidden=hidden;tuck.text=hidden?"›":"‹";tuck.tooltip=hidden?"Show side menu":"Tuck away side menu";if(hidden)ExplorerInputFocus.ClaimViewport();}

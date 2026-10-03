@@ -102,7 +102,7 @@ public sealed class SongAudio : MonoBehaviour
         Source.clip=AudioClip.Create(Path.GetFileName(canonical),decoded.data.Length/decoded.channels,decoded.channels,decoded.rate,false);
         Source.clip.SetData(decoded.data,0);decodeProgress=1;
 #else
-        using(var request=UnityWebRequestMultimedia.GetAudioClip(new Uri(canonical).AbsoluteUri,AudioType.WAV))
+        using(var request=UnityWebRequestMultimedia.GetAudioClip(new Uri(canonical).AbsoluteUri,Path.GetExtension(canonical).Equals(".mp3",StringComparison.OrdinalIgnoreCase)?AudioType.MPEG:AudioType.WAV))
         {
             yield return request.SendWebRequest();if(version!=generation)yield break;
             if(request.result!=UnityWebRequest.Result.Success){Busy=false;Status="Audio import: "+request.error;yield break;}
@@ -117,7 +117,7 @@ public sealed class SongAudio : MonoBehaviour
         }
         catch(Exception e){Status="Song loaded; section map: "+e.Message;}
         // A headset keeps only the recording: decoded stems would not fit its memory.
-        yield return GetComponent<StemPlayback>().Preload(Application.platform==RuntimePlatform.Android?null:manifest.stems,Path.GetDirectoryName(Path.GetFullPath(score)));
+        yield return GetComponent<StemPlayback>().Preload(Application.platform==RuntimePlatform.Android?manifest.stems?.Where(s=>s.method=="midi-synthesis").ToArray():manifest.stems,Path.GetDirectoryName(Path.GetFullPath(score)));
         if(version!=generation)yield break;
         Busy=false;midi.Seek(0);
         audioField?.SetValueWithoutNotify(AudioPath);midiField?.SetValueWithoutNotify(score);
@@ -166,6 +166,6 @@ public sealed class SongAudio : MonoBehaviour
         ExplorerInputFocus.ClaimUI();field.Focus();
 #endif
     }
-    void Update(){if(status!=null)status.text=Status;if(main.Synth!=null){Source.volume=main.Synth.Volume*(GetComponent<StemPlayback>()?.MasterGain??1)*(GetComponent<SongNarration>()?.MusicGain??1);Source.pitch=1;main.Synth.GetComponent<AudioSource>().mute=Ready&&midi.IsPlaying;}}
+    void Update(){if(status!=null)status.text=Status;if(main.Synth!=null){Source.volume=main.Synth.Volume*(GetComponent<StemPlayback>()?.MasterGain??1)*(GetComponent<SongNarration>()?.MusicGain??1);Source.pitch=1;main.Synth.GetComponent<AudioSource>().mute=Ready&&midi.IsPlaying&&!(GetComponent<StemPlayback>()?.MidiSolo??false);}}
     void OnDestroy(){generation++;if(Source!=null&&Source.clip!=null)Destroy(Source.clip);}
 }

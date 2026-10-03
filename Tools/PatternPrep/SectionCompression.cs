@@ -5,6 +5,9 @@ public sealed class SongSettings
     public int Key=-1,LeadVocalTrack=-1;
     public bool Minor;
     public bool InferKeyChanges=true;
+    public bool PianoConcerto;
+    public double ScoreLeadInBeats;
+    public int[] PianoTracks=Array.Empty<int>(),OrchestraTracks=Array.Empty<int>();
     public string Style="";
     public double PatternTimingToleranceBeats=0;
     public string KeySource="",SectionBoundaries="",SectionSource="";

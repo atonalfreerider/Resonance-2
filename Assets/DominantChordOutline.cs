@@ -42,7 +42,7 @@ public sealed class DominantChordOutline : MonoBehaviour
     }
     static int VertexIndex(int row,int col)=>row*(Resolution+1)-row*(row-1)/2+col;
     void LateUpdate(){using var perf=Perf.Outline.Auto();
-        if(main==null)main=GetComponent<Main>();if(dominance==null)dominance=GetComponent<TonalDominance>();var camera=Camera.main;if(main==null||dominance==null||camera==null||fillObject==null)return;
+        if(main==null)main=GetComponent<Main>();if(dominance==null)dominance=GetComponent<TonalDominance>();var camera=main?.VisualCamera??Camera.main;if(main==null||dominance==null||camera==null||fillObject==null)return;
         if(midi==null)midi=GetComponent<MidiPlayer>();
         bool show=dominance.HasChord,minor=dominance.ChordMinor;string quality=dominance.ChordQuality;int nextRoot=dominance.ChordRoot;
         if(midi!=null&&midi.isActiveAndEnabled&&midi.Loaded&&midi.Cycles!=null&&!(main.NotesUseSynth&&main.ActiveNotes.Count>0)){

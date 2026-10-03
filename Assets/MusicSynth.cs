@@ -14,6 +14,7 @@ public class MusicSynth : MonoBehaviour
     volatile int generation;
     int audioGeneration;
     public volatile float Volume = .6f;
+    public volatile float PlaybackGain = 1;
     int rate;
     AudioClip carrier;
     void Awake()
@@ -54,7 +55,7 @@ public class MusicSynth : MonoBehaviour
                 sample += Math.Sin(phase[n]) * envelope[n] * .06;
                 phase[n] += increment[n]; if (phase[n] > Math.PI * 2) phase[n] -= Math.PI * 2;
             }
-            float value = (float)Math.Tanh(sample) * Volume;
+            float value = (float)Math.Tanh(sample) * Volume * PlaybackGain;
             for (int c = 0; c < channels; c++) data[i + c] = value;
         }
     }

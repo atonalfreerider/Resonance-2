@@ -26,10 +26,12 @@ public sealed class StemPlayback : MonoBehaviour
     public string VisualId {get;private set;}="";
     public string Status {get;private set;}="No separated stems in this bundle.";
     sealed class CachedStem { public AudioSource Source;public PreparedPatternSong Score;public float Gain; }
+    int synthIndex;
+    public bool MidiSolo=>cache.TryGetValue(SelectedId,out var solo)&&solo.Source==null;
     readonly System.Collections.Generic.Dictionary<string,CachedStem> cache=new();
     public bool ReadyToSolo=>!IsLoading&&Stems.Length>0&&cache.Count==Stems.Length;
     public float MasterGain {get;private set;}=1;
-    public AudioSource AudibleSource=>cache.TryGetValue(SelectedId,out var value)?value.Source:recording.Source;
+    public AudioSource AudibleSource=>cache.TryGetValue(SelectedId,out var value)?value.Source??GetComponent<Main>().Synth.GetComponent<AudioSource>():recording.Source;
     public int CachedCount=>cache.Count;
     string directory;int generation;
     MidiPlayer midi;SongAudio recording;DropdownField selector;Label label;
@@ -39,6 +41,17 @@ public sealed class StemPlayback : MonoBehaviour
         Stems=stems??Array.Empty<Stem>();directory=folder;SelectedId=VisualId="";MasterGain=1;IsLoading=true;prepared=0;stemProgress=0;int version=++generation;
         foreach(var stem in Stems){
             Status="Preparing instant solo: "+stem.name+"…";RefreshUI();
+            if(stem.method=="midi-synthesis"){
+                string midiError=null;
+                try{
+                    Verified(stem.midiPath,stem.midiSha256);
+                    var score=JsonUtility.FromJson<PreparedPatternSong>(File.ReadAllText(Verified(stem.patternsPath,stem.patternsSha256)));
+                    if(score.Version<1||score.Version>PreparedPatternSong.CurrentVersion||score.MidiSha256!=stem.midiSha256||score.Frames==null||score.Form==null)throw new InvalidDataException("Invalid MIDI solo analysis.");
+                    cache.Add(stem.id,new CachedStem{Score=score});midi.WarmVisualPrepared(score);
+                }catch(Exception e){midiError=e.Message;}
+                if(midiError!=null){Status="MIDI solo preparation failed: "+midiError;IsLoading=false;RefreshUI();yield break;}
+                prepared++;yield return null;continue;
+            }
             var task=Task.Run(()=>{
                 string audio=Verified(stem.audioPath,stem.audioSha256);Verified(stem.midiPath,stem.midiSha256);
                 string analysis=File.ReadAllText(Verified(stem.patternsPath,stem.patternsSha256));
@@ -65,12 +78,13 @@ public sealed class StemPlayback : MonoBehaviour
             if(error!=null){Status="Stem preparation failed: "+error;IsLoading=false;RefreshUI();yield break;}
             prepared++;stemProgress=0;yield return null;
         }
-        IsLoading=false;Status=Stems.Length>0?"Ready · instant audio + visual solo. Full-song chord colors stay visible.":"No stems yet · use Add stems in Song Workshop.";RefreshUI();
+        IsLoading=false;Status=Stems.Length>0?"Ready · instant audio + visual solo. Full-song chord colors stay visible.":"No solos prepared.";RefreshUI();
     }
     public void Clear()
     {
         generation++;IsLoading=false;foreach(var item in cache.Values){if(item.Source!=null){item.Source.Stop();Destroy(item.Source.clip);Destroy(item.Source.gameObject);}}
         cache.Clear();Stems=Array.Empty<Stem>();SelectedId=VisualId="";MasterGain=1;Status="Load a prepared song with stems.";RefreshUI();
+        if(GetComponent<Main>()?.Synth!=null){GetComponent<Main>().Synth.ResetVoices();GetComponent<Main>().Synth.PlaybackGain=1;}
     }
     static string Hash(string path){using var h=System.Security.Cryptography.SHA256.Create();using var s=File.OpenRead(path);return BitConverter.ToString(h.ComputeHash(s)).Replace("-","").ToLowerInvariant();}
     string Verified(string path,string hash)
@@ -88,29 +102,54 @@ public sealed class StemPlayback : MonoBehaviour
         if(id!=""&&!cache.ContainsKey(id))return;
         if(visualId!=""&&!cache.ContainsKey(visualId))return;
         SelectedId=id;VisualId=visualId;midi.SetVisualPrepared(visualId==""?null:cache[visualId].Score);
-        Status=id==""?"Full mix · original recording and MIDI":"Solo: "+Stems.First(s=>s.id==id).name+" · full-song chord colors";
+        ResetSynth(midi.Position,midi.IsAudible?AudioSettings.dspTime:midi.ClockDspStart,midi.IsPlaying);
+        Status=id==""?"Full mix · original recording and MIDI":"Solo: "+Stems.First(s=>s.id==id).name+(MidiSolo?" · MIDI synthesis":"")+" · full-song chord colors";
         RefreshUI();
     }
     public void Schedule(double position,double dspTime,float speed,bool playing)
     {
-        foreach(var item in cache.Values){var source=item.Source;source.Stop();source.timeSamples=Math.Clamp((int)(position*source.clip.frequency),0,source.clip.samples-1);source.pitch=speed;if(playing)source.PlayScheduled(dspTime);}
+        ResetSynth(position,dspTime,playing);
+        foreach(var item in cache.Values){var source=item.Source;if(source==null)continue;source.Stop();source.timeSamples=Math.Clamp((int)(position*source.clip.frequency),0,source.clip.samples-1);source.pitch=speed;if(playing)source.PlayScheduled(dspTime);}
     }
-    public void Pause(){foreach(var item in cache.Values)item.Source.Pause();}
-    public void Stop(){foreach(var item in cache.Values)item.Source.Stop();}
+    void ResetSynth(double position,double dspTime,bool playing)
+    {
+        if(GetComponent<Main>().Synth==null)return;
+        var synth=GetComponent<Main>().Synth;synth.ResetVoices();synthIndex=0;
+        if(!MidiSolo)return;
+        var frames=cache[SelectedId].Score.Frames;
+        int lo=0,hi=frames.Length;
+        while(lo<hi){int mid=(lo+hi)/2;if(frames[mid].Time<=position)lo=mid+1;else hi=mid;}
+        synthIndex=lo;
+        if(playing&&lo>0)ScheduleSynth(dspTime,frames[lo-1]);
+    }
+    void ScheduleSynth(double dspTime,PreparedPatternSong.Frame frame)
+    {
+        GetComponent<Main>().Synth.Schedule(dspTime,frame.Voices.Where(v=>v.Pitch>=21&&v.Pitch<117).GroupBy(v=>v.Pitch).Select(g=>Tuple.Create(g.Key-21,g.Max(v=>v.Velocity))));
+    }
+    public void Pause(){foreach(var item in cache.Values)item.Source?.Pause();}
+    public void Stop(){foreach(var item in cache.Values)item.Source?.Stop();}
     void Update()
     {
         float step=Time.unscaledDeltaTime/CrossfadeSeconds,volume=GetComponent<Main>().Synth?.Volume??0;
         volume*=GetComponent<SongNarration>()?.MusicGain??1;
         MasterGain=Mathf.MoveTowards(MasterGain,SelectedId==""?1:0,step);
         recording.Source.volume=MasterGain*volume;
-        foreach(var entry in cache){entry.Value.Gain=Mathf.MoveTowards(entry.Value.Gain,entry.Key==SelectedId?1:0,step);entry.Value.Source.volume=entry.Value.Gain*volume*(entry.Key==SelectedId?Mathf.Clamp(SoloGain,.25f,4):1);}
+        foreach(var entry in cache){entry.Value.Gain=Mathf.MoveTowards(entry.Value.Gain,entry.Key==SelectedId?1:0,step);if(entry.Value.Source!=null)entry.Value.Source.volume=entry.Value.Gain*volume*(entry.Key==SelectedId?Mathf.Clamp(SoloGain,.25f,4):1);}
+        var synth=GetComponent<Main>().Synth;
+        if(synth!=null)synth.PlaybackGain=MidiSolo?cache[SelectedId].Gain*(GetComponent<SongNarration>()?.MusicGain??1)*Mathf.Clamp(SoloGain,.25f,4):1;
+        if(MidiSolo&&midi.IsPlaying){
+            var frames=cache[SelectedId].Score.Frames;
+            while(synthIndex<frames.Length&&frames[synthIndex].Time<=midi.Position+.1*midi.playbackSpeed){
+                var frame=frames[synthIndex++];ScheduleSynth(midi.ClockDspStart+(frame.Time-midi.ClockPosition)/midi.playbackSpeed,frame);
+            }
+        }
     }
     public VisualElement BuildUI()
     {
         var box=new VisualElement{name="stem-controls"};box.style.marginTop=8;box.style.marginBottom=8;
         var heading=new Label("SOLO AUDIO + VISUALS");heading.AddToClassList("section");box.Add(heading);
         var hint=new Label("Solo the audio, notes and pattern wheels together. Full-song chord colors stay visible.");hint.style.whiteSpace=WhiteSpace.Normal;box.Add(hint);
-        selector=new DropdownField("Instrument stem",new System.Collections.Generic.List<string>{"Full mix"},0){name="stem-selector"};
+        selector=new DropdownField("Instrument solo",new System.Collections.Generic.List<string>{"Full mix"},0){name="stem-selector"};
         selector.RegisterValueChangedCallback(_=>{int index=selector.index;if(index>=0)Select(index==0?"":Stems[index-1].id);});box.Add(selector);
         label=new Label();label.style.whiteSpace=WhiteSpace.Normal;box.Add(label);
         var restore=new Button(()=>Select("")){text="Restore full mix",name="restore-full-mix"};box.Add(restore);

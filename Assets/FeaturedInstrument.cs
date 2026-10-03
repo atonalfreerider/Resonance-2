@@ -8,8 +8,12 @@ using UnityEngine.UIElements;
 public sealed class FeaturedInstrument : MonoBehaviour
 {
     Main main;MidiPlayer midi;PreparedPatternSong source;DropdownField selector;
+    public MidiPlayer PlaybackSource;
+    public int[] GroupTracks;
+    PreparedPatternSong.MelodyStrand[] groupMelody;
     (int track,int channel)[] choices=Array.Empty<(int,int)>();
     readonly HashSet<int> pitches=new();
+    readonly HashSet<(int,int,int,long)> melodyIds=new();
     readonly List<VoiceTrail> voices=new();
     // Routes over the torus between two notes, for the pose they were computed in. While the
     // pose moves (a key change, a tension's lean) the trail's last second is always exact and
@@ -30,8 +34,15 @@ public sealed class FeaturedInstrument : MonoBehaviour
     public int HistoryCount=>voices.Sum(v=>v.Samples.Count);
     public float TrailLength {get;private set;}
     public bool Matches(int track,int channel)=>track==Track&&channel==Channel;
+    public bool IsMelodyNote(int track,int channel,int pitch,double start)
+    {
+        if(Track!=-2)return Matches(track,channel);
+        long at=(long)Math.Round(start*1000);
+        return melodyIds.Contains((track,channel,pitch,at))||melodyIds.Contains((track,channel,pitch,at-1))||melodyIds.Contains((track,channel,pitch,at+1));
+    }
     public static (int track,int channel) DefaultLane(PreparedPatternSong data)
     {
+        if(data.Melody?.Length>0)return (-2,0);
         var lanes=data.Notes.Where(n=>n.Channel!=10).GroupBy(n=>(n.Track,n.Channel)).ToArray();
         if(lanes.Length==0)return (-1,-1);
         var lead=lanes.Where(g=>g.Key.Track==data.LeadVocalTrack).OrderByDescending(g=>g.Count()).FirstOrDefault();
@@ -53,13 +64,19 @@ public sealed class FeaturedInstrument : MonoBehaviour
     public void EnsureLoaded(PreparedPatternSong data)
     {
         if(source==data)return;source=data;ClearHistory();pitches.Clear();main.FeatureNotes(pitches);
+        if(data!=null&&(data.Melody==null||data.Melody.Length==0)&&data.Tempos?.Length>0)MelodySelection.Build(data);
+        groupMelody=null;
+        if(data!=null&&GroupTracks!=null){groupMelody=GroupTracks.SequenceEqual(data.PianoTracks)?data.PianoMelody:data.OrchestraMelody;
+            if(groupMelody==null||groupMelody.Length==0)groupMelody=MelodySelection.Group(data,GroupTracks);}
+        melodyIds.Clear();foreach(var strand in data?.Melody??Array.Empty<PreparedPatternSong.MelodyStrand>())foreach(var n in strand.Notes)melodyIds.Add((n.SourceTrack,n.SourceChannel,n.Pitch,(long)Math.Round(n.Start*1000)));
         if(data==null){Track=Channel=-1;return;}
         choices=data.Notes.Where(n=>n.Channel!=10).Select(n=>(n.Track,n.Channel)).Distinct().OrderBy(p=>p.Track).ThenBy(p=>p.Channel).ToArray();
+        if(data.Melody?.Length>0)choices=new[]{(-2,0)}.Concat(choices).ToArray();
         var chosen=DefaultLane(data);Track=chosen.track;Channel=chosen.channel;
         string pref="Resonance.Featured."+data.MidiSha256;
         int savedTrack=PlayerPrefs.GetInt(pref+".track",Track),savedChannel=PlayerPrefs.GetInt(pref+".channel",Channel);
-        if(choices.Contains((savedTrack,savedChannel))){Track=savedTrack;Channel=savedChannel;}
-        if(selector!=null){selector.choices=choices.Select(p=>(data.TrackNames!=null&&p.track<data.TrackNames.Length&&!string.IsNullOrEmpty(data.TrackNames[p.track])?data.TrackNames[p.track]:"Track "+(p.track+1))+" · Ch "+p.channel).ToList();
+        if(GroupTracks==null&&choices.Contains((savedTrack,savedChannel))){Track=savedTrack;Channel=savedChannel;}
+        if(selector!=null){selector.choices=choices.Select(p=>p.track==-2?"Melody":(data.TrackNames!=null&&p.track>=0&&p.track<data.TrackNames.Length&&!string.IsNullOrEmpty(data.TrackNames[p.track])?data.TrackNames[p.track]:"Track "+(p.track+1))+" · Ch "+p.channel).ToList();
             if(selector.choices.Count==0)selector.choices.Add("No pitched instruments");selector.SetValueWithoutNotify(selector.choices[Math.Max(0,Array.IndexOf(choices,(Track,Channel)))]);}
         lastPosition=-1;BuildVoices();
     }
@@ -74,7 +91,9 @@ public sealed class FeaturedInstrument : MonoBehaviour
         foreach(var voice in voices){Destroy(voice.Line.gameObject);Destroy(voice.Head.gameObject);}voices.Clear();
         if(material==null){material=new Material(Resources.Load<Shader>("HarmonicGlow"));material.SetColor("_BaseColor",Color.white*1.4f);
             headMaterial=new Material(Shader.Find("Universal Render Pipeline/Unlit"));headMaterial.SetColor("_BaseColor",Color.white*10);}
-        foreach(var data in source?.MelodyStrands??Array.Empty<PreparedPatternSong.MelodyStrand>()){
+        foreach(var original in (Track==-2?groupMelody??source?.Melody:source?.MelodyStrands)??Array.Empty<PreparedPatternSong.MelodyStrand>()){
+            var data=original;
+            if(GroupTracks!=null&&Track==-2)data=new PreparedPatternSong.MelodyStrand{Track=-2,Channel=0,Rank=original.Rank,Notes=original.Notes.Where(n=>GroupTracks.Contains(n.SourceTrack)).ToArray()};
             if(!Matches(data.Track,data.Channel)||data.Notes.Length==0)continue;
             var go=new GameObject("Melody strand "+(data.Rank+1));go.transform.SetParent(transform,false);
             var line=go.AddComponent<LineRenderer>();line.sharedMaterial=material;line.useWorldSpace=true;line.numCapVertices=3;line.widthMultiplier=.014f;
@@ -89,12 +108,14 @@ public sealed class FeaturedInstrument : MonoBehaviour
     void Update()
     {
         using var perf=Perf.FeaturedFrames.Auto();
-        if(midi==null)midi=GetComponent<MidiPlayer>();if(midi==null)return;EnsureLoaded(midi.Prepared);
+        if(midi==null)midi=PlaybackSource??GetComponent<MidiPlayer>();if(midi==null)return;EnsureLoaded(midi.Prepared);
         if(source?.Frames==null)return;double now=midi.VisualScorePosition;
         bool jump=lastPosition<0||now<lastPosition-.001||now-lastPosition>Math.Max(.5,Time.unscaledDeltaTime*midi.playbackSpeed*3);
         if(jump){ClearHistory();frameIndex=0;while(frameIndex<source.Frames.Length&&source.Frames[frameIndex].Time<=now)frameIndex++;}
         else while(frameIndex<source.Frames.Length&&source.Frames[frameIndex].Time<=now)frameIndex++;
-        pitches.Clear();if(midi.IsAudible&&frameIndex>0)foreach(var v in source.Frames[frameIndex-1].Voices)if(Matches(v.Track,v.Channel)&&Accepted(v))pitches.Add(v.Pitch-21);
+        pitches.Clear();
+        if(midi.IsAudible&&Track==-2){foreach(var strand in voices){var notes=strand.Data.Notes;int lo=0,hi=notes.Length;while(lo<hi){int mid=(lo+hi)/2;if(notes[mid].Start<=now)lo=mid+1;else hi=mid;}if(lo>0&&notes[lo-1].End>now)pitches.Add(notes[lo-1].Pitch-21);}}
+        else if(midi.IsAudible&&frameIndex>0)foreach(var v in source.Frames[frameIndex-1].Voices)if(Matches(v.Track,v.Channel)&&Accepted(v))pitches.Add(v.Pitch-21);
         main.FeatureNotes(pitches);
     }
     bool Accepted(PreparedPatternSong.Voice v)=>v.Pitch>=21&&v.Pitch<117&&(midi.TrackFilter<0||midi.TrackFilter==v.Track)&&(midi.ChannelFilter==0||midi.ChannelFilter==v.Channel);
