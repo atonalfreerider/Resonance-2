@@ -29,6 +29,16 @@ public static class KeyContext
     // the chord timeline (KeyAnalysis).
     public static void Apply(PreparedPatternSong song,SongSettings settings,MidiCycleAnalysis cycles)
     {
+        if(settings.ReviewedKeyRegions?.Length>0&&cycles!=null)
+        {
+            var keys=settings.ReviewedKeyRegions;
+            if(keys[0].Beat!=0||keys.Any(k=>!double.IsFinite(k.Beat)||k.Beat<0||k.Beat>=song.EndBeat||k.Key<0||k.Key>11)||keys.Zip(keys.Skip(1),(a,b)=>b.Beat>a.Beat).Any(ok=>!ok))throw new ArgumentException("Reviewed key regions must begin at zero and increase inside the score");
+            var reviewedRegions=keys.Select((k,i)=>new KeyAnalysis.Region{Start=k.Beat,End=i+1<keys.Length?keys[i+1].Beat:song.EndBeat,Key=k.Key,Minor=k.Minor}).ToList();
+            foreach(var frame in song.Frames){double beat=cycles.BeatAt(frame.Time);var region=reviewedRegions.LastOrDefault(r=>r.Start<=beat+1e-6)??reviewedRegions[0];frame.Key=region.Key;frame.Minor=region.Minor;}
+            (song.KeyChanges,song.Tensions)=KeyAnalysis.Describe(song.Chords??Array.Empty<SongFormAnalysis.ChordStep>(),reviewedRegions,song.Sections,BeatsPerBar(song));
+            for(int i=0;i<song.KeyChanges.Length;i++)song.KeyChanges[i].Evidence=keys[i+1].Evidence;
+            song.KeySource="Score-reviewed tonal regions; authored signatures and harmonic analysis";return;
+        }
         bool reviewed=settings.KeySource.Contains("reviewed",StringComparison.OrdinalIgnoreCase)||settings.KeySource.Contains("known",StringComparison.OrdinalIgnoreCase);
         var signed=song.Frames.Where(f=>f.Key>=0).ToList();
         // Many exporters always write "major": keep the configured tonic when it shares the collection.
@@ -82,5 +92,10 @@ public static class KeyContext
         RegionPhases.Build(song);
         if(song.RegionPhases.Length!=1||song.RegionPhases[0].End!=8||song.Chords.Length!=3)throw new Exception("Passing region smoothing lost harmonic context or events");
         Console.WriteLine("PASS: sustained modulation, passing-chord rejection, authored signatures, reviewed key and passing region continuity");
+        var reviewedSong=new PreparedPatternSong{EndBeat=64,Disks=Array.Empty<PreparedPatternSong.Disk>(),Tempos=new[]{new PreparedPatternSong.Tempo{Beat=0,Seconds=0,Microseconds=500000}},Measures=Array.Empty<MidiCycleAnalysis.Bar>(),Notes=Array.Empty<MidiCycleAnalysis.Hit>(),Frames=new[]{new PreparedPatternSong.Frame{Time=0},new PreparedPatternSong.Frame{Time=16},new PreparedPatternSong.Frame{Time=24}}};
+        var review=new SongSettings{ReviewedKeyRegions=new[]{new PreparedPatternSong.KeyChange{Beat=0,Key=3,Minor=true},new PreparedPatternSong.KeyChange{Beat=32,Key=1,Evidence="B-flat theme"},new PreparedPatternSong.KeyChange{Beat=48,Key=4,Evidence="D-flat theme"}}};
+        Apply(reviewedSong,review,MidiCycleAnalysis.Restore(reviewedSong));
+        if(reviewedSong.KeyChanges.Length!=2||reviewedSong.Frames[1].Key!=1||reviewedSong.Frames[2].Key!=4)throw new Exception("Reviewed short modulation lost");
+        Console.WriteLine("PASS: reviewed short key regions survive inference and reach playback frames");
     }
 }

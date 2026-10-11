@@ -76,6 +76,8 @@ def publish(bundle, draft_path=None):
                  pictures=[dict(image=placed[k], caption=p['caption'], credit=p['credit'], license=p['license'], commonsPage=p['commonsPage'])
                            for k, p in pictures.items() if placed[k] in used],
                  cues=cues)
+    for field in ('pianoMelody','orchestraMelody'):
+        if field in draft: story[field]=draft[field]
     atomic_json(bundle/'story.json', story)
     spoken = [c for c in cues if c.get('narrate', True)]
     words = sum(len((c.get('speech') or c['text']).split()) for c in spoken)

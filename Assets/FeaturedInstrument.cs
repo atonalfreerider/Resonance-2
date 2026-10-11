@@ -4,13 +4,15 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-[DefaultExecutionOrder(60)]
+[DefaultExecutionOrder(1110)]
 public sealed class FeaturedInstrument : MonoBehaviour
 {
     Main main;MidiPlayer midi;PreparedPatternSong source;DropdownField selector;
     public MidiPlayer PlaybackSource;
     public int[] GroupTracks;
     PreparedPatternSong.MelodyStrand[] groupMelody;
+    PreparedPatternSong.MelodyStrand[] directedMelody;
+    public void SetDirectedMelody(PreparedPatternSong.MelodyStrand[] value){if(directedMelody==value)return;directedMelody=value;ClearHistory();BuildVoices();}
     (int track,int channel)[] choices=Array.Empty<(int,int)>();
     readonly HashSet<int> pitches=new();
     readonly HashSet<(int,int,int,long)> melodyIds=new();
@@ -91,7 +93,7 @@ public sealed class FeaturedInstrument : MonoBehaviour
         foreach(var voice in voices){Destroy(voice.Line.gameObject);Destroy(voice.Head.gameObject);}voices.Clear();
         if(material==null){material=new Material(Resources.Load<Shader>("HarmonicGlow"));material.SetColor("_BaseColor",Color.white*1.4f);
             headMaterial=new Material(Shader.Find("Universal Render Pipeline/Unlit"));headMaterial.SetColor("_BaseColor",Color.white*10);}
-        foreach(var original in (Track==-2?groupMelody??source?.Melody:source?.MelodyStrands)??Array.Empty<PreparedPatternSong.MelodyStrand>()){
+        foreach(var original in (Track==-2?directedMelody??groupMelody??source?.Melody:source?.MelodyStrands)??Array.Empty<PreparedPatternSong.MelodyStrand>()){
             var data=original;
             if(GroupTracks!=null&&Track==-2)data=new PreparedPatternSong.MelodyStrand{Track=-2,Channel=0,Rank=original.Rank,Notes=original.Notes.Where(n=>GroupTracks.Contains(n.SourceTrack)).ToArray()};
             if(!Matches(data.Track,data.Channel)||data.Notes.Length==0)continue;
@@ -171,7 +173,7 @@ public sealed class FeaturedInstrument : MonoBehaviour
                 }
             }
             var head=At(voice,now,out float light);voice.Head.gameObject.SetActive(midi.IsAudible&&head!=null&&light>.02f);
-            if(head!=null){voice.Head.position=Point(head);voice.Head.localScale=Vector3.one*(.075f+.045f*head.Impact)*Mathf.Sqrt(light);}
+            if(head!=null){voice.Head.position=Point(head);voice.Head.localScale=Vector3.one*.7f*(.075f+.045f*head.Impact)*Mathf.Sqrt(light);}
             // Old samples expire individually; a stationary head cannot renew the tail.
             voice.Samples.RemoveAll(s=>Time.unscaledTime-s.Stamp>9);
             float idle=voice.Samples.Count==0?0:Time.unscaledTime-voice.Samples[voice.Samples.Count-1].Stamp;

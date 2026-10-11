@@ -16,6 +16,7 @@ public class MidiPlayer : MonoBehaviour
     public string Status { get; private set; } = "Load a MIDI file";
     public int TrackCount { get; private set; }
     public bool IsPlaying { get; private set; }
+    public int SeekRevision {get;private set;}
     public bool IsAudible=>IsPlaying&&AudioSettings.dspTime>=originDsp;
     public double ClockPosition=>originPosition;
     public double ClockDspStart=>originDsp;
@@ -194,6 +195,10 @@ public class MidiPlayer : MonoBehaviour
     {
         int key=frame?.Key??fallbackKey; bool minor=frame?.Key!=null?frame.Minor:fallbackMinor;
         var p=HarmonicPrepared;var changes=p?.KeyChanges;
+        // Classical concerto bundles have score-reviewed tonal regions. Their
+        // shorter, real modulations must remain visible instead of being folded
+        // into a sixteen-bar display filter intended for noisy pop estimates.
+        if(p?.PianoConcerto==true&&p.KeySource?.StartsWith("Score-reviewed tonal regions",StringComparison.Ordinal)==true)return (key,minor);
         if(frame?.Key==null||changes==null||changes.Length==0||HarmonicCycles==null||p.Frames==null||p.Frames.Length==0||p.Frames[0].Key<0)return (key,minor);
         double beat=HarmonicCycles.BeatAt(frame.Time);
         double bar=p.Measures!=null&&p.Measures.Length>0?Math.Max(1,p.Measures[0].End-p.Measures[0].Start):4;
@@ -222,7 +227,7 @@ public class MidiPlayer : MonoBehaviour
     public void Seek(double seconds)
     {
         if (!Loaded || main.Synth==null) return;
-        GetComponent<FeaturedInstrument>()?.ResetPosition();
+        SeekRevision++;GetComponent<FeaturedInstrument>()?.ResetPosition();
         bool playing=IsPlaying; main.Silence();main.ClearVisualMemory(); Rebase(seconds); if (!playing) main.Synth.ResetVoices();
     }
     public void SetSpeed(float speed)

@@ -152,6 +152,14 @@ public sealed class StoryPictures : MonoBehaviour
         var texture=shown!=null&&textures.TryGetValue(shown,out var t)?t:null;
         float aspect=texture!=null?Mathf.Clamp(texture.width/(float)Mathf.Max(1,texture.height),.55f,2.2f):1.4f;
         bool stacked=views.Vertical||height>width*1.05f;
+        // Concerto pictures support the listening tour from a compact corner;
+        // the piano introduction and both melody paths remain visible.
+        if(clock?.HarmonicPrepared?.PianoConcerto==true&&view==VisualizationViews.View.Torus){
+            float iw=Mathf.Min(Mathf.Max(110,(width-dock-left)*.18f),200),ih=iw/aspect;
+            float limit=Mathf.Clamp(height*.11f,80,220);if(ih>limit){ih=limit;iw=ih*aspect;}
+            float cw=Mathf.Max(iw+16,180);picture.style.width=iw;picture.style.height=ih;card.style.width=cw;
+            card.style.left=placement=="left"?left:Mathf.Max(left,width-dock-cw-20);card.style.top=Top;return;
+        }
         // Without a lyric column, centre the portrait in the usable viewport in either
         // orientation. Leave the view selector above and the narration caption below.
         if(instrumental)

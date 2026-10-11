@@ -1,6 +1,6 @@
 using UnityEngine;
 
-[DefaultExecutionOrder(130)]
+[DefaultExecutionOrder(1130)]
 public sealed class ChordAurora : MonoBehaviour
 {
     const int Particles=10000;

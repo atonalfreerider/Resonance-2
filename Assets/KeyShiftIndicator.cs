@@ -9,7 +9,7 @@ using UnityEngine;
 // quickly above and below, and it stands where the label was as the change began, never
 // turning with the torus. It fades once the torus is locked in. Tonicizations no longer move
 // the torus, so they raise no scale.
-[DefaultExecutionOrder(90)]
+[DefaultExecutionOrder(1150)]
 public sealed class KeyShiftIndicator : MonoBehaviour
 {
     Main main;LineRenderer rail,ticks,mark;Material glow;readonly TextBox[] names=new TextBox[12];

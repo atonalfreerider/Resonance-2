@@ -98,6 +98,10 @@ def validate_cues(cues, duration, stems, source_ids=(), bundle=None):
             raise ValueError('Unavailable view or stem')
         if cue.get('visualStem','') not in {'', *stems}:
             raise ValueError('Unavailable visual stem')
+        if cue.get('concertoFocus','') not in ('','balanced','piano-only','orchestra-only','piano','orchestra'):
+            raise ValueError('Invalid concerto focus')
+        if cue.get('melodyTarget','') not in ('','both','piano','orchestra','three'):
+            raise ValueError('Invalid concerto melody target')
         if 'soloUntil' in cue and (not isinstance(cue['soloUntil'], (int, float)) or isinstance(cue['soloUntil'], bool) or not math.isfinite(cue['soloUntil']) or not start < cue['soloUntil'] <= end or not cue['stem']):
             raise ValueError('soloUntil must fall within a soloed scene')
         if not isinstance(cue['uncoil'], bool) or (cue['uncoil'] and cue['view'] != 'Torus'):
@@ -106,8 +110,10 @@ def validate_cues(cues, duration, stems, source_ids=(), bundle=None):
             raise ValueError('Invalid story caption')
         refs=cue.get('sourceIds',[])
         if not isinstance(cue.get('narrate',True),bool):raise ValueError('Invalid narration flag')
-        if cue.get('annotationTarget','none') not in ('none','melody','drums','patterns') or not isinstance(cue.get('annotationLabel',''),str) or len(cue.get('annotationLabel',''))>70:
+        if cue.get('annotationTarget','none') not in ('none','melody','drums','patterns','chord','note') or not isinstance(cue.get('annotationLabel',''),str) or len(cue.get('annotationLabel',''))>70:
             raise ValueError('Invalid story annotation')
+        if cue.get('annotationTarget')=='note' and (type(cue.get('annotationMidiPitch')) is not int or not 21<=cue['annotationMidiPitch']<117):raise ValueError('Note annotation requires a MIDI pitch from 21 to 116')
+        if cue.get('annotationTarget')=='chord' and (type(cue.get('annotationPitchClass')) is not int or not 0<=cue['annotationPitchClass']<12):raise ValueError('Chord annotation requires a pitch class from 0 to 11')
         if not isinstance(refs,list) or any(s not in source_ids for s in refs):
             raise ValueError('Unknown story source reference')
         if 'speech' in cue and (not isinstance(cue['speech'],str) or not 1 <= len(cue['speech']) <= 500):

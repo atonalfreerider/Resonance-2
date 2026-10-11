@@ -73,21 +73,27 @@ def encodable_time_map(tempo_ticks, tempo_times, score_times, audio_times, ppq):
     Preserve start/end and monotonicity. The report records the deviation; this
     is regularization of an uncertain automatic match, not a measured cue.
     """
-    ticks = np.interp(score_times, tempo_times, tempo_ticks)
+    # Original tempo boundaries matter too: a valid average DTW slope can
+    # exceed MIDI's tempo limit inside a slow original-tempo interval.
+    knots = np.union1d(score_times, tempo_times[(tempo_times>=score_times[0]) & (tempo_times<=score_times[-1])])
+    targets = np.interp(knots, score_times, audio_times)
+    ticks = np.interp(knots, tempo_times, tempo_ticks)
     keep = [0]
     limit = 0xffffff * .90 / (ppq * 1e6)
     for i in range(1, len(ticks)):
-        if ticks[i] > ticks[keep[-1]] and (audio_times[i]-audio_times[keep[-1]])/(ticks[i]-ticks[keep[-1]]) <= limit:
+        if ticks[i] > ticks[keep[-1]] and (targets[i]-targets[keep[-1]])/(ticks[i]-ticks[keep[-1]]) <= limit:
             keep.append(i)
     if keep[-1] != len(ticks)-1:
-        while len(keep)>1 and (audio_times[-1]-audio_times[keep[-1]])/max(1e-12,ticks[-1]-ticks[keep[-1]]) > limit:
+        while len(keep)>1 and (targets[-1]-targets[keep[-1]])/max(1e-12,ticks[-1]-ticks[keep[-1]]) > limit:
             keep.pop()
-        if (audio_times[-1]-audio_times[keep[-1]])/max(1e-12,ticks[-1]-ticks[keep[-1]]) > limit:
+        if (targets[-1]-targets[keep[-1]])/max(1e-12,ticks[-1]-ticks[keep[-1]]) > limit:
             raise ValueError('The full score cannot fit the recording within MIDI tempo limits.')
         keep.append(len(ticks)-1)
-    adjusted=np.interp(score_times,score_times[keep],audio_times[keep])
-    deviation=float(np.max(np.abs(adjusted-audio_times)))
-    return score_times[keep],audio_times[keep],len(ticks)-len(keep),deviation
+    # Interpolate in musical ticks, then retain tempo boundaries so the
+    # wall-clock map used by retime and the diagnostic has the same shape.
+    adjusted=np.interp(ticks,ticks[keep],targets[keep])
+    deviation=float(np.max(np.abs(adjusted-targets)))
+    return knots,adjusted,len(ticks)-len(keep),deviation
 
 
 def retime(midi, events, tempo_ticks, tempo_times, score_times, audio_times, output):
@@ -140,7 +146,7 @@ def normalize(features):
     return features/np.maximum(1e-9, np.linalg.norm(features, axis=0, keepdims=True))
 
 
-def refine_opening(mono, notes, tuning, score_times, audio_times, seconds=15., rate=200):
+def refine_opening(mono, notes, tuning, score_times, audio_times, seconds=15., rate=200, leading_override=None):
     """Recompute only the opening at a finer clock, pinned to the full-song join."""
     end_audio=min(seconds,audio_times[-1]);end_score=float(np.interp(end_audio,audio_times,score_times))
     import librosa
@@ -150,6 +156,10 @@ def refine_opening(mono, notes, tuning, score_times, audio_times, seconds=15., r
     # Only remove an actual quiet prefix; recordings starting with sound stay at zero.
     peak=float(np.max(np.abs(initial)))
     leading=first if first>.15 and np.max(np.abs(initial[:max(1,int((first-.1)*22050))]))<peak*.01 else 0.
+    if leading_override is not None:
+        if not np.isfinite(leading_override) or not 0<=leading_override<end_audio-.2:
+            raise ValueError('Opening lead-in must fall within the refinement window.')
+        leading=float(leading_override)
     excerpt=mono[round(leading*22050):round(end_audio*22050)]
     ap=audio_to_pitch_features(excerpt,Fs=22050,tuning_offset=tuning,feature_rate=rate)
     grid=np.arange(round((end_audio-leading)*rate)+1)/rate
@@ -196,6 +206,7 @@ def main():
     parser.add_argument('--ffmpeg', default='ffmpeg')
     parser.add_argument('--feature-rate', type=int, default=100, choices=[50, 100])
     parser.add_argument('--opening-seconds',type=float,default=15,help='Fine 200 Hz opening refinement for recordings longer than three minutes; 0 disables')
+    parser.add_argument('--opening-lead-in',type=float,help='Measured silence before the first scored sound, in recording seconds')
     parser.add_argument('--mscz',type=Path,help='Original MuseScore score for timed accent extraction; MIDI must omit simplified/orchestral-piano staves')
     parser.add_argument('--formatter',type=Path,default=Path.home()/'Desktop/PianoVisionFormatter',help='PianoVisionFormatter source folder')
     args = parser.parse_args()
@@ -259,7 +270,7 @@ def main():
     opening=None
     if duration>=180 and args.opening_seconds>0 and not args.anchors:
         print('Refining opening locally at 5 ms; preserving the rest of the movement',flush=True)
-        score_times,audio_times,opening=refine_opening(mono,notes,tuning,score_times,audio_times,args.opening_seconds)
+        score_times,audio_times,opening=refine_opening(mono,notes,tuning,score_times,audio_times,args.opening_seconds,leading_override=args.opening_lead_in)
     score_times,audio_times,merged_knots,regularization_error = encodable_time_map(tempo_ticks,tempo_times,score_times,audio_times,midi.ticks_per_beat)
     print(f'Merged {merged_knots} unencodable fingerprint knots; maximum map adjustment {regularization_error:.3f}s',flush=True)
     print('4/5 Bake recording timing into MIDI tempo events; verify all note/controller payloads', flush=True)

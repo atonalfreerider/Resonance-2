@@ -1,6 +1,7 @@
 using UnityEngine;
 
 // Surface identity stays independent of the selected key and sounding chord.
+[DefaultExecutionOrder(1115)]
 public class SurfaceOverlay : MonoBehaviour
 {
     Main main;

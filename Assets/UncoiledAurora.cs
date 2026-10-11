@@ -1,7 +1,7 @@
 using UnityEngine;
 
 // One shared, static curtain mesh; the GPU animates outward pressure bands.
-[DefaultExecutionOrder(140)]
+[DefaultExecutionOrder(1140)]
 public sealed class UncoiledAurora : MonoBehaviour
 {
     Main main;Mesh mesh;Material material;

@@ -13,10 +13,21 @@ class StoryChecks(unittest.TestCase):
     def test_valid_solo(self):
         self.assertEqual(validate_cues([self.cue],30,['vocals']),[self.cue])
     def test_rejects_bad_controls_and_clock(self):
-        for patch in [dict(start=-1),dict(end=31),dict(start=float('nan')),dict(stem='../secret'),dict(view='RunCode'),dict(view='Drums',uncoil=True),dict(text='')]:
+        for patch in [dict(start=-1),dict(end=31),dict(start=float('nan')),dict(stem='../secret'),dict(view='RunCode'),dict(view='Drums',uncoil=True),dict(text=''),dict(concertoFocus='unknown'),dict(melodyTarget='unknown')]:
             with self.subTest(patch=patch), self.assertRaises(ValueError):
                 validate_cues([dict(self.cue,**patch)],30,['vocals'])
         with self.assertRaises(ValueError):validate_cues([self.cue,self.cue],30,['vocals'])
+    def test_chord_guide_requires_valid_pitch_class(self):
+        cue=dict(self.cue,annotationTarget='chord',annotationPitchClass=10)
+        self.assertEqual(validate_cues([cue],30,['vocals'])[0]['annotationPitchClass'],10)
+        for pitch in (-1,12,None,'10'):
+            with self.subTest(pitch=pitch),self.assertRaises(ValueError):
+                validate_cues([dict(cue,annotationPitchClass=pitch)],30,['vocals'])
+    def test_note_guide_requires_midi_pitch(self):
+        cue=dict(self.cue,annotationTarget='note',annotationMidiPitch=29)
+        self.assertEqual(validate_cues([cue],30,['vocals'])[0]['annotationMidiPitch'],29)
+        for pitch in (20,117,None):
+            with self.assertRaises(ValueError):validate_cues([dict(cue,annotationMidiPitch=pitch)],30,['vocals'])
     def test_short_uncoil_is_suppressed_but_continuous_passage_survives(self):
         self.assertFalse(settle_transitions([dict(self.cue,end=8)])[0]['uncoil'])
         cues=[dict(self.cue,end=8),dict(self.cue,start=8,end=16)]

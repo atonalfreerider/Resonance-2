@@ -1,6 +1,15 @@
 using NAudio.Midi;
 using System.Security.Cryptography;
 using System.Text.Json;
+if(args.Length==2&&args[0]=="--key-only"){
+    var options=new JsonSerializerOptions{IncludeFields=true};var song=JsonSerializer.Deserialize<PreparedPatternSong>(File.ReadAllText(args[1]),options);
+    var keyFolder=Path.GetDirectoryName(Path.GetFullPath(args[1]));var keySettings=JsonSerializer.Deserialize<SongSettings>(File.ReadAllText(Path.Combine(keyFolder,"song.json")),options);
+    var keyCycles=MidiCycleAnalysis.Restore(song);
+    // Re-run harmonic analysis, rather than mistaking yesterday's inferred frame
+    // keys or sparse exported signatures for a complete authored modulation map.
+    foreach(var frame in song.Frames)frame.Key=-1;
+    KeyContext.Apply(song,keySettings,keyCycles);File.WriteAllText(args[1],JsonSerializer.Serialize(song,options));return;
+}
 if(args.Length==1&&args[0]=="--test-melody"){MelodySelection.SelfTest();return;}
 if(args.Length==1&&args[0]=="--test-classical-wheels"){InstrumentPatterns.TestClassicalWindows();return;}
 

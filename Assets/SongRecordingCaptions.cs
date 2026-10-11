@@ -26,9 +26,10 @@ public sealed class SongRecordingCaptions : MonoBehaviour
         var cue=director.CurrentCue;var segment=narration.SegmentFor(director.CueIndex);
         bool show=RecordingMode.Active&&cue!=null&&segment!=null&&midi.Position>=segment.start&&midi.Position<segment.end;
         card.style.display=show?DisplayStyle.Flex:DisplayStyle.None;if(!show)return;
-        if(text!=cue.text)
+        string spoken=string.IsNullOrWhiteSpace(cue.speech)?cue.text:cue.speech;
+        if(text!=spoken)
         {
-            text=cue.text;words=text.Split((char[])null,StringSplitOptions.RemoveEmptyEntries);ends=new float[words.Length];total=0;
+            text=spoken;words=text.Split((char[])null,StringSplitOptions.RemoveEmptyEntries);ends=new float[words.Length];total=0;
             for(int i=0;i<words.Length;i++){total+=Mathf.Max(2,words[i].Length)+(words[i].EndsWith(".")||words[i].EndsWith(":")?3:0);ends[i]=total;}
             first=-1;lit=-1;
         }
@@ -49,7 +50,11 @@ public sealed class SongRecordingCaptions : MonoBehaviour
         bool portrait=views.Vertical||height>width;float cw=portrait?width-32:Mathf.Min(width-48,1100);
         float size=Mathf.Clamp(cw/18,24,42);
         card.style.left=(width-cw)*.5f;card.style.width=cw;
-        card.style.top=portrait?new StyleLength(height*RecordingMode.CaptionTop):new StyleLength(StyleKeyword.Auto);
+        var pair=GetComponent<ConcertoTori>();
+        bool duet=portrait&&pair!=null&&pair.SplitActive&&pair.Piano!=null&&pair.Orchestra!=null&&pair.Piano.gameObject.activeInHierarchy&&pair.Orchestra.gameObject.activeInHierarchy;
+        float captionTop=height*RecordingMode.CaptionTop;
+        if(duet){float centre=height*(1-(pair.PianoViewport.center.y+pair.OrchestraViewport.center.y)*.5f);float cardHeight=card.resolvedStyle.height;if(!float.IsFinite(cardHeight)||cardHeight<1)cardHeight=80;captionTop=centre-cardHeight*.5f;}
+        card.style.top=portrait?new StyleLength(captionTop):new StyleLength(StyleKeyword.Auto);
         card.style.bottom=portrait?new StyleLength(StyleKeyword.Auto):new StyleLength(22);
         foreach(var label in labels)label.style.fontSize=size;
         if(lit==word)return;lit=word;

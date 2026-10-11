@@ -71,6 +71,23 @@ class RetimingTests(unittest.TestCase):
             self.assertAlmostEqual(result.start.iloc[0],1.32,places=5)
             self.assertAlmostEqual(result.start.iloc[0]+result.duration.iloc[0],2.5,places=5)
 
+    def test_original_slow_tempo_inside_valid_average_alignment_is_encodable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source=Path(directory)/'in.mid';output=Path(directory)/'out.mid'
+            m=mido.MidiFile(ticks_per_beat=480)
+            m.tracks.append(mido.MidiTrack([
+                mido.MetaMessage('set_tempo',tempo=500000),
+                mido.MetaMessage('set_tempo',tempo=16000000,time=480),
+                mido.MetaMessage('set_tempo',tempo=500000,time=24),
+                mido.MetaMessage('end_of_track',time=480)]))
+            m.tracks.append(mido.MidiTrack([mido.Message('note_on',note=60,velocity=80,time=480),mido.Message('note_off',note=60,time=24)]));m.save(source)
+            midi,events,notes,ticks,times=read_score(source)
+            x,y,merged,error=encodable_time_map(ticks,times,np.array([0.,times[-1]]),np.array([0.,times[-1]*2]),480)
+            self.assertGreater(merged,0);self.assertGreater(error,0)
+            retime(midi,events,ticks,times,x,y,output)
+            self.assertAlmostEqual(mido.MidiFile(output).length,times[-1]*2,places=5)
+            self.assertTrue(all(v.tempo<=0xffffff for t in mido.MidiFile(output).tracks for v in t if v.type=='set_tempo'))
+
     def test_one_shot_percussion_can_end_at_eof(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'drum.mid';m=mido.MidiFile()

@@ -257,6 +257,36 @@ Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/narration.py Prepar
 - **Spoken forms.** A draft's `speech` wording is what Cartesia reads: JAY-Z as "Jay Z", R&B as
   "R and B", pronunciations of names.
 
+### Piano concerto tours
+
+`concertoFocus` selects `piano-only`, `orchestra-only`, `piano`, `orchestra`, or `balanced`. These
+layouts animate two visual toruses in their existing shared concerto world;
+ordinary songs keep their usual cameras. `melodyTarget` selects the guide arrows
+for `piano`, `orchestra`, `both`, or `three`. The last option uses the story's
+explicit `pianoMelody` (two strands) and `orchestraMelody` (one strand) for a
+brief score-based demonstration, then restores each torus's normal melody.
+Audio remains the recording unless a cue explicitly selects a MIDI solo.
+Ordinary playback keeps both toruses visible and balanced, including rests.
+Only Director cues or direct `ConcertoTori.SetFocus` input feature a section.
+Director focus changes have a twelve-score-second minimum hold and gradual
+viewport and depth transitions. Overview combines both
+sections into the original torus. Only piano concerto metadata enables the pair.
+`directedMelody: true` uses the story's explicit melody arrays throughout a cue,
+including the second movement's flute-to-clarinet handoff.
+
+The first-movement Rubinstein script lives in `directors/rach2-moderato.json`.
+Publish it with `build_rach2_tour.py`, using the verified images in
+`SongLibraryData/jobs/rach2-tour/images`. Its ElevenLabs narrator is JohnV4;
+`delivery` supplies the v4 voice tag directing calm downward sentence endings.
+Render with `narration.py <bundle> --provider elevenlabs --key-file <private key>`.
+The generated preview includes the recording and measured narration ducking;
+`narration.json` reports actual speech and music-only durations.
+
+The second-movement script is `directors/rach2-adagio.json`; publish it with
+`build_rach2_adagio_tour.py`. Its authored speech windows reserve half the
+recording for clean listening. Both builders retain editable source scripts,
+human-readable report scripts, and cached offline voice tracks.
+
 The tutorial's word timings (for the lit word in its caption) come from
 `Tools/SongLibrary/tutorial_timing.py`, run after `tutorial_narration.py`.
 
@@ -313,3 +343,18 @@ A cue can set `releaseSoloAfterNarration: true` to return audio and visuals to
 the full mix at that cue's rendered speech endpoint. This is used for the Ticket
 to Ride introduction. The view/caption can remain until the next scene; the solo
 and music ducking end with the voice. Seeking backwards restores the solo.
+
+The third-movement script is `directors/rach2-finale.json`, published with
+`build_rach2_finale_tour.py`, with JohnV4 downward delivery and half clean music.
+Its `song.json` includes score-reviewed `ReviewedKeyRegions` (Beat, Key, Minor,
+Evidence); `PatternPrep --key-only <patterns.json>` reapplies only tonal context.
+All concerto key regions reach playback, including brief reviewed changes.
+Cue `annotationTarget: chord` and `annotationPitchClass` (A=0 through G-sharp=11)
+point to both toruses: G=10 for the dominant buildup, C=3 for its resolution.
+
+Recording captions use the spoken narration text. In portrait, a visible concerto
+duet centers them between the two toruses; single-torus scenes retain the usual
+placement. `annotationTarget: note` plus `annotationMidiPitch` points to an exact
+register (the opening bell is left-hand F1, MIDI 29). World-space chord outlines,
+melody trails and key guides update after the dual layout, preventing stale-position
+flashes. Explicit seek revisions distinguish navigation from slow rendering frames.

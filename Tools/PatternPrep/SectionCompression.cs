@@ -6,6 +6,7 @@ public sealed class SongSettings
     public bool Minor;
     public bool InferKeyChanges=true;
     public bool PianoConcerto;
+    public PreparedPatternSong.KeyChange[] ReviewedKeyRegions=Array.Empty<PreparedPatternSong.KeyChange>();
     public double ScoreLeadInBeats;
     public int[] PianoTracks=Array.Empty<int>(),OrchestraTracks=Array.Empty<int>();
     public string Style="";

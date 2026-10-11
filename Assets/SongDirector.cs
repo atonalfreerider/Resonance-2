@@ -10,12 +10,13 @@ using UnityEngine.UIElements;
 public sealed class SongDirector : MonoBehaviour
 {
     // image: a history picture inside the bundle, shown as a pop-up for the cue (StoryPictures).
-    [Serializable] public sealed class Cue { public double start,end;public string text,view,stem,annotationTarget,annotationLabel,image,imageCaption,imageCredit,imagePlacement;public bool uncoil,releaseSoloAfterNarration;
+    [Serializable] public sealed class Cue { public double start,end;public string text,speech,view,stem,annotationTarget,annotationLabel,image,imageCaption,imageCredit,imagePlacement;public bool uncoil,releaseSoloAfterNarration;
         // soloGain: how much louder a quiet stem plays while this cue solos it (1 when absent); narrationEnd: when its voice stops.
-        public float soloGain,narrationEnd; public double soloUntil; public string visualStem; }
+        public float soloGain,narrationEnd; public double soloUntil; public string visualStem,concertoFocus,melodyTarget; public bool directedMelody; public int annotationPitchClass=-1,annotationMidiPitch=-1; }
     [Serializable] public sealed class Narrator { public string name,voice,language; }
     [Serializable] public sealed class Story {
         public int version;public string title,midiSha256,audioSha256,patternsSha256,model;public double duration;public Cue[] cues;public Narrator narrator;
+        public PreparedPatternSong.MelodyStrand[] pianoMelody,orchestraMelody;
     }
     static readonly string[] Placements={"","right","left","center"};
     MidiPlayer midi;SongAudio audio;StemPlayback stems;VisualizationViews views;Main main;
@@ -68,6 +69,10 @@ public sealed class SongDirector : MonoBehaviour
                 (cue.uncoil&&cue.view!="Torus")||cue.stem==null||(cue.stem!=""&&!(manifest.stems??Array.Empty<StemPlayback.Stem>()).Any(s=>s.id==cue.stem))||
                 !double.IsFinite(cue.soloUntil)||(cue.soloUntil!=0&&(cue.soloUntil<=cue.start||cue.soloUntil>cue.end||cue.stem==""))||
                 (!string.IsNullOrEmpty(cue.visualStem)&&!(manifest.stems??Array.Empty<StemPlayback.Stem>()).Any(s=>s.id==cue.visualStem))||
+                !new[]{"","balanced","piano-only","orchestra-only","piano","orchestra"}.Contains(cue.concertoFocus??"")||
+                !new[]{"","both","piano","orchestra","three"}.Contains(cue.melodyTarget??"")||
+                (cue.annotationTarget=="note"&&(cue.annotationMidiPitch<21||cue.annotationMidiPitch>116))||
+                (cue.annotationTarget=="chord"&&(cue.annotationPitchClass<0||cue.annotationPitchClass>11))||
                 !Placements.Contains(cue.imagePlacement??"")||(!string.IsNullOrEmpty(cue.image)&&(StoryPictures.Resolve(directory,cue.image)==null||string.IsNullOrWhiteSpace(cue.imageCredit))))
                 throw new InvalidDataException("Invalid story cue; no controls applied.");
             end=cue.end;

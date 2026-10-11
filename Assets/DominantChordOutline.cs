@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-[DefaultExecutionOrder(120)]
+[DefaultExecutionOrder(1120)]
 public sealed class DominantChordOutline : MonoBehaviour
 {
     Main main;MidiPlayer midi;TonalDominance dominance;Material material,fillMaterial;Mesh fillMesh;GameObject fillObject;

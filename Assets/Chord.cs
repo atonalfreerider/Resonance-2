@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(LineRenderer))]
+[DefaultExecutionOrder(1115)]
 public class Chord : MonoBehaviour
 {
     public Note Note1, Note2;

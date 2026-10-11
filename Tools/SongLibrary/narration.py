@@ -149,7 +149,10 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
             settings=dict(stability=.5,similarity_boost=.75)
             if model not in ('eleven_v4','eleven_v4_turbo'):
                 settings.update(style=.15,use_speaker_boost=True)
-            body=dict(text=cue.get('speech') or cue['text'],model_id=model,language_code=language[:2],voice_settings=settings)
+            text=cue.get('speech') or cue['text']
+            if narrator.get('delivery') and model in ('eleven_v4','eleven_v3'):
+                text='['+narrator['delivery']+'] '+text
+            body=dict(text=text,model_id=model,language_code=language[:2],voice_settings=settings)
         elif provider=='cartesia':
             body=dict(model_id=model,voice=voice,transcript=cue.get('speech') or cue['text'],language=language,output_format=dict(container='wav',encoding='pcm_s16le',sample_rate=RATE),generation_config=dict(speed=1,volume=1))
         else:body=dict(model=model,voice=voice,input=cue.get('speech') or cue['text'],instructions=DELIVERY,response_format='wav',speed=1.0)
@@ -220,6 +223,6 @@ if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('bundle');p.add_argument('--key-file');p.add_argument('--voice',help="overrides the story's narrator");p.add_argument('--provider',choices=list(PROVIDERS))
     a=p.parse_args();settings=read_json(DATA/'settings.json') or {}
     provider=a.provider or settings.get('narrationProvider','openai')
-    key_file=a.key_file or settings.get('cartesiaKeyFile' if provider=='cartesia' else 'storyKeyFile')
+    key_file=a.key_file or settings.get(provider+'KeyFile' if provider in ('cartesia','elevenlabs') else 'storyKeyFile')
     if not key_file:raise SystemExit('No key file: pass --key-file or configure SongLibraryData/settings.json')
     print(json.dumps(generate(a.bundle,key_file,settings.get('narrationVoice'),provider=provider,override_voice=a.voice),indent=2))
