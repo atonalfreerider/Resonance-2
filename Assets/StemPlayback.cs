@@ -130,7 +130,7 @@ public sealed class StemPlayback : MonoBehaviour
     public void Stop(){foreach(var item in cache.Values)item.Source?.Stop();}
     void Update()
     {
-        float step=Time.unscaledDeltaTime/CrossfadeSeconds,volume=GetComponent<Main>().Synth?.Volume??0;
+        float step=(Time.captureDeltaTime>0?Time.captureDeltaTime:Time.unscaledDeltaTime)/CrossfadeSeconds,volume=GetComponent<Main>().Synth?.Volume??0;   // the capture step while a video records
         volume*=GetComponent<SongNarration>()?.MusicGain??1;
         MasterGain=Mathf.MoveTowards(MasterGain,SelectedId==""?1:0,step);
         recording.Source.volume=MasterGain*volume;

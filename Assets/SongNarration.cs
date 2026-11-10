@@ -89,7 +89,9 @@ public sealed class SongNarration : MonoBehaviour
         if(shouldPlay&&!released)foreach(var s in manifest.segments)if(now>=s.start-.12&&now<s.end+.15){duck=Mathf.Min(duck,s.duck>0?s.duck:DefaultDuck);}
         Speaking=duck<1;
         // Duck quickly ahead of the voice, recover gently after it.
-        MusicGain=Mathf.Lerp(MusicGain,duck,1-Mathf.Exp(-Time.unscaledDeltaTime*(Speaking?16:released?50:4)));
+        // While a video records, frames advance by the capture step, not the wall clock (rendering is slower).
+        float dt=Time.captureDeltaTime>0?Time.captureDeltaTime:Time.unscaledDeltaTime;
+        MusicGain=Mathf.Lerp(MusicGain,duck,1-Mathf.Exp(-dt*(Speaking?16:released?50:4)));
         voice.volume=(GetComponent<Main>().Synth?.Volume??0)*.95f;
     }
     void OnDisable(){Stop();MusicGain=1;Speaking=false;}
