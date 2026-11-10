@@ -257,6 +257,41 @@ Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/narration.py Prepar
 - **Spoken forms.** A draft's `speech` wording is what Cartesia reads: JAY-Z as "Jay Z", R&B as
   "R and B", pronunciations of names.
 
+### Tours written in bars (songs ingested from a score)
+
+For a song ingested with `library.py ingest <recording> --score <score.mscz>`, a director writes cues in printed
+bars instead of seconds: `Tools/SongLibrary/directors/<song>.json` (committed) holds the draft with a `bundle`
+glob, and each cue says `"from": "17", "to": "21:2"` (bar 21, beat 2; `"9#2"` is the second time bar 9 is
+played; `"end"` the end of the last bar). `soloUntil`, `narrationStart` and `narrationEnd` may be bar specs too.
+`score_bars.BarClock` turns them into recording seconds through the bundle's score import and aligned tempo
+map, so every cue follows the performer's timing.
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/score_bars.py PreparedSongs/Library/<song> 17 21:2 62
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/build_director_tour.py Tools/SongLibrary/directors/chopin-op10-3.json
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/narration.py PreparedSongs/Library/<song>
+```
+
+`build_director_tour.py` writes `story.draft.json` into the newest matching bundle, publishes it and writes
+the tour script with every cue's time and words to `Reports/SongProcessing/<bundle>/`.
+
+**Checking a tour with TypeSafe (Jev).** `tour_check.py` asks TypeSafe's System One model two kinds of question,
+with the decisions kept in code and the answers cached by request in `SongLibraryData/typesafe-cache.json`:
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/tour_check.py claims <director.json> <evidence.json>
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/tour_check.py beats <director.json> <evidence.json>
+```
+
+- `claims`: every spoken sentence against the evidence of its cue's `sourceIds` (a Noul "is this a factual
+  statement?" and a Choice supports / contradicts / says nothing); verdicts below 0.8 confidence are marked
+  for review.
+- `beats`: each beat of the director's story in their own words ("the second swell, with dissonant tension")
+  against candidate passages described from the score (a Choice), compared with the bars the cue uses.
+
+The evidence file (sources' passages, the beats, the candidate passages) lives with the song's source files in
+`SongLibraryData/scores/<song>/evidence.json`, not in git. The key is `typesafeKeyFile` in settings.
+
 ### Piano concerto tours
 
 `concertoFocus` selects `piano-only`, `orchestra-only`, `piano`, `orchestra`, or `balanced`. These
