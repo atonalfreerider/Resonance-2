@@ -7,6 +7,7 @@ Scores are generated here (no copyrighted score is needed).
 import json
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 import zipfile
 from fractions import Fraction
 from pathlib import Path
@@ -182,6 +183,46 @@ class LegacyReading(unittest.TestCase):
         report = msi.timing(s)
         self.assertAlmostEqual(report['summary']['duration'], 2.0 + 1.0)   # bar 1 at 1 q/s, bar 2 at 2 q/s
         json.dumps(report)
+
+    def test_every_tick_moves_the_reading_position_and_musescore4_misreads_are_named(self):
+        # MuseScore 1.3 writes a bar's annotations first, each at its own tick; the tuplet that follows carries the
+        # tick that brings the position back to the start of the bar, and its chords carry none.
+        bar = ('<Tempo><tick>120</tick><tempo>0.8</tempo><text>rall.</text></Tempo>'
+               '<Dynamic><tick>480</tick><subtype>pp</subtype></Dynamic>'
+               + tuplet(0, 2, 3).replace('<Tuplet id="0">', '<Tuplet id="0"><tick>0</tick>')
+               + chord('eighth', 60, tuplet=0) + chord('eighth', 62, tuplet=0) + chord('eighth', 64, tuplet=0)
+               + chord('quarter', 65))
+        path = write_mscz(self.dir, score_114([[bar, chord('half', 67)]]))
+        s = msi.read(str(path))
+        self.assertEqual(s.repairs, [])                                   # complete under MuseScore 1.x rules
+        self.assertEqual([(n.pitch, n.tick) for n in s.notes if n.measure == 0], [(60, 0), (62, 160), (64, 320), (65, 480)])
+        self.assertEqual(sorted((d.kind, d.tick) for d in s.directions), [('dynamic', 480), ('tempo', 120)])
+        self.assertEqual(len(s.musescore4), 1)
+        issue = s.musescore4[0]
+        self.assertEqual((issue['measure'], issue['museScore4Measure'], issue['staff'], issue['chord'], issue['tick'],
+                          issue['museScore4Tick']), (1, 1, 1, 0, 0, 480))
+        self.assertIn('refuses', issue['problem'])
+        out = self.dir / 'for-ms4.mscz'
+        self.assertEqual(msi.musescore4_copy(str(path), str(out), s.musescore4), 1)
+        fixed, _ = msi.read_bytes(str(out))
+        original, _ = msi.read_bytes(str(path))
+        self.assertEqual(fixed.decode(), original.decode().replace('<Chord>', '<Chord><tick>0</tick>', 1))
+        again = msi.read(str(out))
+        self.assertEqual(again.musescore4, [])
+        self.assertEqual([(n.pitch, n.tick) for n in again.notes], [(n.pitch, n.tick) for n in s.notes])
+
+    def test_ottava_lines_move_the_sounding_pitch(self):
+        right = [chord('quarter', 72) + chord('quarter', 74), chord('quarter', 76) + chord('quarter', 77, tie=True), chord('half', 77)]
+        left = [chord('half', 48), chord('half', 50), chord('half', 52)]
+        lines = ('<Ottava><tick>480</tick><tick2>1440</tick2><beginText><text>8va</text></beginText></Ottava>'
+                 '<Ottava><track>4</track><subtype>2</subtype><tick>960</tick><tick2>1920</tick2></Ottava>')
+        s = self.read(score_114([right, left], extra=lines))
+        rh = [(n.tick, n.pitch) for n in s.notes if n.staff == 0]
+        lh = [(n.tick, n.pitch) for n in s.notes if n.staff == 1]
+        self.assertEqual(rh, [(0, 72), (480, 86), (960, 88), (1440, 77)])   # tie from outside the line keeps its pitch
+        self.assertEqual(lh, [(0, 48), (960, 38), (1920, 52)])               # subtype 2 = 8vb, on the second staff
+        self.assertEqual(msi.ottava_shift(ET.fromstring('<Ottava><subtype>15ma</subtype></Ottava>')), 24)
+        self.assertEqual(msi.ottava_shift(ET.fromstring('<Ottava><beginText><text>8va bassa</text></beginText></Ottava>')), -12)
 
     def test_score_midi_has_no_markers_or_text(self):
         # PatternPrep reads MIDI markers as section boundaries and text events as karaoke lyrics.

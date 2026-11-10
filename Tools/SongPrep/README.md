@@ -36,10 +36,18 @@ Method reference: [Sync Toolbox](https://github.com/groupmm/synctoolbox), MIT li
 hand / Left hand) and a timing JSON: every note with its score tick, printed measure number (a pickup is 0),
 beat and seconds of the score's own tempo map, plus the measures, tempos, expression texts and a report of any
 corrupted measure it repaired (voice 1 must fill its measure; other voices may stop early; nothing may cross
-the bar line). The source score is never modified.
+the bar line). The source score is never modified. Ottava lines move the sounding pitch.
+
+Old files MuseScore 4 refuses as corrupted are often complete: MuseScore 1.3 wrote a bar's annotations first,
+each at its own tick, and let the following tuplet's `<tick>` bring the reading position back; MuseScore 4's
+1.x reader ignores a tuplet's tick, so the tuplet lands late and overruns the bar (Chopin's Op. 10 No. 3, bar
+20: "Incomplete measure, measure 21, staff 1"). The timing JSON's `museScore4` list names each such measure;
+`--musescore4-copy fixed.mscz` writes a copy MuseScore 4 opens (the misread chord gets its own `<tick>`, which
+changes nothing under 1.x rules).
 
 ```powershell
 Tools/SongPrep/.venv/Scripts/python.exe Tools/SongPrep/musescore_import.py score.mscz --midi score.mid --json score-import.json
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongPrep/musescore_import.py old.mscz --musescore4-copy for-musescore4.mscz
 Tools/SongPrep/.venv/Scripts/python.exe Tools/SongPrep/test_musescore_import.py
 ```
 

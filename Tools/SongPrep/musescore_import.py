@@ -32,8 +32,12 @@ printed number, staff, voice, what was found and what was done:
 * an element whose absolute ``<tick>`` lies outside its measure is moved to where the voice's cursor stood.
 
 MuseScore 4 also rejects some old files whose measures are complete, because its 1.x reader places an element
-differently from MuseScore 1.x; :func:`museScore4_compatibility` names those measures, so the report says what
-MuseScore would complain about and how this import reads it.
+differently from MuseScore 1.x (it ignores a Tuplet's own ``<tick>``, which MuseScore 1.3 wrote to bring the
+reading position back after a bar's annotations); :func:`museScore4_compatibility` names those measures, so the
+report says what MuseScore would complain about and how this import reads it, and ``--musescore4-copy`` writes
+a copy MuseScore 4 opens (each misread chord gets its own ``<tick>``; nothing else changes).
+
+Ottava lines (8va, 8vb, 15ma...) move the sounding pitch: the file keeps the written pitch, as MuseScore does.
 
 Measure numbers are the printed ones: an incomplete first measure (a pickup) is measure 0, irregular measures
 are not counted, exactly as MuseScore numbers them.  Times in the JSON are in seconds of the score's own tempo
@@ -70,6 +74,22 @@ GATE = {'staccato': Fraction(1, 2), 'staccatissimo': Fraction(1, 3), 'ustaccatis
         'dstaccatissimo': Fraction(1, 3), 'portato': Fraction(3, 4)}
 LETTERS = 'FCGDAEB'
 STEP_SEMITONES = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
+# Ottava lines: MuseScore 1.x numbers the subtypes, 2.x and later name them.
+OTTAVA_SHIFTS = {'0': 12, '1': 24, '2': -12, '3': -24, '8va': 12, '8vb': -12, '15ma': 24, '15mb': -24,
+                 '22ma': 36, '22mb': -36, '8va alta': 12, '8va bassa': -12, '15ma alta': 24, '15ma bassa': -24}
+INLINE_SPANNERS = ('Ottava', 'Pedal')       # 2.x spanners opened in a measure (<X id>) and closed by <endSpanner id>
+
+
+def ottava_shift(el: ET.Element) -> int:
+    """Semitones an ottava line moves its notes: from its subtype, else from its printed text (8va, 8vb...)."""
+    sub = (el.findtext('subtype') or '').strip()
+    if sub in OTTAVA_SHIFTS:
+        return OTTAVA_SHIFTS[sub]
+    text = ' '.join(t for t in el.itertext()).lower()
+    for mark, shift in (('22mb', -36), ('22ma', 36), ('15mb', -24), ('15ma', 24), ('8vb', -12), ('bassa', -12), ('8va', 12)):
+        if mark in text:
+            return shift
+    return 12
 
 
 class ScoreImportError(Exception):
@@ -246,6 +266,11 @@ class LegacyReader:
         self.division = _int(self.score, 'Division', 480) or 480
         self.repairs: List[Repair] = []
         self.warnings: List[str] = []
+        self.ms4_issues: List[dict] = []
+        self._ottava: List[Tuple[int, Fraction, Fraction, int]] = []
+        self._inline_open: Dict[str, tuple] = {}
+        self._inline_ottavas: List[Tuple[int, Fraction, Fraction, int]] = []
+        self._inline_pedals: List[Tuple[int, Fraction, Fraction]] = []
 
     # --------------------------------------------------------------- structure
     def parts_and_staves(self):
@@ -370,6 +395,7 @@ class LegacyReader:
         notes: List[Note] = []
         directions: List[Direction] = []
         dynamics: Dict[int, List[Tuple[Fraction, int, bool]]] = {}
+        self._ottava = self._ottavas(len(music))
 
         for staff_index, staff in enumerate(music):
             elements = staff.findall('Measure')
@@ -386,7 +412,12 @@ class LegacyReader:
         for n in notes:
             if n.velocity <= 0:
                 n.velocity = self._dynamic_at(dynamics.get(n.staff, []), n.tick)
-        pedals = self._pedals(len(music))
+        # 2.x ottavas opened and closed inside measures (1.x ones were applied while reading)
+        for s, t, t2, shift in self._inline_ottavas:
+            for n in notes:
+                if n.staff == s and t <= n.tick < t2:
+                    n.pitch += shift
+        pedals = sorted(set(self._pedals(len(music)) + self._inline_pedals), key=lambda x: (x[1], x[0]))
         title, composer = self._metadata()
         notes.sort(key=lambda n: (n.tick, n.staff, n.pitch))
         for d in directions:
@@ -399,25 +430,51 @@ class LegacyReader:
                            directions=directions, repairs=self.repairs, warnings=self.warnings)
 
     def _read_measure(self, m: ET.Element, measure: Measure, staff: int, directions, dyn) -> List[dict]:
-        """Chords and rests of one staff's measure, placed: dicts with tick, ticks, track, element, grace."""
+        """Chords and rests of one staff's measure, placed: dicts with tick, ticks, track, element, grace.
+
+        The reading position follows MuseScore 1.x: ANY element's own ``<tick>`` moves it (MuseScore 1.3's writer
+        tracked one position for everything it wrote, so a chord with no tick of its own follows whatever element
+        last wrote one - a Tempo, a Dynamic or a Tuplet).  MuseScore 4's 1.x reader ignores a Tuplet's tick when
+        it moves the position; where that matters the measure is recorded in ``self.ms4_issues``."""
         tuplets: Dict[str, dict] = {}
         cursor = measure.tick
+        ms4 = cursor                                # the position MuseScore 4 would read at
         default_track = staff * 4
         placed: List[dict] = []
         pending_grace: List[dict] = []
-        for el in m:
+        for position, el in enumerate(m):
             tag = el.tag
+            own = el.findtext('tick') if tag not in ('Chord', 'Rest', 'tick') else None
+            if own is not None:
+                try:
+                    cursor = Fraction(int(own))
+                    if tag != 'Tuplet':
+                        ms4 = cursor
+                except ValueError:
+                    pass
             if tag == 'Tuplet':
                 tid = el.get('id') or el.findtext('id') or str(len(tuplets))
                 normal = _int(el, 'normalNotes', 2); actual = _int(el, 'actualNotes', 3)
                 base = el.findtext('baseNote')
-                tuplets[tid] = dict(ratio=(normal, actual), base=base, members=[], tick=_int(el, 'tick'))
+                tuplets[tid] = dict(ratio=(normal, actual), base=base, members=[], tick=_int(el, 'tick'),
+                                    ms4=ms4, cursor=cursor)
                 continue
             if tag == 'tick':                       # 2.x: a bare cursor move
                 try:
-                    cursor = Fraction(int(el.text))
+                    cursor = ms4 = Fraction(int(el.text))
                 except (TypeError, ValueError):
                     pass
+                continue
+            if tag in INLINE_SPANNERS and el.get('id') is not None:         # 2.x: a spanner opened in place
+                self._inline_open[el.get('id')] = (tag, staff, cursor, el)
+                continue
+            if tag == 'endSpanner' and el.get('id') in self._inline_open:
+                kind, s, start, opened = self._inline_open.pop(el.get('id'))
+                if cursor > start:
+                    if kind == 'Ottava':
+                        self._inline_ottavas.append((s, start, cursor, ottava_shift(opened)))
+                    else:
+                        self._inline_pedals.append((s, start, cursor))
                 continue
             if tag in ('Tempo',):
                 directions.append(Direction(tick=cursor, staff=staff, kind='tempo', text=_text(el)))
@@ -443,10 +500,26 @@ class LegacyReader:
             explicit = False
             if t is not None:
                 try:
-                    cursor = Fraction(int(t))
+                    cursor = ms4 = Fraction(int(t))
                     explicit = True
                 except ValueError:
                     pass
+            tuplet_id = (el.findtext('Tuplet') or '').strip() or None
+            chord_number = len(placed) + len(pending_grace)          # this element's place among the measure's chords/rests
+            if not explicit and ms4 != cursor:
+                # Only a tuplet's own tick separates the two readings; the first chord that follows it lands
+                # elsewhere in MuseScore 4 (later: the voice overruns and the file is refused; earlier: it plays early).
+                late = ms4 > cursor
+                self.ms4_issues.append(dict(
+                    measure=measure.number, index=measure.index, museScore4Measure=measure.index + 1,
+                    staff=staff + 1, chord=chord_number, tuplet=tuplet_id, tick=int(cursor), museScore4Tick=int(ms4),
+                    problem=(f'MuseScore 4 ignores the <tick> of the tuplet before this chord and starts it at tick {ms4} '
+                             f'instead of {cursor}' + (', so the voice runs past the bar line and MuseScore 4 refuses the '
+                             'file as corrupted ("Incomplete measure", numbering the pickup as measure 1)' if late else
+                             ', so it plays that passage early')),
+                    resonance='read as MuseScore 1.x wrote it (every <tick> moves the reading position): the measure is complete',
+                    fix=f'give that chord its own <tick>{cursor}</tick> (no change under MuseScore 1.x rules)'))
+                ms4 = cursor
             track = _int(el, 'track', default_track)
             if track is None or track // 4 != staff:
                 # a track from another staff (cross-staff notes keep their own staff's track): keep the voice
@@ -467,6 +540,7 @@ class LegacyReader:
             pending_grace = []
             placed.append(item)
             cursor = cursor + ticks
+            ms4 = ms4 + ticks
         for g in pending_grace:                     # a trailing grace (after-grace)
             g['tick'] = cursor
             placed.append(g)
@@ -556,10 +630,13 @@ class LegacyReader:
                 if a in GATE:
                     gate = min(gate, GATE[a])
             voice = item['track'] % 4
+            # an ottava line moves the sounding pitch; the file keeps the written one (graces go with their chord)
+            shift = sum(sh for s, t, t2, sh in self._ottava if s == staff and t <= item['tick'] < t2)
             for note in el.findall('Note'):
-                pitch = _int(note, 'pitch')
-                if pitch is None:
+                written = _int(note, 'pitch')
+                if written is None:
                     continue
+                pitch = written + shift
                 tpc = _int(note, 'tpc')
                 velocity = 0
                 if (note.findtext('veloType') or '').strip() == 'user':
@@ -572,7 +649,7 @@ class LegacyReader:
                                     tick=item['tick'] - length * (k + 1), ticks=length, play_ticks=length,
                                     velocity=velocity, measure=measure.index, grace=True, articulations=arts))
                     continue
-                key = (item['track'], pitch)
+                key = (item['track'], written)
                 tied = open_ties.pop(key, None)
                 if tied is not None and tied.tick + tied.ticks == item['tick']:
                     tied.ticks += item['ticks']
@@ -610,6 +687,16 @@ class LegacyReader:
             if t is None or t2 is None or t2 <= t:
                 continue
             out.append((min(staves - 1, (tr or 0) // 4), Fraction(t), Fraction(t2)))
+        return sorted(set(out), key=lambda x: (x[1], x[0]))
+
+    def _ottavas(self, staves: int) -> List[Tuple[int, Fraction, Fraction, int]]:
+        """1.x ottava lines: global spanners (staff from <track>, default the first) over [tick, tick2)."""
+        out = []
+        for o in self.score.findall('Ottava') + (self.root.findall('Ottava') if self.root is not self.score else []):
+            t, t2, tr = _int(o, 'tick'), _int(o, 'tick2'), _int(o, 'track', 0)
+            if t is None or t2 is None or t2 <= t:
+                continue
+            out.append((min(staves - 1, (tr or 0) // 4), Fraction(t), Fraction(t2), ottava_shift(o)))
         return sorted(set(out), key=lambda x: (x[1], x[0]))
 
     def _metadata(self) -> Tuple[str, str]:
@@ -653,8 +740,54 @@ def measure_at(measures: List[Measure], tick: Fraction) -> Measure:
 # ---------------------------------------------------------------------------------------------- MuseScore 4 view
 
 def museScore4_compatibility(data: bytes, measures: List[Measure], division: int) -> List[dict]:
-    """Measures MuseScore 4 would reject when opening this old file (filled in once diagnosed)."""
-    return []
+    """Measures MuseScore 4 misreads when it opens this 1.x/2.x file, with how this import reads them.
+
+    MuseScore 1.3 wrote one reading position for everything in a measure: when annotations (a 'rall.', a
+    dynamic) are written at the start of a bar with their own later ticks, the tuplet that follows carries the
+    tick that brings the position back, and its chords carry none.  MuseScore 4's 1.x reader (read114) moves
+    the position for a <tick> inside a Chord, Rest, Dynamic or Tempo but not inside a Tuplet, so the tuplet's
+    first chord lands on the last annotation's tick, the voice runs past the bar line and the file is refused
+    as corrupted ('Incomplete measure ... Found 15/20, Expected 2/4').  :func:`musescore4_copy` writes a copy
+    MuseScore 4 opens: the tuplet's first chord gets its own <tick>, which changes nothing under 1.x rules."""
+    reader = LegacyReader(data, file_version(data))
+    reader.read('', '')
+    return reader.ms4_issues
+
+
+def musescore4_copy(path: str, out: str, issues: List[dict]) -> int:
+    """Copy a 1.x/2.x score with each misread tuplet's first chord given its own <tick> (see
+    :func:`museScore4_compatibility`).  Only those lines are added; every other byte is kept.  Returns the
+    number of chords changed."""
+    data, inner = read_bytes(path)
+    text = data.decode('utf-8')
+    changed = 0
+    for issue in sorted(issues, key=lambda i: (i['staff'], i['index']), reverse=True):
+        staves = [m.start() for m in re.finditer(rf'<Staff id="{issue["staff"]}">', text)]
+        if not staves:
+            continue
+        start = staves[-1]
+        end = text.find('</Staff>', start)
+        measures = [m.start() for m in re.finditer(r'<Measure[\s>]', text[start:end])]
+        if issue['index'] >= len(measures):
+            continue
+        m0 = start + measures[issue['index']]
+        m1 = text.find('</Measure>', m0)
+        chords = [m.start() for m in re.finditer(r'<(?:Chord|Rest)>', text[m0:m1])]
+        if issue['chord'] >= len(chords):
+            continue
+        tag_end = m0 + chords[issue['chord']] + len('<Chord>' if text.startswith('<Chord>', m0 + chords[issue['chord']]) else '<Rest>')
+        layout = re.match(r'(\r?\n)([ \t]*)', text[tag_end:])       # keep the file's own line breaks and indent
+        insertion = (layout.group(1) + layout.group(2) if layout else '') + f'<tick>{issue["tick"]}</tick>'
+        text = text[:tag_end] + insertion + text[tag_end:]
+        changed += 1
+    fixed = text.encode('utf-8')
+    if Path(path).suffix.lower() == '.mscx':
+        Path(out).write_bytes(fixed)
+    else:
+        with zipfile.ZipFile(path) as src, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as dst:
+            for info in src.infolist():
+                dst.writestr(info, fixed if info.filename == inner else src.read(info.filename))
+    return changed
 
 
 # --------------------------------------------------------------------------------------------- modern formats
@@ -815,10 +948,15 @@ def main(argv=None):
     p.add_argument('--midi', help='write a type-1 MIDI here')
     p.add_argument('--json', help='write the timing report here')
     p.add_argument('--ppq', type=int, help='MIDI resolution (default: the score\'s division)')
+    p.add_argument('--musescore4-copy', help='for a 1.x/2.x score MuseScore 4 refuses: write a copy it can open')
     a = p.parse_args(argv)
     score = read(a.score)
     if a.midi:
         write_midi(score, a.midi, a.ppq)
+    if a.musescore4_copy:
+        changed = musescore4_copy(a.score, a.musescore4_copy, score.musescore4) if score.musescore4 else 0
+        print(f'MuseScore 4 copy: {changed} chord(s) given their own <tick>' if changed else
+              'MuseScore 4 copy: nothing to change (no misread measures); no copy written', file=sys.stderr)
     report = timing(score)
     if a.json:
         Path(a.json).write_text(json.dumps(report, indent=1, ensure_ascii=False), encoding='utf-8')
