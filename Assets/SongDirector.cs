@@ -12,7 +12,11 @@ public sealed class SongDirector : MonoBehaviour
     // image: a history picture inside the bundle, shown as a pop-up for the cue (StoryPictures).
     [Serializable] public sealed class Cue { public double start,end;public string text,speech,view,stem,annotationTarget,annotationLabel,image,imageCaption,imageCredit,imagePlacement;public bool uncoil,releaseSoloAfterNarration;
         // soloGain: how much louder a quiet stem plays while this cue solos it (1 when absent); narrationEnd: when its voice stops.
-        public float soloGain,narrationEnd; public double soloUntil; public string visualStem,concertoFocus,melodyTarget; public bool directedMelody; public int annotationPitchClass=-1,annotationMidiPitch=-1; }
+        public float soloGain,narrationEnd; public double soloUntil; public string visualStem,concertoFocus,melodyTarget; public bool directedMelody; public int annotationPitchClass=-1,annotationMidiPitch=-1;
+        // Two passages side by side (PassageComparison): [start, end) song seconds each, the span of the first that
+        // the second leaves out, where in the second it is missing, what the second adds, and the labels (first,
+        // second, lit span, cut, title, note, added).
+        public double[] compareFirst,compareSecond,compareHighlight,compareAdded;public double compareMissingAt=-1;public string[] compareLabels; }
     [Serializable] public sealed class Narrator { public string name,voice,language; }
     [Serializable] public sealed class Story {
         public int version;public string title,midiSha256,audioSha256,patternsSha256,model;public double duration;public Cue[] cues;public Narrator narrator;
@@ -49,6 +53,7 @@ public sealed class SongDirector : MonoBehaviour
         gameObject.AddComponent<SongNarration>().Bind(box);
         gameObject.AddComponent<StoryAnnotations>().Bind(root,panel,wheels,box);
         gameObject.AddComponent<StoryPictures>().Bind(root,panel);
+        gameObject.AddComponent<PassageComparison>().Bind(root);
         footer=new VisualElement{name="song-story-footer",pickingMode=PickingMode.Ignore};root.Add(footer);
         caption=new Label{name="song-story-caption",pickingMode=PickingMode.Ignore,enableRichText=false};footer.Add(caption);
         gameObject.AddComponent<SongRecordingCaptions>().Bind(root);

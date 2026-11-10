@@ -53,8 +53,12 @@ def timed_cues(director, clock):
             cue['compareFirst'], cue['compareSecond'] = span(compare['first']), span(compare['second'])
             if compare.get('highlight'):
                 cue['compareHighlight'] = span(compare['highlight'])
+            if compare.get('added'):
+                cue['compareAdded'] = span(compare['added'])
             if compare.get('missingAt'):
                 cue['compareMissingAt'] = round(clock.seconds(compare['missingAt']), 3)
+            if compare.get('labels'):
+                cue['compareLabels'] = [str(x) for x in compare['labels']]
         if 'start' not in cue:
             raise ValueError(f'Cue {i} needs "from" or "start"')
         cues.append(cue)
