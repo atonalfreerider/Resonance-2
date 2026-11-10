@@ -8,7 +8,7 @@ from catalog import Catalog
 def main():
     parser=argparse.ArgumentParser(description='Resonance offline song library')
     sub=parser.add_subparsers(dest='command',required=True)
-    p=sub.add_parser('ingest');p.add_argument('audio');p.add_argument('--midi');p.add_argument('--title');p.add_argument('--offline',action='store_true');p.add_argument('--neural',action='store_true');p.add_argument('--piano-hands',action='store_true',help='Use a two-track ground-truth piano MIDI for right/left-hand solo audio and visuals');p.add_argument('--meter',type=int,choices=[3,4],default=4)
+    p=sub.add_parser('ingest');p.add_argument('audio');p.add_argument('--midi');p.add_argument('--score',help='MuseScore .mscz/.mscx (any version) instead of a MIDI');p.add_argument('--opening-lead-in',type=float,help='Measured silence before the first scored sound (recording seconds)');p.add_argument('--anchors',help='CSV score_seconds,audio_seconds of matching cues');p.add_argument('--title');p.add_argument('--offline',action='store_true');p.add_argument('--neural',action='store_true');p.add_argument('--piano-hands',action='store_true',help='Use a two-track ground-truth piano MIDI for right/left-hand solo audio and visuals');p.add_argument('--meter',type=int,choices=[3,4],default=4)
     p=sub.add_parser('index');p.add_argument('directories',nargs='+')
     p=sub.add_parser('stems');p.add_argument('bundle')
     p=sub.add_parser('repair-bass');p.add_argument('bundle')
@@ -22,7 +22,8 @@ def main():
     a=parser.parse_args()
     if a.command=='ingest':
         from pipeline import ingest
-        result=ingest(a.audio,a.midi,a.title,not a.offline,a.neural,a.meter,lambda s:print(s,flush=True),piano_hands=a.piano_hands)
+        extra=(['--opening-lead-in',str(a.opening_lead_in)] if a.opening_lead_in is not None else [])+(['--anchors',str(Path(a.anchors).resolve())] if a.anchors else [])
+        result=ingest(a.audio,a.midi,a.title,not a.offline,a.neural,a.meter,lambda s:print(s,flush=True),piano_hands=a.piano_hands,score=a.score,prepare_args=extra)
     elif a.command=='repair-bass':
         from repair_bass import repair
         result=repair(a.bundle)

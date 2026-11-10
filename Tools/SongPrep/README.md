@@ -14,7 +14,7 @@ The preprocessor uses Sync Toolbox's tuning-aware pitch/chroma and DLNCO attack 
 
 Recordings over three minutes also receive a local 200 Hz opening pass (first 15 seconds). A detected quiet prefix is encoded as a silent four-beat measure, preserving later bar boundaries and event payloads. `song.json` records `ScoreLeadInBeats` so score accents still match. Use `--opening-seconds 0` to disable this pass; explicit cue anchors take precedence.
 
-For classical scores, pass `--mscz original.mscz --formatter C:/Users/johnb/Desktop/PianoVisionFormatter` to `prepare_song.py`. Its MuseScore playback renderer supplies timed accent/marcato/sforzando notes after simplified and orchestral-piano staves are excluded. PatternPrep creates a virtual Melody highlight with at most two voices, preserving the complete sounding score. Classical instrument wheels use section boundaries near 32 bars, allowing spans up to 64 rather than reducing them to pop-sized harmonic cells. Set `PianoConcerto`, `PianoTracks`, and `OrchestraTracks` in `song.json` for dual-torus playback.
+For classical scores, pass `--mscz original.mscz` to `prepare_song.py`: Resonance reads the score itself (`musescore_import.py`, every MuseScore version) and marks the notes under accents, marcato and sforzato (and sf/sfz dynamics) in `score-accents.json`, after simplified and orchestral-piano staves are excluded. PatternPrep creates a virtual Melody highlight with at most two voices, preserving the complete sounding score. Classical instrument wheels use section boundaries near 32 bars, allowing spans up to 64 rather than reducing them to pop-sized harmonic cells. Set `PianoConcerto`, `PianoTracks`, and `OrchestraTracks` in `song.json` for dual-torus playback.
 
 `timing-map.csv` records the original MIDI seconds → recording seconds relationship. `analysis.json` distinguishes **musical matching diagnostics** from **MIDI serialization error**. A 10 ms feature grid and tiny export error do not establish 10 ms musical accuracy. Approximate/missing notes, ambiguous repeated passages, altered arrangements and fade-outs cannot be made perfectly identical by retiming alone. The tool does not invent missing notes or silently transpose the score; it reports a transposition diagnostic and weak windows. Use reviewed matching cues for those passages.
 
@@ -27,3 +27,22 @@ Tests:
 ```
 
 Method reference: [Sync Toolbox](https://github.com/groupmm/synctoolbox), MIT licensed; [audio–score example](https://github.com/groupmm/synctoolbox/blob/master/sync_audio_score_full.ipynb). Python dependencies are used as installed packages, not copied into Unity.
+
+## MuseScore scores
+
+`musescore_import.py` reads `.mscz`/`.mscx` files of every MuseScore version without MuseScore: 1.x/2.x here,
+3.x/4.x in `musescore_modern.py` (repeats and jumps unrolled as MuseScore plays them). It writes a type-1 MIDI
+(the score's tempo map and signatures; one track per staff, a piano's staves as Right
+hand / Left hand) and a timing JSON: every note with its score tick, printed measure number (a pickup is 0),
+beat and seconds of the score's own tempo map, plus the measures, tempos, expression texts and a report of any
+corrupted measure it repaired (voice 1 must fill its measure; other voices may stop early; nothing may cross
+the bar line). The source score is never modified.
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongPrep/musescore_import.py score.mscz --midi score.mid --json score-import.json
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongPrep/test_musescore_import.py
+```
+
+`Tools/SongLibrary/library.py ingest <recording> --score <score.mscz>` imports the score, aligns it to the
+recording (the recording is the source of truth for time; every tick is kept) and keeps `score-import.json`
+in the bundle for tours and reports.

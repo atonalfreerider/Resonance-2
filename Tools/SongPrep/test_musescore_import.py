@@ -183,6 +183,31 @@ class LegacyReading(unittest.TestCase):
         self.assertAlmostEqual(report['summary']['duration'], 2.0 + 1.0)   # bar 1 at 1 q/s, bar 2 at 2 q/s
         json.dumps(report)
 
+    def test_score_midi_has_no_markers_or_text(self):
+        # PatternPrep reads MIDI markers as section boundaries and text events as karaoke lyrics.
+        right = [chord('half', 72), chord('half', 74)]
+        s = self.read(score_114([right], extra='<StaffText><track>0</track><tick>0</tick><text>dolce</text></StaffText>'))
+        out = self.dir / 'plain.mid'
+        msi.write_midi(s, str(out))
+        kinds = {m.type for t in mido.MidiFile(str(out)).tracks for m in t}
+        self.assertNotIn('marker', kinds)
+        self.assertNotIn('text', kinds)
+        self.assertNotIn('lyrics', kinds)
+
+    def test_accents_match_the_aligned_track_numbers(self):
+        import mscz_accents
+        right = [chord('quarter', 72, artic='sforzato') + chord('quarter', 74), chord('half', 76)]
+        left = [chord('half', 48), '<Dynamic><subtype>sf</subtype></Dynamic>' + chord('half', 50)]
+        path = write_mscz(self.dir, score_114([right, left]))
+        s = msi.read(str(path))
+        mid = self.dir / 'score.mid'
+        msi.write_midi(s, str(mid), ppq=960)
+        marks, report = mscz_accents.extract(path, mid)
+        # MIDI track 1 = right hand, 2 = left hand; alignment inserts a conductor track, so PatternPrep sees +1.
+        self.assertEqual(sorted((m['Track'], m['Pitch'], m['Beat']) for m in marks), [(2, 72, 0.0), (3, 50, 2.0)])
+        self.assertEqual(report['matchedAccentNotes'], 2)
+        self.assertEqual(report['unmatchedAccentNotes'], 0)
+
     def test_spelling(self):
         self.assertEqual(msi.spelled(61, 21), 'C#4')
         self.assertEqual(msi.spelled(61, 9), 'Db4')

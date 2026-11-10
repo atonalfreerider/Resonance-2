@@ -207,8 +207,7 @@ def main():
     parser.add_argument('--feature-rate', type=int, default=100, choices=[50, 100])
     parser.add_argument('--opening-seconds',type=float,default=15,help='Fine 200 Hz opening refinement for recordings longer than three minutes; 0 disables')
     parser.add_argument('--opening-lead-in',type=float,help='Measured silence before the first scored sound, in recording seconds')
-    parser.add_argument('--mscz',type=Path,help='Original MuseScore score for timed accent extraction; MIDI must omit simplified/orchestral-piano staves')
-    parser.add_argument('--formatter',type=Path,default=Path.home()/'Desktop/PianoVisionFormatter',help='PianoVisionFormatter source folder')
+    parser.add_argument('--mscz',type=Path,help='Original MuseScore score for timed accent extraction (read by musescore_import.py); MIDI must omit simplified/orchestral-piano staves')
     args = parser.parse_args()
     output = args.output.resolve(); output.mkdir(parents=True, exist_ok=True)
     audio_path, midi_path = args.audio.resolve(), args.midi.resolve()
@@ -339,7 +338,7 @@ def main():
     (output/'song.json').write_text(json.dumps(song_settings),encoding='utf-8')
     if args.mscz:
         from mscz_accents import extract
-        marks,provenance=extract(args.mscz,midi_path,args.formatter)
+        marks,provenance=extract(args.mscz,midi_path)
         (output/'score-accents.json').write_text(json.dumps(marks),encoding='utf-8')
         (output/'score-accents.provenance.json').write_text(json.dumps(provenance),encoding='utf-8')
     authored = midi_path.parent/'authored-patterns.json'

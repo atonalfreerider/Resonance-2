@@ -712,8 +712,8 @@ class TempoMap:
 # --------------------------------------------------------------------------------------------------- writers
 
 def write_midi(score: ScoreImport, path: str, ppq: Optional[int] = None) -> None:
-    """Type-1 MIDI: a conductor track (tempo, time signatures, markers for the printed measure numbers) and one
-    track per staff ('Right hand' / 'Left hand' for a piano's two staves), with sustain pedal."""
+    """Type-1 MIDI: a conductor track (tempo, time signatures) and one track per staff ('Right hand' / 'Left hand'
+    for a piano's two staves), with sustain pedal."""
     import mido
     ppq = ppq or score.division
     scale = Fraction(ppq, score.division)
@@ -729,11 +729,8 @@ def write_midi(score: ScoreImport, path: str, ppq: Optional[int] = None) -> None
         events.append((at(t), 1, mido.MetaMessage('set_tempo', tempo=int(round(1e6 / qps)))))
     for t, n, d in score.sigs:
         events.append((at(t), 2, mido.MetaMessage('time_signature', numerator=n, denominator=d)))
-    for m in score.measures:
-        events.append((at(m.tick), 3, mido.MetaMessage('marker', text=f'm{m.number}')))
-    for d in score.directions:
-        if d.kind in ('tempo', 'expression', 'text') and d.text:
-            events.append((at(d.tick), 4, mido.MetaMessage('text', text=latin1(d.text)[:120])))
+    # No markers or text events: PatternPrep reads markers as section boundaries and text events as karaoke
+    # lyrics. Printed measure numbers and expression texts are in the timing JSON.
     _flush(conductor, events)
     for staff in score.staves:
         track = mido.MidiTrack()

@@ -71,6 +71,17 @@ class PipelineTests(unittest.TestCase):
             get.return_value.json.return_value={'result':{'results':[{'name':'Test song','slug':'test-song','downloadUrl':'/uploads/123.mid','url':'/test-song'}]}}
             self.assertEqual(bitmidi_search('test')[0]['url'],'https://bitmidi.com/uploads/123.mid')
 
+    def test_score_ingest_argument_guards(self):
+        from pipeline import ingest
+        with tempfile.TemporaryDirectory() as tmp:
+            audio=Path(tmp)/'take.wav';audio.write_bytes(b'')
+            with self.assertRaisesRegex(ValueError,'companion MIDI or a MuseScore score'):
+                ingest(audio,midi='a.mid',score='a.mscz',online=False)
+            with self.assertRaisesRegex(ValueError,'MuseScore score or forced neural'):
+                ingest(audio,score='a.mscz',force_neural=True,online=False)
+            with self.assertRaisesRegex(ValueError,'ground-truth MIDI or score'):
+                ingest(audio,piano_hands=True,online=False)
+
     def test_unsafe_bundle_path_rejected(self):
         from server import bundle_path
         with self.assertRaises(ValueError):bundle_path('../../Windows')

@@ -8,9 +8,15 @@ from common import *
 from catalog import Catalog, bitmidi_search, download_candidate, midi_info
 
 
-def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=4, notify=lambda x:None, stems=True, piano_hands=False):
+def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=4, notify=lambda x:None, stems=True, piano_hands=False,
+           score=None, prepare_args=()):
+    """score: a MuseScore .mscz/.mscx read by Tools/SongPrep/musescore_import.py instead of a companion MIDI (its
+    timing report is kept in the bundle as score-import.json; a song.json beside the score is merged like one
+    beside a MIDI). prepare_args: extra prepare_song.py options, e.g. ('--opening-lead-in', '3.6')."""
+    if midi and score:raise ValueError('Choose either a companion MIDI or a MuseScore score')
     if midi and force_neural:raise ValueError('Choose either a companion MIDI or forced neural transcription')
-    if piano_hands and not midi:raise ValueError('Piano-hand mode requires the authored two-track ground-truth MIDI')
+    if score and force_neural:raise ValueError('Choose either a MuseScore score or forced neural transcription')
+    if piano_hands and not (midi or score):raise ValueError('Piano-hand mode requires the authored two-track ground-truth MIDI or score')
     audio=Path(audio).resolve()
     if not audio.is_file() or audio.suffix.lower() not in ('.mp3','.wav','.flac','.ogg','.m4a'):
         raise ValueError('Choose an existing MP3, WAV, FLAC, OGG or M4A recording')
@@ -25,7 +31,7 @@ def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=
     catalog=Catalog(); notify('Indexing local MIDI and prepared songs')
     catalog.index([ROOT/'PreparedSongs',DATA/'midi'])
     existing_bundles=catalog.exact(audio_hash)
-    if not midi and not force_neural:
+    if not midi and not score and not force_neural:
         for existing in existing_bundles:
             try: validate_bundle(existing)
             except (ValueError,KeyError,OSError): continue
@@ -42,12 +48,28 @@ def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=
     stage=job/'bundle';stage.mkdir();log=job/'process.log'
     provenance=dict(version=PIPELINE_VERSION,title=title,sourceAudioSha256=audio_hash,
                     reviewed=False,warnings=[],candidates=[],method='',sourceAudioName=audio.name)
-    atomic_json(job/'request.json',dict(audio=str(audio),midi=str(midi) if midi else None,title=title,pianoHands=piano_hands))
+    atomic_json(job/'request.json',dict(audio=str(audio),midi=str(midi) if midi else None,score=str(score) if score else None,
+                                        title=title,pianoHands=piano_hands,prepareArgs=[str(a) for a in prepare_args]))
+    score_report=None
+    if score:
+        score=Path(score).resolve()
+        notify('Reading the MuseScore score')
+        imported=job/'score';imported.mkdir()
+        run([PREP_PYTHON,ROOT/'Tools/SongPrep/musescore_import.py',score,'--midi',imported/'score.mid','--json',imported/'score-import.json'],log)
+        score_report=read_json(imported/'score-import.json')
+        midi=imported/'score.mid'
+        if (score.parent/'song.json').exists():shutil.copy(score.parent/'song.json',imported/'song.json')
     notify('Decoding recording and estimating key / beat grid')
     from features import decode,evidence,match_midi,regrid
     decode(audio,stage/'recording.wav');info,chroma=evidence(stage/'recording.wav')
     selected=Path(midi).resolve() if midi else None
-    if selected: midi_info(selected);provenance['method']='provided-midi'
+    if selected: midi_info(selected);provenance['method']='provided-score' if score else 'provided-midi'
+    if score_report:
+        provenance['score']=dict(name=score.name,sha256=score_report['sha256'],museScoreVersion=score_report['museScoreVersion'],
+                                 reader=score_report['reader'],title=score_report['title'],composer=score_report['composer'],
+                                 repairs=score_report['repairs'],museScore4=score_report.get('museScore4',[]),warnings=score_report['warnings'])
+        for r in score_report['repairs']:
+            provenance['warnings'].append(f"Score measure {r['measure']} (staff {r['staff']}, voice {r['voice']}): {r['kind']}; found {r['found']}, expected {r['expected']}: {r['action']}")
     if not selected and not force_neural:
         notify('Searching the MIDI catalog and comparing audio fingerprints')
         choices=catalog.search(title)
@@ -84,7 +106,10 @@ def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=
     atomic_json(stage/'song.json',settings)
     if selected:
         notify('Aligning companion MIDI to recording fingerprints; compiling patterns')
-        run([PREP_PYTHON,ROOT/'Tools/SongPrep/prepare_song.py','--audio',audio,'--midi',selected,'--output',stage],log)
+        command=[PREP_PYTHON,ROOT/'Tools/SongPrep/prepare_song.py','--audio',audio,'--midi',selected,'--output',stage,*prepare_args]
+        if score:command+=['--mscz',score]
+        run(command,log)
+        if score_report:shutil.copy(job/'score'/'score-import.json',stage/'score-import.json')
         provenance['sourceMidiSha256']=sha(selected)
         provenance['alignment']=read_json(stage/'analysis.json')
     else:
