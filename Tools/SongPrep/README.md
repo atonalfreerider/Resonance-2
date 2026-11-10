@@ -49,7 +49,17 @@ changes nothing under 1.x rules).
 Tools/SongPrep/.venv/Scripts/python.exe Tools/SongPrep/musescore_import.py score.mscz --midi score.mid --json score-import.json
 Tools/SongPrep/.venv/Scripts/python.exe Tools/SongPrep/musescore_import.py old.mscz --musescore4-copy for-musescore4.mscz
 Tools/SongPrep/.venv/Scripts/python.exe Tools/SongPrep/test_musescore_import.py
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongPrep/test_musescore_modern.py
 ```
+
+MuseScore 3.x/4.x files are played the way MuseScore 4 plays them (`musescore_modern.py`): repeats, voltas and
+D.C./D.S. jumps unrolled (each played bar keeps its printed number, its pass and its own time signature), ties,
+grace notes, articulation lengths, arpeggios, tremolos, fermatas, gradual tempo changes and pauses (as tempo-map
+time, so bars keep their ticks). Trills, other ornaments and glissandos keep the written note. Checked against
+MuseScore 4.7.2's own MIDI export on 21 real scores (piano solos to 29-staff concertos): at least 99.99%
+precision and 98.3% recall, every difference an ornament. `test_musescore_modern.py` runs synthetic scores, and
+compares with an installed MuseScore 4 on the scores in `RESONANCE_MUSESCORE_CORPUS` (default: five; `all` for
+every score, about 4.5 minutes); it never writes into the scores folder.
 
 `Tools/SongLibrary/library.py ingest <recording> --score <score.mscz>` imports the score, aligns it to the
 recording (the recording is the source of truth for time; every tick is kept) and keeps `score-import.json`

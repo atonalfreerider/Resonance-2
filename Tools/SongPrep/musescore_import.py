@@ -46,6 +46,7 @@ map; aligning to a recording happens later (``prepare_song.py``), which keeps ev
 from __future__ import annotations
 
 import argparse
+import bisect
 import hashlib
 import io
 import json
@@ -98,13 +99,19 @@ class ScoreImportError(Exception):
 
 @dataclass
 class Measure:
-    index: int                 # position in the score (0-based)
+    index: int                 # position in the played sequence (0-based); the score's order when nothing repeats
     number: int                # printed number (a pickup is 0)
-    tick: Fraction             # start, in ticks of the score's division
+    tick: Fraction             # start, in ticks of the score's division (on the played timeline)
     ticks: Fraction            # actual length
     time_sig: Tuple[int, int]  # nominal (as printed)
     actual: Tuple[int, int]    # actual length as a fraction of a whole note
     irregular: bool = False
+    source: Optional[int] = None   # index of the measure in the score (default: index; repeats play one again)
+    play: int = 0                  # pass: 0 the first time this score measure is played, 1 the second...
+
+    def __post_init__(self):
+        if self.source is None:
+            self.source = self.index
 
 
 @dataclass
@@ -128,7 +135,8 @@ class Note:
 class Direction:
     tick: Fraction
     staff: int
-    kind: str                  # tempo | dynamic | text | expression
+    kind: str                  # tempo | dynamic | text | expression; 3.x/4.x also rehearsal | fermata | hairpin |
+                               # repeat (markers, jumps) | volta | pause (seconds of a breath or section pause)
     text: str
     measure: int = -1
 
@@ -549,67 +557,7 @@ class LegacyReader:
 
     # --------------------------------------------------------------- validation and repair
     def _check_measure(self, placed: List[dict], measure: Measure, staff: int):
-        start, end = measure.tick, measure.tick + measure.ticks
-        voices: Dict[int, List[dict]] = {}
-        for item in placed:
-            if item['grace']:
-                continue
-            voices.setdefault(item['track'] % 4, []).append(item)
-        for voice, items in sorted(voices.items()):
-            items.sort(key=lambda it: it['tick'])
-            # elements whose absolute tick lies outside the measure
-            for k, it in enumerate(items):
-                if it['explicit'] and (it['tick'] < start or it['tick'] >= end):
-                    prev_end = items[k - 1]['tick'] + items[k - 1]['ticks'] if k else start
-                    self._repair(measure, staff, voice, 'element outside its measure',
-                                 found=f'starts at tick {it["tick"]}', expected=f'{start}..{end}',
-                                 action=f'moved to tick {prev_end}')
-                    it['tick'] = prev_end
-            content_end = max(it['tick'] + it['ticks'] for it in items)
-            filled = content_end - start
-            if filled > measure.ticks:
-                over = [it for it in items if it['tick'] + it['ticks'] > end]
-                tuplet_ids = {it['tuplet'] for it in items if it['tuplet']}
-                if tuplet_ids:
-                    # fit the tuplet(s) so the voice ends at the bar line
-                    excess = filled - measure.ticks
-                    span = sum(it['ticks'] for it in items if it['tuplet'] in tuplet_ids)
-                    if span > excess:
-                        factor = (span - excess) / span
-                        self._scale_from(items, lambda it: it['tuplet'] in tuplet_ids, factor)
-                        self._repair(measure, staff, voice, 'tuplet does not fit the measure',
-                                     found=frac_text(filled / (4 * self.division)), expected=sig_text(measure),
-                                     action=f'tuplet ratio corrected by {factor}')
-                        continue
-                if len(over) == 1 and over[0] is items[-1] and over[0]['tick'] < end:
-                    before = over[0]['ticks']
-                    over[0]['ticks'] = end - over[0]['tick']
-                    self._repair(measure, staff, voice, 'last note crosses the bar line',
-                                 found=frac_text(filled / (4 * self.division)), expected=sig_text(measure),
-                                 action=f'last note shortened from {before} to {over[0]["ticks"]} ticks')
-                    continue
-                factor = measure.ticks / filled
-                self._scale_from(items, lambda it: True, factor, origin=start)
-                self._repair(measure, staff, voice, 'voice longer than the measure',
-                             found=frac_text(filled / (4 * self.division)), expected=sig_text(measure),
-                             action=f'voice scaled by {factor} (an unmarked tuplet)')
-            elif filled < measure.ticks and voice == 0:
-                self._repair(measure, staff, voice, 'incomplete voice 1',
-                             found=frac_text(filled / (4 * self.division)), expected=sig_text(measure),
-                             action='padded with silence to the bar line')
-
-    @staticmethod
-    def _scale_from(items, select, factor, origin=None):
-        """Scale the lengths of the selected items by factor and re-flow the voice: each item follows the one
-        before it after the same gap as before (gaps only come from explicit <tick> moves), starting at origin
-        (or where the voice started)."""
-        gaps = [Fraction(0)] + [max(Fraction(0), b['tick'] - (a['tick'] + a['ticks'])) for a, b in zip(items, items[1:])]
-        cursor = origin if origin is not None else items[0]['tick']
-        for it, gap in zip(items, gaps):
-            if select(it):
-                it['ticks'] = it['ticks'] * factor
-            it['tick'] = cursor + gap
-            cursor = it['tick'] + it['ticks']
+        check_measure(placed, measure, staff, self.division, self._repair)
 
     def _repair(self, measure: Measure, staff: int, voice: int, kind: str, found: str, expected: str, action: str):
         self.repairs.append(Repair(measure=measure.number, index=measure.index, staff=staff + 1, voice=voice + 1,
@@ -726,6 +674,78 @@ def sig_text(m: Measure) -> str:
     return f'{m.actual[0]}/{m.actual[1]}'
 
 
+def check_measure(placed: List[dict], measure: Measure, staff: int, division: int, repair) -> None:
+    """Check one staff's measure voice by voice and repair it in place, as MuseScore checks a score it opens:
+    voice 1 must fill the measure exactly, other voices may stop early but never run past the bar line, and no
+    element may start outside its measure.  Used by every reader (1.x/2.x here, 3.x/4.x in musescore_modern).
+
+    ``placed``: the measure's chords and rests as dicts with ``tick`` and ``ticks`` (score ticks, changed in
+    place by a repair), ``track`` (staff * 4 + voice), ``grace`` (grace chords are not checked), ``tuplet`` (an
+    id or None) and ``explicit`` (the element was put at its place by a position move, not by the voice's
+    flow).  ``repair(measure, staff, voice, kind, found, expected, action)`` is called for every repair."""
+    start, end = measure.tick, measure.tick + measure.ticks
+    voices: Dict[int, List[dict]] = {}
+    for item in placed:
+        if item['grace']:
+            continue
+        voices.setdefault(item['track'] % 4, []).append(item)
+    for voice, items in sorted(voices.items()):
+        items.sort(key=lambda it: it['tick'])
+        # elements whose absolute tick lies outside the measure
+        for k, it in enumerate(items):
+            if it['explicit'] and (it['tick'] < start or it['tick'] >= end):
+                prev_end = items[k - 1]['tick'] + items[k - 1]['ticks'] if k else start
+                repair(measure, staff, voice, 'element outside its measure',
+                       found=f'starts at tick {it["tick"]}', expected=f'{start}..{end}',
+                       action=f'moved to tick {prev_end}')
+                it['tick'] = prev_end
+        content_end = max(it['tick'] + it['ticks'] for it in items)
+        filled = content_end - start
+        if filled > measure.ticks:
+            over = [it for it in items if it['tick'] + it['ticks'] > end]
+            tuplet_ids = {it['tuplet'] for it in items if it['tuplet']}
+            if tuplet_ids:
+                # fit the tuplet(s) so the voice ends at the bar line
+                excess = filled - measure.ticks
+                span = sum(it['ticks'] for it in items if it['tuplet'] in tuplet_ids)
+                if span > excess:
+                    factor = (span - excess) / span
+                    scale_from(items, lambda it: it['tuplet'] in tuplet_ids, factor)
+                    repair(measure, staff, voice, 'tuplet does not fit the measure',
+                           found=frac_text(filled / (4 * division)), expected=sig_text(measure),
+                           action=f'tuplet ratio corrected by {factor}')
+                    continue
+            if len(over) == 1 and over[0] is items[-1] and over[0]['tick'] < end:
+                before = over[0]['ticks']
+                over[0]['ticks'] = end - over[0]['tick']
+                repair(measure, staff, voice, 'last note crosses the bar line',
+                       found=frac_text(filled / (4 * division)), expected=sig_text(measure),
+                       action=f'last note shortened from {before} to {over[0]["ticks"]} ticks')
+                continue
+            factor = measure.ticks / filled
+            scale_from(items, lambda it: True, factor, origin=start)
+            repair(measure, staff, voice, 'voice longer than the measure',
+                   found=frac_text(filled / (4 * division)), expected=sig_text(measure),
+                   action=f'voice scaled by {factor} (an unmarked tuplet)')
+        elif filled < measure.ticks and voice == 0:
+            repair(measure, staff, voice, 'incomplete voice 1',
+                   found=frac_text(filled / (4 * division)), expected=sig_text(measure),
+                   action='padded with silence to the bar line')
+
+
+def scale_from(items, select, factor, origin=None):
+    """Scale the lengths of the selected items by factor and re-flow the voice: each item follows the one before
+    it after the same gap as before (gaps only come from explicit position moves), starting at origin (or where
+    the voice started)."""
+    gaps = [Fraction(0)] + [max(Fraction(0), b['tick'] - (a['tick'] + a['ticks'])) for a, b in zip(items, items[1:])]
+    cursor = origin if origin is not None else items[0]['tick']
+    for it, gap in zip(items, gaps):
+        if select(it):
+            it['ticks'] = it['ticks'] * factor
+        it['tick'] = cursor + gap
+        cursor = it['tick'] + it['ticks']
+
+
 def measure_at(measures: List[Measure], tick: Fraction) -> Measure:
     lo, hi = 0, len(measures) - 1
     while lo < hi:
@@ -828,16 +848,14 @@ class TempoMap:
         if points[0][0] > 0:
             points.insert(0, (Fraction(0), points[0][1]))
         self.points = points
+        self.ticks = [t for t, _ in points]
         self.seconds = [0.0]
         for (t0, q0), (t1, _) in zip(points, points[1:]):
             self.seconds.append(self.seconds[-1] + float(t1 - t0) / division / q0)
 
     def __call__(self, tick) -> float:
         tick = Fraction(tick)
-        k = 0
-        for i, (t, _) in enumerate(self.points):
-            if t <= tick:
-                k = i
+        k = max(0, bisect.bisect_right(self.ticks, tick) - 1)
         t0, qps = self.points[k]
         return self.seconds[k] + float(tick - t0) / self.division / qps
 
@@ -868,10 +886,13 @@ def write_midi(score: ScoreImport, path: str, ppq: Optional[int] = None) -> None
     for staff in score.staves:
         track = mido.MidiTrack()
         mid.tracks.append(track)
+        part = next((p for p in score.parts if p['index'] == staff['part']), {})
         channel = staff['part'] % 15
         if channel >= 9:
             channel += 1
-        program = next((p['program'] for p in score.parts if p['index'] == staff['part']), 0)
+        if part.get('percussion'):              # drum sets play on the General MIDI percussion channel
+            channel = 9
+        program = part.get('program', 0)
         events = [(0, 0, mido.MetaMessage('track_name', name=latin1(staff['name']))),
                   (0, 1, mido.Message('program_change', channel=channel, program=program))]
         for s, t, t2 in score.pedals:
@@ -920,12 +941,14 @@ def timing(score: ScoreImport) -> dict:
         m = by_index[n.measure]
         notes.append(dict(id=i, staff=n.staff, voice=n.voice, track=n.track, pitch=n.pitch,
                           name=spelled(n.pitch, n.tpc), tpc=n.tpc, tick=float(n.tick), ticks=float(n.ticks),
-                          measure=m.number, measureIndex=m.index, beat=round(beat(n.tick, m), 6),
+                          measure=m.number, measureIndex=m.index, **{'pass': m.play}, beat=round(beat(n.tick, m), 6),
                           start=round(tm(n.tick), 6), end=round(tm(n.tick + n.ticks), 6), velocity=n.velocity,
                           grace=n.grace, articulations=n.articulations))
-    measures = [dict(index=m.index, number=m.number, tick=float(m.tick), ticks=float(m.ticks),
-                     timeSignature=list(m.time_sig), actual=list(m.actual), irregular=m.irregular,
-                     start=round(tm(m.tick), 6), end=round(tm(m.tick + m.ticks), 6)) for m in score.measures]
+    # one entry per measure as played: 'source' is its index in the score, 'pass' how often it was played before
+    measures = [dict(index=m.index, number=m.number, source=m.source, **{'pass': m.play}, tick=float(m.tick),
+                     ticks=float(m.ticks), timeSignature=list(m.time_sig), actual=list(m.actual),
+                     irregular=m.irregular, start=round(tm(m.tick), 6), end=round(tm(m.tick + m.ticks), 6))
+                for m in score.measures]
     return dict(format='resonance.score-import/1', source=score.source, sha256=score.sha256,
                 museScoreVersion=score.format_version, programVersion=score.program_version, reader=score.reader,
                 title=score.title, composer=score.composer, division=score.division, parts=score.parts,
@@ -934,6 +957,7 @@ def timing(score: ScoreImport) -> dict:
                 timeSignatures=[dict(tick=float(t), numerator=n, denominator=d) for t, n, d in score.sigs],
                 pedals=[dict(staff=s, tick=float(t), tick2=float(t2)) for s, t, t2 in score.pedals],
                 directions=[dict(tick=float(d.tick), measure=by_index[d.measure].number if d.measure in by_index else None,
+                                 measureIndex=d.measure if d.measure in by_index else None,
                                  staff=d.staff, kind=d.kind, text=d.text) for d in score.directions],
                 notes=notes, repairs=[asdict(r) for r in score.repairs], warnings=score.warnings,
                 museScore4=score.musescore4,
