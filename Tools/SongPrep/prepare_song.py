@@ -81,7 +81,14 @@ def encodable_time_map(tempo_ticks, tempo_times, score_times, audio_times, ppq):
     keep = [0]
     limit = 0xffffff * .90 / (ppq * 1e6)
     for i in range(1, len(ticks)):
-        if ticks[i] > ticks[keep[-1]] and (targets[i]-targets[keep[-1]])/(ticks[i]-ticks[keep[-1]]) <= limit:
+        if ticks[i] <= ticks[keep[-1]]:
+            continue
+        # A pause (a fermata, a breath before a reprise) is a near-vertical step: far more recording time than score
+        # ticks. Absorb it into the knots BEFORE it (the held note), so the note after the pause keeps its time;
+        # merging the knots after it instead would place that arrival early.
+        while len(keep) > 1 and (targets[i]-targets[keep[-1]])/(ticks[i]-ticks[keep[-1]]) > limit:
+            keep.pop()
+        if (targets[i]-targets[keep[-1]])/(ticks[i]-ticks[keep[-1]]) <= limit:
             keep.append(i)
     if keep[-1] != len(ticks)-1:
         while len(keep)>1 and (targets[-1]-targets[keep[-1]])/max(1e-12,ticks[-1]-ticks[keep[-1]]) > limit:
@@ -146,6 +153,46 @@ def normalize(features):
     return features/np.maximum(1e-9, np.linalg.norm(features, axis=0, keepdims=True))
 
 
+def apply_landmarks(score_times, audio_times, marks, reach=2.0, threshold=0.3):
+    """Move the fingerprint time map onto checked landmarks (score_seconds, audio_seconds pairs, e.g. a fermata's
+    release or a reprise's downbeat located by ear) where the alignment is grossly off. A landmark placed by ear
+    or by inspection is good to a tenth of a second or so, while the alignment is usually closer than that on
+    ordinary notes, so only landmarks the map misses by `threshold` seconds or more are applied (pauses: a
+    fermata, a breath before a reprise, a final chord). The alignment elsewhere is left alone: a landmark's
+    correction (landmark minus map) applies at its score time and fades to nothing within `reach` score-seconds,
+    or runs straight to the next applied landmark when that one is nearer than 2 x reach. The map stays strictly
+    increasing, and its first and last points (the recording's ends) do not move."""
+    marks = np.asarray(sorted((float(s), float(a)) for s, a in marks))
+    every = np.abs(marks[:, 1] - np.interp(marks[:, 0], score_times, audio_times))
+    applied = marks[every >= threshold]
+    report = dict(count=int(len(marks)), applied=int(len(applied)), thresholdSeconds=threshold, reachSeconds=reach,
+                  medianMissSeconds=float(np.median(every)), maxCorrectionSeconds=float(every.max()) if len(every) else 0.)
+    if not len(applied):
+        report['largest'] = []
+        return score_times, audio_times, report
+    s, a = applied[:, 0], applied[:, 1]
+    residual = a - np.interp(s, score_times, audio_times)
+    xs, ys = [], []
+    for i in range(len(s)):
+        if i == 0 or s[i]-s[i-1] > 2*reach:
+            xs.append(s[i]-reach); ys.append(0.)
+        xs.append(s[i]); ys.append(residual[i])
+        if i == len(s)-1 or s[i+1]-s[i] > 2*reach:
+            xs.append(s[i]+reach); ys.append(0.)
+    xs, ys = np.asarray(xs), np.asarray(ys)
+    order = np.argsort(xs, kind='stable'); xs, ys = xs[order], ys[order]
+    knots = np.union1d(score_times, s[(s > score_times[0]) & (s < score_times[-1])])
+    moved = np.interp(knots, score_times, audio_times) + np.interp(knots, xs, ys, left=0., right=0.)
+    moved[0], moved[-1] = audio_times[0], audio_times[-1]
+    for k in range(1, len(moved)):
+        moved[k] = max(moved[k], moved[k-1] + 1e-3)
+    if moved[-1] > audio_times[-1] + 1e-6:
+        raise ValueError('Landmarks push the music past the end of the recording')
+    report['largest'] = [dict(scoreSeconds=float(s[i]), audioSeconds=float(a[i]), correction=float(residual[i]))
+                         for i in np.argsort(-np.abs(residual))[:5]]
+    return knots, moved, report
+
+
 def refine_opening(mono, notes, tuning, score_times, audio_times, seconds=15., rate=200, leading_override=None):
     """Recompute only the opening at a finer clock, pinned to the full-song join."""
     end_audio=min(seconds,audio_times[-1]);end_score=float(np.interp(end_audio,audio_times,score_times))
@@ -202,7 +249,8 @@ def main():
     parser.add_argument('--audio', required=True, type=Path)
     parser.add_argument('--midi', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
-    parser.add_argument('--anchors', type=Path, help='Optional CSV: score_seconds,audio_seconds (matching musical cues)')
+    parser.add_argument('--anchors', type=Path, help='Optional CSV: score_seconds,audio_seconds (matching musical cues) that constrain the alignment itself; replaces the opening refinement')
+    parser.add_argument('--landmarks', type=Path, help='Optional CSV: score_seconds,audio_seconds of checked positions; after alignment the map is moved onto each, locally (within 2 score-seconds)')
     parser.add_argument('--ffmpeg', default='ffmpeg')
     parser.add_argument('--feature-rate', type=int, default=100, choices=[50, 100])
     parser.add_argument('--opening-seconds',type=float,default=15,help='Fine 200 Hz opening refinement for recordings longer than three minutes; 0 disables')
@@ -256,7 +304,9 @@ def main():
         cues = np.atleast_2d(np.loadtxt(args.anchors, delimiter=',', skiprows=1))
         if np.any(np.diff(cues, axis=0) <= 0):
             raise ValueError('Cue times must increase in both columns.')
-        kwargs['anchor_pairs'] = [(float(a), float(m)) for m, a in cues]
+        # Sync Toolbox pins both ends itself and refuses an anchor at time 0; a score-time-0 anchor still places
+        # the first scored sound (below).
+        kwargs['anchor_pairs'] = [(float(a), float(m)) for m, a in cues if m > 0 and a > 0]
         path = sync_via_mrmsdtw_with_anchors(**kwargs)
     else:
         path = sync_via_mrmsdtw(**kwargs)
@@ -271,6 +321,14 @@ def main():
         print('Refining opening locally at 5 ms; preserving the rest of the movement',flush=True)
         score_times,audio_times,opening=refine_opening(mono,notes,tuning,score_times,audio_times,args.opening_seconds,leading_override=args.opening_lead_in)
     score_times,audio_times,merged_knots,regularization_error = encodable_time_map(tempo_ticks,tempo_times,score_times,audio_times,midi.ticks_per_beat)
+    landmarks=None
+    if args.landmarks:
+        # After the map is encodable, so its own regularization cannot move a checked position again.
+        marks=np.atleast_2d(np.loadtxt(args.landmarks,delimiter=',',skiprows=1))
+        score_times,audio_times,landmarks=apply_landmarks(score_times,audio_times,marks)
+        score_times,audio_times,again,error = encodable_time_map(tempo_ticks,tempo_times,score_times,audio_times,midi.ticks_per_beat)
+        merged_knots+=again;landmarks['regularizationAfterSeconds']=error
+        print(f"Moved the map onto {landmarks['applied']} of {landmarks['count']} checked landmarks (missed by {landmarks['thresholdSeconds']}s or more; largest {landmarks['maxCorrectionSeconds']:.3f}s; re-encoding moved it {error:.3f}s)",flush=True)
     print(f'Merged {merged_knots} unencodable fingerprint knots; maximum map adjustment {regularization_error:.3f}s',flush=True)
     print('4/5 Bake recording timing into MIDI tempo events; verify all note/controller payloads', flush=True)
     exported = retime(midi, events, tempo_ticks, tempo_times, score_times, audio_times, aligned)
@@ -294,7 +352,7 @@ def main():
         if similarity < .7:
             windows.append(dict(start=float(start), end=float(min(duration,start+5)), pitchSimilarity=similarity))
     metrics = dict(sourceDuration=float(tempo_times[-1]), audioDuration=duration, noteCount=len(notes),
-                   featureResolutionMs=1000/rate, openingRefinement=opening, tuningCents=float(tuning), suggestedPitchClassShift=shift,
+                   featureResolutionMs=1000/rate, openingRefinement=opening, landmarks=landmarks, tuningCents=float(tuning), suggestedPitchClassShift=shift,
                    linearPitchSimilarity=float(before.mean()), alignedPitchSimilarity=float(matches.mean()),
                    maxMidiExportErrorMs=float(errors.max()*1000), mergedFingerprintKnots=merged_knots, maxTimingRegularizationSeconds=regularization_error, weakWindows=windows, verifiedPerfect=False)
     (output/'analysis.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
