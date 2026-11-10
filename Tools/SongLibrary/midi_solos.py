@@ -19,14 +19,7 @@ def prepare(directory, groups):
         score=folder/(group['id']+'.mid')
         copy_master_stem(bundle/'aligned.mid',score,{'other':group['tracks']},'other')
         compile_patterns(score,bundle/'midi-solos.log')
-        path=Path(str(score)+'.patterns.json');patterns=read_json(path)
-        for field in MASTER_FIELDS:
-            if field in master:patterns[field]=copy.deepcopy(master[field])
-        for section in patterns['Sections']:
-            reference=next((s for s in master['Sections'] if s['Start']==section['Start']),None)
-            if reference:
-                for field in MASTER_SECTION_FIELDS:
-                    if field in reference:section[field]=copy.deepcopy(reference[field])
+        path=Path(str(score)+'.patterns.json');patterns=inherit_master(read_json(path),master)
         atomic_json(path,patterns)
         entries.append(dict(id=group['id'],name=group['name'],method='midi-synthesis',
             midiPath=score.relative_to(bundle).as_posix(),midiSha256=sha(score),

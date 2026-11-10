@@ -110,6 +110,13 @@ def ingest(audio, midi=None, title=None, online=True, force_neural=False, meter=
         if score:command+=['--mscz',score]
         run(command,log)
         if score_report:shutil.copy(job/'score'/'score-import.json',stage/'score-import.json')
+        # A quiet performance made louder (song.json RecordingGainDb, limited at -1 dBFS) before stems are cut from it.
+        gain=read_json(stage/'song.json',{}).get('RecordingGainDb')
+        if gain:
+            from loudness import apply_to_wav
+            apply_to_wav(stage/'recording.wav',float(gain))
+            prepared=read_json(stage/'aligned.mid.prepared.json');prepared['audioSha256']=sha(stage/'recording.wav')
+            atomic_json(stage/'aligned.mid.prepared.json',prepared);provenance['recordingGainDb']=float(gain)
         provenance['sourceMidiSha256']=sha(selected)
         provenance['alignment']=read_json(stage/'analysis.json')
     else:

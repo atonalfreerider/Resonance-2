@@ -96,6 +96,20 @@ def validate_cues(cues, duration, stems, source_ids=(), bundle=None):
             raise ValueError('Overlapping or out-of-range story cues')
         if cue['view'] not in VIEWS or cue['stem'] not in {'', *stems}:
             raise ValueError('Unavailable view or stem')
+        # Two passages shown side by side on the pattern wheels: [start, end) seconds each, an optional highlighted
+        # span inside the first and the time in the second where that span is missing.
+        for key in ('compareFirst', 'compareSecond', 'compareHighlight'):
+            if key in cue:
+                span = cue[key]
+                if not (isinstance(span, list) and len(span) == 2 and all(isinstance(t, (int, float)) and not isinstance(t, bool) and math.isfinite(t) for t in span)
+                        and 0 <= span[0] < span[1] <= duration+.001):
+                    raise ValueError(f'Invalid {key}')
+        if ('compareFirst' in cue) != ('compareSecond' in cue):
+            raise ValueError('A comparison needs both passages')
+        if 'compareHighlight' in cue and not cue['compareFirst'][0] <= cue['compareHighlight'][0] < cue['compareHighlight'][1] <= cue['compareFirst'][1]+.001:
+            raise ValueError('compareHighlight must lie inside compareFirst')
+        if 'compareMissingAt' in cue and not ('compareSecond' in cue and cue['compareSecond'][0] <= cue['compareMissingAt'] <= cue['compareSecond'][1]):
+            raise ValueError('compareMissingAt must lie inside compareSecond')
         if cue.get('visualStem','') not in {'', *stems}:
             raise ValueError('Unavailable visual stem')
         if cue.get('concertoFocus','') not in ('','balanced','piano-only','orchestra-only','piano','orchestra'):

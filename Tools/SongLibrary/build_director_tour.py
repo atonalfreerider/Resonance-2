@@ -45,6 +45,16 @@ def timed_cues(director, clock):
         for key in TIMED:
             if isinstance(cue.get(key), str):
                 cue[key] = clock.seconds(cue[key])
+        # Two passages side by side (Unity draws a wheel for each): what the second leaves out of the first is
+        # highlighted on the first, and the place it is missing from is marked on the second.
+        compare = cue.pop('compare', None)
+        if compare:
+            span = lambda pair: [round(clock.seconds(pair[0]), 3), round(clock.seconds(pair[1]), 3)]
+            cue['compareFirst'], cue['compareSecond'] = span(compare['first']), span(compare['second'])
+            if compare.get('highlight'):
+                cue['compareHighlight'] = span(compare['highlight'])
+            if compare.get('missingAt'):
+                cue['compareMissingAt'] = round(clock.seconds(compare['missingAt']), 3)
         if 'start' not in cue:
             raise ValueError(f'Cue {i} needs "from" or "start"')
         cues.append(cue)

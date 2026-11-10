@@ -18,7 +18,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from common import DATA, MASTER_FIELDS, MASTER_SECTION_FIELDS, atomic_json, compile_patterns, read_json, sha, validate_bundle  # noqa: E402
+from common import DATA, MASTER_FIELDS, MASTER_SECTION_FIELDS, atomic_json, compile_patterns, inherit_master, read_json, sha, validate_bundle  # noqa: E402
 
 MASTER_FIELDS_WITH_LYRICS = tuple(dict.fromkeys(MASTER_FIELDS + ('Lyrics',)))
 
@@ -44,16 +44,7 @@ def relyric(bundle: Path, resync_audio: bool = False) -> dict:
     master = read_json(master_path)
     for stem in manifest.get('stems', []):
         path = bundle / stem['patternsPath']
-        patterns = read_json(path)
-        for field in MASTER_FIELDS_WITH_LYRICS:
-            if field in master:
-                patterns[field] = copy.deepcopy(master[field])
-        for section in patterns.get('Sections', []):
-            reference = next((s for s in master['Sections'] if s['Start'] == section['Start']), None)
-            if reference:
-                for field in MASTER_SECTION_FIELDS:
-                    if field in reference:
-                        section[field] = copy.deepcopy(reference[field])
+        patterns = inherit_master(read_json(path), master, MASTER_FIELDS_WITH_LYRICS)
         atomic_json(path, patterns)
         stem['patternsSha256'] = sha(path)
     atomic_json(manifest_path, manifest)

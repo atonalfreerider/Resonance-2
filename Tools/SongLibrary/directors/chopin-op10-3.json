@@ -2,8 +2,8 @@
  "title": "Chopin: the melody he loved most",
  "bundle": "Chopin---Etude-Op-10-No-3-in-E-major-*",
  "assets": "SongLibraryData/scores/chopin-op10-3",
- "narrativeStyle": "John's directed tour: an étude as a study of the hand, the bittersweet single-voice melody, a bridge that swells, spins and is steadied by alternating sixths, and an abridged return",
- "narrationTargetFraction": 0.5,
+ "narrativeStyle": "John's directed tour on the torus: an étude as a study of the hand, the bittersweet single voice and its falling intervals, a bridge that swells, spins and is steadied by alternating sixths, and an abridged return shown side by side",
+ "narrationTargetFraction": 0.55,
  "narrator": {
   "name": "JohnV4",
   "provider": "elevenlabs",
@@ -31,6 +31,16 @@
    "id": "score",
    "title": "Resonance's import of the MuseScore score, aligned to this recording: bars, intervals and harmonies",
    "url": "https://imslp.org/wiki/%C3%89tudes,_Op.10_(Chopin,_Fr%C3%A9d%C3%A9ric)"
+  },
+  {
+   "id": "leeds",
+   "title": "Leeds International Piano Competition on SoundCloud: Chopin, Etude Op. 10 No. 3, Alexej Gorlatch (LIPC 2009)",
+   "url": "https://soundcloud.com/leeds-piano-competition/chopin-tude-op-10-no-3"
+  },
+  {
+   "id": "leeds-prizes",
+   "title": "Leeds International Piano Competition: prizewinners (2009: Sofya Gulyak 1st, Alexej Gorlatch 2nd)",
+   "url": "https://en.wikipedia.org/wiki/Leeds_International_Piano_Competition"
   }
  ],
  "pictures": {
@@ -40,14 +50,6 @@
    "credit": "Eugène Delacroix, 1838 / Wikimedia Commons · Public domain",
    "license": "Public domain",
    "commonsPage": "https://commons.wikimedia.org/wiki/File:Eug%C3%A8ne_Ferdinand_Victor_Delacroix_043.jpg",
-   "placement": "right"
-  },
-  "gutmann": {
-   "file": "pictures/gutmann-1879.jpg",
-   "caption": "Adolph Gutmann, Chopin's pupil and copyist",
-   "credit": "Lithograph, Allgemeine Moden-Zeitung, 1879 / Wikimedia Commons · Public domain",
-   "license": "Public domain",
-   "commonsPage": "https://commons.wikimedia.org/wiki/File:Adolphe_Gutmann5.jpg",
    "placement": "right"
   },
   "clean-copy": {
@@ -71,13 +73,13 @@
   {
    "start": 0,
    "to": "3",
-   "view": "Overview",
+   "view": "Torus",
+   "picture": "delacroix",
    "text": "“Never another such beautiful melody”: Chopin to his pupil Adolph Gutmann",
    "speech": "Chopin told his pupil Adolph Gutmann that he had never in his life written another such beautiful melody. This is that melody: the Étude in E major, Opus 10, Number 3.",
    "sourceIds": [
     "niecks"
-   ],
-   "picture": "delacroix"
+   ]
   },
   {
    "from": "3",
@@ -94,46 +96,86 @@
   {
    "from": "6",
    "to": "9",
-   "view": "Overview",
-   "text": "“O, my fatherland!”",
-   "speech": "Once, while Gutmann was studying it, Chopin lifted his clasped hands and exclaimed: O, my fatherland!",
+   "view": "Torus",
+   "text": "Alexej Gorlatch, at the 2009 Leeds International Piano Competition (second prize)",
+   "speech": "This performance is by Alexei Gorlatch, at the 2009 Leeds International Piano Competition, where he won second prize.",
    "sourceIds": [
-    "niecks"
-   ],
-   "picture": "gutmann"
+    "leeds",
+    "leeds-prizes"
+   ]
   },
   {
    "from": "9",
    "to": "14",
-   "view": "Overview",
+   "view": "Torus",
    "stem": "right-hand",
    "soloUntil": "13",
+   "picture": "clean-copy",
    "text": "An étude is a study. The right hand alone: melody in the weaker outer fingers, a soft pulse from thumb and index finger",
    "speech": "An étude is a study, written to perfect one skill. Listen to the right hand alone. It plays two parts at once: the weaker outer fingers sing the melody, while the thumb and index finger keep a soft pulse beneath it.",
    "sourceIds": [
     "henle",
     "wikipedia"
-   ],
-   "picture": "clean-copy"
+   ]
   },
   {
    "from": "14",
    "to": "17",
    "view": "Torus",
    "text": "The line climbs, each bar reaching higher",
-   "speech": "Now the line climbs, each bar reaching higher. At the top, the texture thins to a single high voice.",
+   "speech": "Now the line climbs, each bar reaching higher. At the top, a single high voice begins to fall.",
    "sourceIds": [
     "score"
    ]
   },
   {
    "from": "17",
+   "to": "18",
+   "view": "Torus",
+   "text": "Bar 17: G♯ falls a fifth, to C♯",
+   "speech": "Each phrase falls a fifth: G sharp to C sharp.",
+   "annotationTarget": "note",
+   "annotationMidiPitch": 80,
+   "annotationLabel": "G♯ falls a fifth, to C♯",
+   "sourceIds": [
+    "score"
+   ]
+  },
+  {
+   "from": "18",
+   "to": "19",
+   "view": "Torus",
+   "text": "Bar 18: a fourth lower, D♯ falls a fifth, to G♯",
+   "speech": "The next begins a fourth lower, on D sharp.",
+   "annotationTarget": "note",
+   "annotationMidiPitch": 75,
+   "annotationLabel": "a fourth lower: D♯",
+   "sourceIds": [
+    "score"
+   ]
+  },
+  {
+   "from": "19",
+   "to": "20",
+   "view": "Torus",
+   "text": "Bar 19: a third lower, B falls a fifth, to E",
+   "speech": "Then a third lower, on B.",
+   "annotationTarget": "note",
+   "annotationMidiPitch": 71,
+   "annotationLabel": "a third lower: B",
+   "sourceIds": [
+    "score"
+   ]
+  },
+  {
+   "from": "20",
    "to": "21:2",
-   "view": "Overview",
-   "narrate": false,
-   "text": "Bar 17: a single high voice. Hold one long note, then sigh downward",
-   "annotationTarget": "melody",
-   "annotationLabel": "Bar 17: one voice, alone",
+   "view": "Torus",
+   "text": "Bar 20: a smaller third, G♯, and home to E",
+   "speech": "Then a smaller third, on G sharp, and home to E.",
+   "annotationTarget": "note",
+   "annotationMidiPitch": 68,
+   "annotationLabel": "a smaller third: G♯",
    "sourceIds": [
     "score"
    ]
@@ -141,12 +183,11 @@
   {
    "from": "21:2",
    "to": "29",
-   "view": "Overview",
+   "view": "Torus",
    "stem": "right-hand",
    "soloUntil": "26",
    "text": "The bridge, poco più animato: sixths in the right hand, rocking between two hand shapes",
    "speech": "The bridge begins, a little more animated, and the étude's other skill appears: sixths. The right hand rocks between two shapes, typically thumb with ring finger, then index with little finger.",
-   "annotationTarget": "none",
    "sourceIds": [
     "henle",
     "score"
@@ -156,7 +197,6 @@
    "from": "29",
    "to": "34",
    "view": "Torus",
-   "uncoil": true,
    "text": "The first swell: forte in A major, answered softly in A minor",
    "speech": "Then two swells. The first rises forte in A major, and answers itself softly in A minor.",
    "sourceIds": [
@@ -178,7 +218,6 @@
    "from": "42",
    "to": "52",
    "view": "Torus",
-   "uncoil": true,
    "narrate": false,
    "text": "The climax: fortissimo near the top of the keyboard, then con bravura double sixths in both hands, spinning out of control",
    "sourceIds": [
@@ -190,7 +229,7 @@
   {
    "from": "52",
    "to": "58",
-   "view": "Overview",
+   "view": "Torus",
    "text": "Repeating, alternating sixths steady the storm; the music settles onto the dominant",
    "speech": "Out of the spin, the hands lock into repeating, alternating sixths, the same rocking the étude trains. It steadies the storm, and the music settles onto the dominant, waiting.",
    "sourceIds": [
@@ -209,12 +248,35 @@
   },
   {
    "from": "62",
-   "to": "67",
+   "to": "66",
    "view": "Timeline",
-   "text": "The return, abridged: after the first phrase, straight to the climb (bars 6 to 13 are cut)",
+   "compare": {
+    "first": [
+     "1",
+     "21:2"
+    ],
+    "second": [
+     "62",
+     "end"
+    ],
+    "highlight": [
+     "6",
+     "14"
+    ],
+    "missingAt": "67"
+   },
+   "text": "A and A′ side by side: bars 6 to 13 are left out of the return",
    "speech": "The melody returns, but notice what Chopin leaves out. After this first phrase he skips the detour and the repeat, and goes straight to the climb. The range was built the first time; now the release comes sooner.",
-   "annotationTarget": "patterns",
-   "annotationLabel": "A′: bars 6–13 cut",
+   "sourceIds": [
+    "score"
+   ]
+  },
+  {
+   "from": "66",
+   "to": "67",
+   "view": "Torus",
+   "narrate": false,
+   "text": "Straight to the climb",
    "sourceIds": [
     "score"
    ]
@@ -222,20 +284,19 @@
   {
    "from": "67",
    "to": "70",
-   "view": "Overview",
-   "narrate": true,
-   "text": "The single voice again: hold one long note, sigh downward, each phrase lower than the last",
+   "view": "Torus",
+   "picture": "wodzinska",
+   "text": "The single voice again: the same falling fifths, each phrase lower than the last",
+   "speech": "Its nickname is Tristesse: sadness. Listen again to the falling fifths.",
    "sourceIds": [
     "wikipedia",
     "score"
-   ],
-   "speech": "Its nickname is Tristesse, sadness. Yet each phrase holds a long note, then sighs downward, beginning lower each time.",
-   "picture": "wodzinska"
+   ]
   },
   {
    "from": "70",
    "to": "73",
-   "view": "Overview",
+   "view": "Torus",
    "text": "The sigh returns, over the chord path that opens Pachelbel's Canon: E, B, C♯ minor, G♯ minor, A",
    "speech": "Beneath the sigh, the chords walk the path of Pachelbel's Canon: each bright major chord answered by a darker minor one. Bittersweet.",
    "annotationTarget": "melody",
@@ -260,7 +321,7 @@
   {
    "from": "77",
    "to": "end",
-   "view": "Overview",
+   "view": "Torus",
    "narrate": false,
    "text": "E major",
    "sourceIds": [

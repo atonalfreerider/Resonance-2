@@ -56,11 +56,35 @@ def run(command, log=None, timeout=7200, env=None):
 
 
 # Isolated stems show the master's harmony and form: the same chords, fundamentals,
-# section groups and per-visit passes, so a stem's pattern wheels match the full mix.
-MASTER_FIELDS = ('Chords', 'RegionPhases', 'Key', 'Minor', 'KeySource', 'Duration', 'EndBeat',
+# section groups and per-visit passes, so a stem's pattern wheels match the full mix. They also keep the
+# master's tonal context (key changes, tonicizations and the key of every frame): one hand or instrument on its
+# own can suggest another key (the right hand of Chopin's E-major etude reads as G-sharp minor), and a solo must
+# never turn the torus to a key the piece is not in.
+MASTER_FIELDS = ('Chords', 'RegionPhases', 'Key', 'Minor', 'KeySource', 'KeyChanges', 'Tensions', 'Duration', 'EndBeat',
                  'Style', 'FormName', 'FormGrammar', 'SongBars', 'FundamentalBars', 'Patterns', 'Groups', 'Lyrics')
 MASTER_SECTION_FIELDS = ('Chords', 'ProgressionBeats', 'Family', 'Label', 'Role', 'Letter', 'Short',
-                         'Passes', 'Variation', 'Group', 'GroupVisit', 'CycleBeats', 'Loops')
+                         'Passes', 'Variation', 'Group', 'GroupVisit', 'CycleBeats', 'Loops', 'KeyRoot', 'KeyMinor')
+
+
+def inherit_master(patterns, master, fields=MASTER_FIELDS):
+    """Give a stem's patterns the master's harmony, form and tonal context (see MASTER_FIELDS)."""
+    import bisect
+    import copy
+    for field in fields:
+        if field in master:
+            patterns[field] = copy.deepcopy(master[field])
+    for section in patterns.get('Sections', []):
+        reference = next((s for s in master.get('Sections', []) if s['Start'] == section['Start']), None)
+        if reference:
+            for field in MASTER_SECTION_FIELDS:
+                if field in reference:
+                    section[field] = copy.deepcopy(reference[field])
+    keys = [(f['Time'], f.get('Key', -1), f.get('Minor', False)) for f in master.get('Frames', [])]
+    times = [k[0] for k in keys]
+    for frame in patterns.get('Frames', []):
+        if keys:
+            _, frame['Key'], frame['Minor'] = keys[max(0, bisect.bisect_right(times, frame['Time']+1e-9)-1)]
+    return patterns
 
 
 def compile_patterns(midi, log=None):

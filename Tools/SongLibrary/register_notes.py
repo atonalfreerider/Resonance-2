@@ -15,7 +15,7 @@ import copy
 import shutil
 from pathlib import Path
 import numpy as np
-from common import MASTER_FIELDS, MASTER_SECTION_FIELDS, atomic_json, compile_patterns, read_json, sha, validate_bundle
+from common import MASTER_FIELDS, MASTER_SECTION_FIELDS, atomic_json, compile_patterns, inherit_master, read_json, sha, validate_bundle
 from stems import map_to_master
 
 
@@ -58,14 +58,8 @@ def rebuild(bundle, stem='other-high', name='Synth arpeggiator', low=60, high=10
     midi = folder / f'{stem}.mid'
     map_to_master(notes_mid, midi, bundle / 'aligned.mid')
     compile_patterns(midi, bundle.parent / 'stems.log')
-    path = Path(str(midi) + '.patterns.json'); patterns = read_json(path); master = read_json(bundle / 'aligned.mid.patterns.json')
-    for field in MASTER_FIELDS:
-        if field in master: patterns[field] = copy.deepcopy(master[field])
-    for section in patterns['Sections']:
-        reference = next((s for s in master['Sections'] if s['Start'] == section['Start']), None)
-        if reference:
-            for field in MASTER_SECTION_FIELDS:
-                if field in reference: section[field] = copy.deepcopy(reference[field])
+    path = Path(str(midi) + '.patterns.json'); master = read_json(bundle / 'aligned.mid.patterns.json')
+    patterns = inherit_master(read_json(path), master)
     atomic_json(path, patterns)
     manifest = read_json(bundle / 'aligned.mid.prepared.json')
     for entry in manifest['stems']:
