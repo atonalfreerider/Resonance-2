@@ -37,7 +37,7 @@ public static class LyricModeValidation
             await Task.Run(()=>{Prep("--write-fixture","lyrics",Score);Prep(Score);});
             Check(midi.Load(Path.GetFullPath(Score)),"Generated lyric song loads: "+midi.Status);
             var data=midi.Prepared;var lyrics=data.Lyrics;
-            Check(data.Version==PreparedPatternSong.CurrentVersion&&data.Parts.Length==3&&lyrics!=null&&lyrics.Syllables.Length==251,$"Bundle v{data.Version}: {data.Parts.Length} instrument parts, {lyrics?.Syllables.Length} synced syllables ({lyrics?.Sync})");
+            Check(data.Version>=PreparedPatternSong.MinimumReadableVersion&&data.Parts.Length==3&&lyrics!=null&&lyrics.Syllables.Length==251,$"Bundle v{data.Version}: {data.Parts.Length} instrument parts, {lyrics?.Syllables.Length} synced syllables ({lyrics?.Sync})");
 
             // Instrument changers in the overview: each lane shows its pattern and repeat.
             views.SetView(VisualizationViews.View.Overview);await Task.Delay(1200);

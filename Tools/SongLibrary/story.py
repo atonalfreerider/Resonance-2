@@ -7,6 +7,7 @@ import bisect
 import collections
 import json
 import math
+import re
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -16,6 +17,9 @@ from common import atomic_json, read_json, sha, validate_bundle
 VIEWS = ('Overview', 'Torus', 'TorusLyrics', 'Timeline', 'Drums', 'Lyrics')
 PLACEMENTS = ('right', 'left', 'center')
 IMAGE_TYPES = ('.jpg', '.jpeg', '.png')
+# Where on the structure wheel a patterns arrow points (Docs/MOTIF-REDUCTION.md §14.8); SongDirector.Read accepts the
+# same grammar. Matched with fullmatch, never ^...$: $ also matches before a trailing newline.
+ANCHOR = re.compile(r'(?:section|phrase|node|omission|run|atom|relation):[^\s].{0,38}|ghost|glyph')
 
 
 def load_context(bundle):
@@ -148,6 +152,12 @@ def validate_cues(cues, duration, stems, source_ids=(), bundle=None):
             raise ValueError('Invalid story annotation')
         if cue.get('annotationTarget')=='note' and (type(cue.get('annotationMidiPitch')) is not int or not 21<=cue['annotationMidiPitch']<117):raise ValueError('Note annotation requires a MIDI pitch from 21 to 116')
         if cue.get('annotationTarget')=='chord' and (type(cue.get('annotationPitchClass')) is not int or not 0<=cue['annotationPitchClass']<12):raise ValueError('Chord annotation requires a pitch class from 0 to 11')
+        # An anchor names a node's arc by label ("section:A′", "phrase:a3", "node:A′/a1"), the omission slit
+        # ("omission:A′"), a power's staircase ("run:B1"), an atom ("atom:N"), a relation's span ("relation:3"), the
+        # ghost cursor or the centre glyph. Optional: an empty anchor is none, as SongDirector.Read treats a missing one.
+        anchor=cue.get('annotationAnchor','')
+        if not isinstance(anchor,str) or (anchor and not ANCHOR.fullmatch(anchor)):
+            raise ValueError('Invalid annotation anchor: expected section|phrase|node|omission|run|atom|relation:<label> (up to 39 characters), ghost or glyph')
         if not isinstance(refs,list) or any(s not in source_ids for s in refs):
             raise ValueError('Unknown story source reference')
         if 'speech' in cue and (not isinstance(cue['speech'],str) or not 1 <= len(cue['speech']) <= 500):

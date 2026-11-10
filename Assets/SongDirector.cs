@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -13,6 +14,10 @@ public sealed class SongDirector : MonoBehaviour
     [Serializable] public sealed class Cue { public double start,end;public string text,speech,view,stem,annotationTarget,annotationLabel,image,imageCaption,imageCredit,imagePlacement;public bool uncoil,releaseSoloAfterNarration;
         // soloGain: how much louder a quiet stem plays while this cue solos it (1 when absent); narrationEnd: when its voice stops.
         public float soloGain,narrationEnd; public double soloUntil; public string visualStem,concertoFocus,melodyTarget; public bool directedMelody; public int annotationPitchClass=-1,annotationMidiPitch=-1;
+        // annotationAnchor (optional): where on the structure wheel a patterns arrow points: a node's arc by label
+        // ("section:A′", "phrase:a3", "node:A′/a1"), the omission slit ("omission:A′"), a power's staircase ("run:B1"),
+        // an atom ("atom:N"), a relation's span ("relation:3"), the ghost cursor or the centre glyph ("ghost", "glyph").
+        public string annotationAnchor;
         // Two passages side by side (PassageComparison): [start, end) song seconds each, the span of the first that
         // the second leaves out, where in the second it is missing, what the second adds, and the labels (first,
         // second, lit span, cut, title, note, added). compareFollow: where the second passage is in the first, as
@@ -25,6 +30,9 @@ public sealed class SongDirector : MonoBehaviour
         public PreparedPatternSong.MelodyStrand[] pianoMelody,orchestraMelody;
     }
     static readonly string[] Placements={"","right","left","center"};
+    // The anchor grammar of Docs/MOTIF-REDUCTION.md §14.8, the same as story.py's validate_cues. \z, not $: $ also
+    // matches before a trailing newline. A missing (null) or empty anchor is none, as story.py publishes it.
+    public static readonly Regex AnchorGrammar=new Regex(@"^(?:(?:section|phrase|node|omission|run|atom|relation):[^\s].{0,38}|ghost|glyph)\z");
     MidiPlayer midi;SongAudio audio;StemPlayback stems;VisualizationViews views;Main main;
     Toggle toggle;Label status,caption;VisualElement footer,controls;
     Story story;Task<Story> pending;string source;int current=-2;
@@ -83,6 +91,7 @@ public sealed class SongDirector : MonoBehaviour
                 !new[]{"","both","piano","orchestra","three"}.Contains(cue.melodyTarget??"")||
                 (cue.annotationTarget=="note"&&(cue.annotationMidiPitch<21||cue.annotationMidiPitch>116))||
                 (cue.annotationTarget=="chord"&&(cue.annotationPitchClass<0||cue.annotationPitchClass>11))||
+                (!string.IsNullOrEmpty(cue.annotationAnchor)&&!AnchorGrammar.IsMatch(cue.annotationAnchor))||
                 !Placements.Contains(cue.imagePlacement??"")||(!string.IsNullOrEmpty(cue.image)&&(StoryPictures.Resolve(directory,cue.image)==null||string.IsNullOrWhiteSpace(cue.imageCredit))))
                 throw new InvalidDataException("Invalid story cue; no controls applied.");
             end=cue.end;

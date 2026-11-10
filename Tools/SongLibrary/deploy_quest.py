@@ -31,7 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 LIBRARY = ROOT / "PreparedSongs" / "Library"
 PACKAGE = "com.primitive.resonance"
-BUNDLE_VERSION = 5  # PreparedPatternSong.CurrentVersion
+BUNDLE_VERSION = 5  # PreparedPatternSong.MinimumReadableVersion
 ADB_CANDIDATES = [
     r"C:\Program Files\Unity\Hub\Editor\6000.6.3f1\Editor\Data\PlaybackEngines\AndroidPlayer\SDK\platform-tools\adb.exe",
 ]
@@ -86,7 +86,7 @@ def bundle_current(bundle):
 
 
 def prepared_songs(only=None, include_fixtures=False):
-    """The same rule as the app's song list: aligned.mid with current patterns and a prepared manifest."""
+    """The same rule as the app's song list: aligned.mid with patterns the app reads and a prepared manifest."""
     songs = []
     for folder in sorted(LIBRARY.iterdir(), key=lambda p: p.name.lower()):
         if not folder.is_dir():

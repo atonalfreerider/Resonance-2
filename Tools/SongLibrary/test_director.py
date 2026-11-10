@@ -79,6 +79,24 @@ class BarTimes(unittest.TestCase):
             with self.assertRaises(ValueError):
                 story.validate_cues([dict(story_cue, **broken)], 11.0, [])
 
+    def test_annotation_anchors(self):
+        # Director cues are copied verbatim, so a structure-wheel anchor reaches the story; only the grammar of
+        # Docs/MOTIF-REDUCTION.md §14.8 is published (SongDirector.Read checks the same).
+        director = dict(cues=[dict({'from': '1', 'to': '3'}, text='A′: bars 6–13 cut', annotationTarget='patterns',
+                                   annotationAnchor='omission:A′')])
+        cue = build_director_tour.timed_cues(director, self.clock)[0]
+        self.assertEqual(cue['annotationAnchor'], 'omission:A′')
+        cue = dict(cue, view='Timeline', stem='', uncoil=False)
+        story.validate_cues([cue], 11.0, [])
+        for anchor in ('section:A′', 'section:Verse 2', 'phrase:a3', 'node:A′/a1', 'run:B1', 'atom:N', 'relation:12',
+                       'ghost', 'glyph', 'phrase:' + 'x'*39, ''):
+            with self.subTest(anchor=anchor):
+                story.validate_cues([dict(cue, annotationAnchor=anchor)], 11.0, [])
+        for anchor in ('section:', 'section: A', 'phrase:' + 'x'*40, 'Section:A', 'bar:6', 'ghost:1', 'glyph ', 'ghost\n',
+                       'section:A\n', 'node:A′\na1', 'omission', None, 3):
+            with self.subTest(anchor=anchor), self.assertRaises(ValueError):
+                story.validate_cues([dict(cue, annotationAnchor=anchor)], 11.0, [])
+
 
 class Checks(unittest.TestCase):
     def test_claims_and_beats_decisions(self):

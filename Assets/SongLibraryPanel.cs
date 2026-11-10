@@ -65,7 +65,8 @@ public sealed class SongLibraryPanel : MonoBehaviour
     void OnApplicationFocus(bool focused){if(focused&&list!=null&&!hidden&&(Intro||Open))Rescan();}
 
     // A song is fully prepared when its folder holds the aligned score, the recording manifest
-    // beside it, and a pattern bundle of the current version.
+    // beside it, and a pattern bundle this build reads: version 5 on (a version-5 bundle has no
+    // motif layer and keeps the classic wheels, so no bundle needs regenerating to stay listed).
     public static List<Song> Scan()
     {
         var songs=new List<Song>();
@@ -87,7 +88,7 @@ public sealed class SongLibraryPanel : MonoBehaviour
         {
             using var reader=new StreamReader(bundle);var head=new char[65536];int read=reader.Read(head,0,head.Length);
             var m=Regex.Match(new string(head,0,read),"\"Version\"\\s*:\\s*(\\d+)");
-            return m.Success&&int.Parse(m.Groups[1].Value)>=PreparedPatternSong.CurrentVersion;
+            return m.Success&&int.Parse(m.Groups[1].Value)>=PreparedPatternSong.MinimumReadableVersion;
         }
         catch{return false;}
     }

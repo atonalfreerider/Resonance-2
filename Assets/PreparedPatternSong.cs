@@ -12,8 +12,144 @@ using System.Linq;
     // Version 4 adds detected key changes and tonal tensions (tonicizations).
     // Version 5 adds instrument patterns (each pitched lane's own chord loops, their
     // repetitions and variations) and a lyric sheet synced to the music, with meter and rhyme.
-    public const int CurrentVersion=5;
+    // Version 6 adds the motif layer: the piece reduced to atoms (cell shapes with chirality) and the
+    // transformations that place them (tonal or real transposition, mirror, augmentation, the parallel mode),
+    // nested powers (a unit stated n times, each a step from the last), phrases and periods, and sections
+    // related by returns with edits (A′ = A − bars 6–13 + coda). Every note is checked to decode from it.
+    // Readers accept 5 and 6. A version-5 bundle has an empty layer (Schema 0): the wheels stay classic.
+    public const int CurrentVersion=6,MinimumReadableVersion=5;
+    // Version stays the first field written (System.Text.Json writes fields in declaration order): the song list and
+    // deploy_quest.py read it from a bundle's first 64 KB, and the motif layer after it can run to megabytes.
     public int Version=CurrentVersion,TrackCount,LeadVocalTrack=-1;
+    public MotifLayer Motifs=new MotifLayer();
+    public bool HasMotifs()=>Motifs!=null&&Motifs.Schema>=1&&Motifs.Nodes!=null&&Motifs.Nodes.Length>1;
+
+    public static class MotifKinds { public const int Piece=0,Section=1,Phrase=2,Period=3,SubPhrase=4,Power=5,Unit=6,Coda=7,Intro=8,Arrival=9; }
+    public static class MotifRelations { public const int Return=0,Power=1,Run=2,Doubling=3,Alternation=4,Liquidation=5,CrossReference=6; }
+    public static class MotifSparks { public const int Inserted=0,Deleted=1,Substituted=2,Altered=3,Shifted=4,Lengthened=5,Octave=6,Ornament=7; }
+    public static class MotifEdits { public const int Match=0,Delete=1,Insert=2,Substitute=3; }
+
+    [Serializable] public sealed class MotifLayer
+    {
+        public int Schema;                                    // 0: none (version 5, or the analysis was disabled: Status); 1: this layout
+        public string Status="",Formula="",Caption="";       // Formula: the piece line, then section and phrase lines, joined by '\n'
+        public string[] Levels=Array.Empty<string>();        // names of node levels: Piece, Section, Phrase, Unit
+        public int PrincipalStream=-1;                       // the stream the glyph follows by default (the melody)
+        public MotifStream[] Streams=Array.Empty<MotifStream>();
+        public MotifAtom[] Atoms=Array.Empty<MotifAtom>();
+        public MotifParadigm[] Paradigms=Array.Empty<MotifParadigm>();
+        public MotifNode[] Nodes=Array.Empty<MotifNode>();          // preorder; Nodes[0] = the piece; children contiguous
+        public MotifCell[] Cells=Array.Empty<MotifCell>();          // grouped by stream (MotifStream.FirstCell, CellCount), by Start
+        public MotifSpark[] Sparks=Array.Empty<MotifSpark>();       // grouped by cell (MotifCell.FirstSpark, SparkCount)
+        public MotifRelation[] Relations=Array.Empty<MotifRelation>();
+        public MotifEdit[] Edits=Array.Empty<MotifEdit>();          // return scripts (MotifRelation.FirstEdit, EditCount)
+        public MotifStats Stats=new MotifStats();
+    }
+    // One monophonic line or texture. Kind: voice (a score voice), line (a lane's outer line), rest, texture,
+    // both (both hands), drums. Staff and Voice come from a MuseScore import (-1 otherwise).
+    [Serializable] public sealed class MotifStream
+    {
+        public int Id,Track,Channel,Staff=-1,Voice=-1,FirstCell,CellCount;
+        public string Name="",Kind="";
+        public bool Bass;
+    }
+    // A family of paradigms with one diminution signature, signs dropped (N neighbour, T turn, P passing or
+    // sigh, A appoggiatura, Osc, Arp, Shape, Hold). The census is its chirality: members whose figure turns
+    // upward (Positive) or downward (Negative), Neutral for achiral ones.
+    [Serializable] public sealed class MotifAtom
+    {
+        public int Id,Paradigms,Members,Positive,Negative,Neutral;
+        public string Kind="",Name="",Signature="";
+    }
+    // An exact orbit: its prototype (the first statement, Notes relative to its first note) and every cell
+    // that is the prototype transposed, mirrored or augmented, plus variants with residual edits. Clock is
+    // the glyph's pitch clock: 7 (scale steps) or 12 (semitones). Symmetry: the transpositions that fix a
+    // texture shape ({0,6} a tritone, {0,3,6,9} a diminished seventh).
+    [Serializable] public sealed class MotifParadigm
+    {
+        public int Id,Atom=-1,Stream,Members,Mirrored,Variants,Clock=7,Sign,PrototypeCell=-1;
+        public string Letter="",Name="",Signature="";
+        public double Beats;
+        public bool Achiral;
+        public MotifNote[] Notes=Array.Empty<MotifNote>();
+        public int[] Symmetry=Array.Empty<int>();
+    }
+    // Onset and Length in beats from the cell start; Step and Semitones from the first note; Alter: the
+    // chromatic alteration against the local scale; Chord: 0 the line's note, 1.. chord notes below it.
+    // Role: the diminution token ("" structural, "N+", "N-", "P-", "T+", "A-", "Rep").
+    [Serializable] public sealed class MotifNote
+    {
+        public double Onset,Length;
+        public int Step,Semitones,Alter,Chord;
+        public bool Tied;
+        public string Role="";
+    }
+    // One cell of a stream: which paradigm it states and how (from the prototype). Degree is the scale degree
+    // of its first note in the local key (0 = tonic; for Clock 12 the semitone above the tonic): the glyph's
+    // angle. Real: the transposition is named chromatically. ModeChange: the parallel mode (P). Relation: the
+    // power this cell is an iteration of. Text: the musician's name of the relation to its previous statement
+    // ("tonal sequence up a second", "in the parallel minor", "an octave lower with C♮: ♭6 borrowed from E minor").
+    [Serializable] public sealed class MotifCell
+    {
+        public int Stream,Paradigm,Node=-1,Steps,Semitones,Degree,FirstSpark=-1,SparkCount,Relation=-1;
+        public double Start,End;
+        public bool Inverted,Exact=true,Real,ModeChange;
+        public float Scale=1;
+        public string Text="";
+    }
+    // A residual edit: where the music departs from the formula (the white sparks). Note: the prototype note
+    // it concerns (-1 for an inserted note). Tag names it ("C♮ = ♭6 from E minor", "held 13/16", "P+").
+    [Serializable] public sealed class MotifSpark
+    {
+        public double Beat;
+        public int Cell=-1,Kind,Pitch=-1,Note=-1;
+        public string Tag="";
+    }
+    // The flattened tree. Level: 0 piece, 1 section, 2 phrase or period, 3 sub-phrase, power or unit (powers
+    // nest; Depth is the tree depth). Prototype: the node this one restates (A for A′, a1 for a1′, the first
+    // iteration for later ones) under Steps/Semitones/Inverted. Projected: inherited from the prototype through
+    // the return's script. Omits: prototype children the copy leaves out ("a2, a1′"). Powers: Count statements,
+    // each StepSteps/StepSemitones from the last; Iteration is a child's index in its parent power. Order: the
+    // generator's order (0 translation, 1 loop, 2 alternation, n a cycle). Text: the node's formula line.
+    [Serializable] public sealed class MotifNode
+    {
+        public int Id,Parent=-1,FirstChild=-1,ChildCount,Depth,Level,Kind;
+        public double Start,End;
+        public string Label="",Name="",Text="",Omits="";
+        public int Prototype=-1,Relation=-1,Paradigm=-1,Steps,Semitones;
+        public bool Inverted,Real,Projected;
+        public int Count=1,Iteration,StepSteps,StepSemitones,Order;
+        public float Bits,Evidence;
+    }
+    // A relation between spans or streams: Return (Node restates Source with the Edits script), Power (Count
+    // statements stepped by Steps/Semitones), Run (a texture chain stepped by Semitones per event; Period > 0
+    // when it cycles back to its pitch classes; Symmetry: the transpositions that fix its hand shape), Doubling
+    // (StreamB doubles StreamA; Pattern lists the octave registers, "-24,-12"; Contrary marks mirror motion),
+    // Alternation (Pattern "RRLL"), Liquidation (Pattern "8,4,2": the shrinking period in quarters of a tactus),
+    // CrossReference (bar 16 = bar 6 a sixth higher). Text is the musician's sentence for captions and tours.
+    [Serializable] public sealed class MotifRelation
+    {
+        public int Id,Kind,Level,Node=-1,Source=-1,StreamA=-1,StreamB=-1,Steps,Semitones,Count=1,Period,Order,FirstEdit=-1,EditCount;
+        public double Start,End,SourceStart=-1,SourceEnd=-1;
+        public bool Inverted,Real,ModeChange,CrossScale,Contrary;
+        public float Bits,SavedBits;
+        public string Text="",Pattern="";
+        public int[] Symmetry=Array.Empty<int>();
+    }
+    [Serializable] public sealed class MotifEdit
+    {
+        public int Op;                                       // MotifEdits: match, delete (source not restated), insert (new target), substitute
+        public double SourceStart=-1,SourceEnd=-1,TargetStart=-1,TargetEnd=-1;
+        public float Bits;
+    }
+    // Description lengths in bits. Literal: every note coded alone; Entropy: order-0 entropy coder; Cells:
+    // paradigms without powers or returns; Model: the full reduction (articulation excluded, reported apart).
+    [Serializable] public sealed class MotifStats
+    {
+        public int Notes,Streams,Cells,Paradigms,Atoms,Nodes,Relations,Powers,Returns,MirroredCells,DerivedNotes;
+        public float BitsLiteral,BitsEntropy,BitsCells,BitsModel,BitsResidual,BitsArticulation,Derived;
+    }
+
     public MelodyStrand[] PianoMelody=Array.Empty<MelodyStrand>(),OrchestraMelody=Array.Empty<MelodyStrand>();
     public string Style="",FormName="",Summary="",FormGrammar="";
     public int SongBars,FundamentalBars;

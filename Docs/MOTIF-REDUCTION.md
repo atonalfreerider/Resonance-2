@@ -1613,4 +1613,10 @@ Generator order signs on the wheel:
 
 ## Deviations during implementation
 
-None yet.
+- §13.1 (step 1): the `Motifs` field, `HasMotifs()` and the motif classes follow the `Version` field instead of
+  sitting directly under the `CurrentVersion` line. System.Text.Json writes fields in declaration order, and
+  `SongLibraryPanel.CurrentBundle` and `deploy_quest.py` read `"Version"` from a bundle's first 64 KB: a motif layer
+  of 0.2–4 MB written ahead of it would hide every v6 bundle. `Version` stays the first key of every bundle.
+- §14.8 (step 1): an empty `annotationAnchor` is no anchor, like a missing one: `SongDirector.Read` and `validate_cues`
+  accept it instead of rejecting it as outside the grammar. Every other value must match the grammar against the whole
+  string (`\z` in C#, `re.fullmatch` in Python), since `$` alone also accepts a trailing newline.
