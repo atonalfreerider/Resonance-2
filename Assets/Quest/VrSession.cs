@@ -107,7 +107,8 @@ public sealed class VrSession : MonoBehaviour
         var go=new GameObject("Head");go.transform.SetParent(Rig,false);Head=go.AddComponent<Camera>();
         Head.clearFlags=CameraClearFlags.SolidColor;Head.backgroundColor=Color.black;
         if(Simulated)Head.fieldOfView=90;   // about the headset's own
-        Head.cullingMask=((desktop!=null?desktop.cullingMask:~0)&~(1<<30)&~(1<<31))|(1<<DrumLyricRack.StageLayerIndex);   // the lyric stage, drawn directlyHead.allowHDR=Simulated;Head.allowMSAA=!Simulated;
+        Head.cullingMask=((desktop!=null?desktop.cullingMask:~0)&~(1<<30)&~(1<<31))|(1<<DrumLyricRack.StageLayerIndex);   // the lyric stage, drawn directly
+        Head.allowHDR=Simulated;Head.allowMSAA=!Simulated;
         var data=Head.GetUniversalAdditionalCameraData();
         if(desktop!=null){var from=desktop.GetUniversalAdditionalCameraData();data.renderPostProcessing=from.renderPostProcessing;data.volumeLayerMask=from.volumeLayerMask;data.antialiasing=AntialiasingMode.None;}
         data.renderShadows=false;

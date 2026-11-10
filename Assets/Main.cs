@@ -12,7 +12,9 @@ using Util;
 public class Main : MonoBehaviour
 {
     public bool VisualOnly;
-    public Camera VisualCamera;
+    // Set at runtime by ConcertoTori for its visual-only tori. Not serialized: an unassigned serialized Camera
+    // is the Editor's placeholder null, which `??` does not treat as null.
+    [System.NonSerialized] public Camera VisualCamera;
     public void UseSharedSynth(MusicSynth synth){Synth=synth;}
     public void MatchVisualPose(Main other)
     {

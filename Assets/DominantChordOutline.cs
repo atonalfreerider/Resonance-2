@@ -27,9 +27,10 @@ public sealed class DominantChordOutline : MonoBehaviour
     }
     void OnEnable(){
         if(!Application.isPlaying)return;
-        visibility=0;
+        // A torus hidden and shown again (ConcertoTori) gets new lines: rebuild them on the next frame.
+        visibility=0;hasBuilt=false;shownVisibility=-1;
         main=GetComponent<Main>();material=new Material(Resources.Load<Shader>("HarmonicGlow"));material.SetColor("_BaseColor",Color.white*1.5f);
-        for(int i=0;i<3;i++){var go=new GameObject("Dominant chord surface outline");go.transform.SetParent(transform,false);var line=go.AddComponent<LineRenderer>();edges[i]=line;line.sharedMaterial=material;line.useWorldSpace=true;line.widthMultiplier=.02f;line.positionCount=41;line.numCapVertices=3;}
+        for(int i=0;i<3;i++){var go=new GameObject("Dominant chord surface outline");go.transform.SetParent(transform,false);var line=go.AddComponent<LineRenderer>();edges[i]=line;line.sharedMaterial=material;line.useWorldSpace=true;line.widthMultiplier=.02f;line.positionCount=41;line.numCapVertices=3;line.enabled=false;}   // hidden until LateUpdate has placed it: 41 points at the origin draw as a bright bar
         fillObject=new GameObject("Active chord surface tint");fillObject.transform.SetParent(transform,false);
         fillMesh=new Mesh{name="Curved chord region"};fillMesh.MarkDynamic();fillObject.AddComponent<MeshFilter>().sharedMesh=fillMesh;
         fillMaterial=new Material(Resources.Load<Shader>("ChordRegion"));fillObject.AddComponent<MeshRenderer>().sharedMaterial=fillMaterial;fillObject.SetActive(false);
@@ -42,7 +43,7 @@ public sealed class DominantChordOutline : MonoBehaviour
     }
     static int VertexIndex(int row,int col)=>row*(Resolution+1)-row*(row-1)/2+col;
     void LateUpdate(){using var perf=Perf.Outline.Auto();
-        if(main==null)main=GetComponent<Main>();if(dominance==null)dominance=GetComponent<TonalDominance>();var camera=main?.VisualCamera??Camera.main;if(main==null||dominance==null||camera==null||fillObject==null)return;
+        if(main==null)main=GetComponent<Main>();if(dominance==null)dominance=GetComponent<TonalDominance>();var camera=main!=null&&main.VisualCamera!=null?main.VisualCamera:Camera.main;if(main==null||dominance==null||camera==null||fillObject==null)return;
         if(midi==null)midi=GetComponent<MidiPlayer>();
         bool show=dominance.HasChord,minor=dominance.ChordMinor;string quality=dominance.ChordQuality;int nextRoot=dominance.ChordRoot;
         if(midi!=null&&midi.isActiveAndEnabled&&midi.Loaded&&midi.Cycles!=null&&!(main.NotesUseSynth&&main.ActiveNotes.Count>0)){

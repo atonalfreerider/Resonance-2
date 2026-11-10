@@ -74,7 +74,8 @@ public sealed class PatternWheel3D : MonoBehaviour
     // Text height in the wheel's units.
     static TextBox Label(Transform parent,string text,float height,TextAlignmentOptions align,Color color)
     {
-        var t=TextBox.Create(text,align);t.transform.SetParent(parent,false);t.Size=height*12f;   // TextMeshPro font size per unit of line height, measuredt.Color=color;t.TextField.fontMaterial.renderQueue=3200;
+        var t=TextBox.Create(text,align);t.transform.SetParent(parent,false);t.Size=height*12f;   // TextMeshPro font size per unit of line height, measured
+        t.Color=color;t.TextField.fontMaterial.renderQueue=3200;
         t.TextField.textWrappingMode=TextWrappingModes.NoWrap;return t;
     }
     public void Place(Vector3 centre,Quaternion rotation,float unitsPerRadius)
