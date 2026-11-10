@@ -22,6 +22,9 @@ public sealed class SongDirector : MonoBehaviour
     MidiPlayer midi;SongAudio audio;StemPlayback stems;VisualizationViews views;Main main;
     Toggle toggle;Label status,caption;VisualElement footer,controls;
     Story story;Task<Story> pending;string source;int current=-2;
+    // MidiPlayer stops itself at the end of the song and rewinds to 0 before this Update runs, so the end is
+    // also recognised as "it was playing near the end and now it has stopped".
+    bool wasPlaying;double lastNow;
     VisualizationViews.View previousView;string previousStem;bool previousUncoil,captionRaised;CameraControl orbit;
     // The torus turns slowly under the camera while a story plays, as in the tutorial (radians a second).
     const float OrbitSpeed=.09f;
@@ -83,7 +86,7 @@ public sealed class SongDirector : MonoBehaviour
     {
         enabled=enabled&&story!=null&&audio.Ready&&!audio.Busy&&!stems.IsLoading;
         if(enabled==Directing){toggle?.SetValueWithoutNotify(enabled);return;}
-        if(enabled){previousView=views.Current;previousUncoil=main.Uncoiled;previousStem=stems.SelectedId;current=-2;}
+        if(enabled){previousView=views.Current;previousUncoil=main.Uncoiled;previousStem=stems.SelectedId;current=-2;wasPlaying=false;lastNow=0;}
         else{stems.SoloGain=1;stems.Select(previousStem??"");views.SetView(previousView);main.SetUncoiled(previousUncoil);footer.style.display=DisplayStyle.None;caption.text="";}
         Directing=enabled;toggle.SetValueWithoutNotify(enabled);
     }
@@ -132,7 +135,10 @@ public sealed class SongDirector : MonoBehaviour
         double now=midi.Position;int index=Array.FindIndex(story.cues,c=>now>=c.start&&now<c.end);
         // AudioClip.length is a float; its endpoint can be fractionally earlier
         // than the sample-accurate duration stored by preprocessing.
-        if(now>=Math.Min(story.duration,midi.Duration)-.001){SetDirecting(false);return;}
+        double end=Math.Min(story.duration,midi.Duration);
+        bool finished=now>=end-.001||(wasPlaying&&!midi.IsPlaying&&lastNow>=end-1);
+        wasPlaying=midi.IsPlaying;lastNow=now;
+        if(finished){wasPlaying=false;SetDirecting(false);return;}
         // Orbit the torus in the views that show it, whenever the camera is free (not moving between
         // views, not uncoiling, not unrolled flat).
         orbit??=Camera.main!=null?Camera.main.GetComponent<CameraControl>():null;

@@ -90,18 +90,27 @@ static class VideoRecorderMenu
         controller.StopRecording();
         string report=session!=null?session.ReportPath:"";
         UnityEngine.Debug.Log($"Recording saved: {video}.mp4");
-        // The tutorial: cut the Shorts and the full tour once the file is closed.
-        if(File.Exists(report)&&File.ReadAllText(report).Contains("\"kind\": \"tutorial\""))
-            EditorApplication.delayCall+=()=>CutShorts(report);
+        if(!File.Exists(report))return;
+        // Once the file is closed: the editor's package (narration, music, ducking cues, captions, timeline) for
+        // every take, then for the tutorial the Shorts and the full tour.
+        bool tutorial=File.ReadAllText(report).Contains("\"kind\": \"tutorial\"");
+        EditorApplication.delayCall+=()=>RunTool("Tools/Video/edit_package.py",report,"Editor package",
+            tutorial?()=>RunTool("Tools/Video/cut_shorts.py",report,"Shorts"):null);
     }
-    static void CutShorts(string report)
+    // A Tools/ script with the song library's Python, in the background; its output goes to the console.
+    public static void RunTool(string script,string argument,string label,Action then=null)
     {
         string root=Path.GetFullPath(Path.Combine(Application.dataPath,".."));
-        string python=Path.Combine(root,"Tools/SongLibrary/.venv/Scripts/python.exe"),script=Path.Combine(root,"Tools/Video/cut_shorts.py");
-        if(!File.Exists(python)||!File.Exists(script))return;
-        var process=Process.Start(new ProcessStartInfo(python,$"\"{script}\" \"{report}\""){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true});
-        process.EnableRaisingEvents=true;
-        process.Exited+=(_,__)=>{string output=process.StandardOutput.ReadToEnd()+process.StandardError.ReadToEnd();EditorApplication.delayCall+=()=>UnityEngine.Debug.Log("Shorts: "+output);};
+        string python=Path.Combine(root,"Tools/SongLibrary/.venv/Scripts/python.exe");script=Path.Combine(root,script);
+        if(!File.Exists(python)||!File.Exists(script)){UnityEngine.Debug.LogWarning($"{label}: {python} or {script} is missing.");then?.Invoke();return;}
+        // Both pipes are drained as the tool writes (reading them only after it exits could fill a pipe and stall it).
+        var output=new System.Text.StringBuilder();
+        var process=new Process{StartInfo=new ProcessStartInfo(python,$"\"{script}\" \"{argument}\""){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true,WorkingDirectory=root},EnableRaisingEvents=true};
+        process.OutputDataReceived+=(_,e)=>{if(e.Data!=null)lock(output)output.AppendLine(e.Data);};
+        process.ErrorDataReceived+=(_,e)=>{if(e.Data!=null)lock(output)output.AppendLine(e.Data);};
+        process.Exited+=(_,__)=>{process.WaitForExit();int code=process.ExitCode;string text;lock(output)text=output.ToString();
+            EditorApplication.delayCall+=()=>{if(code==0)UnityEngine.Debug.Log($"{label}: {text}");else UnityEngine.Debug.LogError($"{label} failed: {text}");then?.Invoke();};};
+        process.Start();process.BeginOutputReadLine();process.BeginErrorReadLine();
     }
     static string Slug(string s){var chars=s.ToLowerInvariant().ToCharArray();for(int i=0;i<chars.Length;i++)if(!char.IsLetterOrDigit(chars[i]))chars[i]='-';return new string(chars).Trim('-');}
 }

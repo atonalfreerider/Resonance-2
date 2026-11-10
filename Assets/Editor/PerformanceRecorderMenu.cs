@@ -111,7 +111,10 @@ static class PerformanceRecorderMenu
         EditorApplication.delayCall+=Finish;
         // The synth plays quietly: each video's sound is brought to a steady loudness (the picture
         // is copied untouched), once the Recorder has closed the files.
-        EditorApplication.delayCall+=()=>{foreach(var view in new[]{"-pov","-overhead"})Normalize(name+view+".mp4");Debug.Log($"Performances: saved {name}-pov.mp4 and {name}-overhead.mp4");};
+        EditorApplication.delayCall+=()=>{foreach(var view in new[]{"-pov","-overhead"})Normalize(name+view+".mp4");Debug.Log($"Performances: saved {name}-pov.mp4 and {name}-overhead.mp4");
+            // Every take gets the editor's package beside it (its sound as a WAV, empty captions, a timeline).
+            VideoRecorderMenu.RunTool("Tools/Video/edit_package.py",name+"-pov.mp4","Editor package (player's view)",
+                ()=>VideoRecorderMenu.RunTool("Tools/Video/edit_package.py",name+"-overhead.mp4","Editor package (overhead)"));};
     }
     static void Normalize(string video)
     {
