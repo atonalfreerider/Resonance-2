@@ -113,6 +113,23 @@ def validate_cues(cues, duration, stems, source_ids=(), bundle=None):
         if 'compareLabels' in cue and not (isinstance(cue['compareLabels'], list) and len(cue['compareLabels']) <= 8
                                            and all(isinstance(x, str) and len(x) <= 60 for x in cue['compareLabels'])):
             raise ValueError('compareLabels: up to eight labels of up to 60 characters')
+        # A ghost playhead's map from the second passage to the first: (second, first) knot pairs in runs; inside a
+        # run both clocks rise, and every knot lies inside its passage.
+        if ('compareFollow' in cue) != ('compareFollowRuns' in cue) or ('compareFollow' in cue and 'compareFirst' not in cue):
+            raise ValueError('compareFollow needs compareFollowRuns and both passages')
+        if 'compareFollow' in cue:
+            knots, runs = cue['compareFollow'], cue['compareFollowRuns']
+            if not (isinstance(knots, list) and isinstance(runs, list) and runs
+                    and all(isinstance(n, int) and not isinstance(n, bool) and n >= 2 for n in runs)
+                    and len(knots) == 2*sum(runs) <= 512
+                    and all(isinstance(t, (int, float)) and not isinstance(t, bool) and math.isfinite(t) for t in knots)):
+                raise ValueError('Invalid compareFollow')
+            (a0, a1), (b0, b1), at = cue['compareFirst'], cue['compareSecond'], 0
+            for n in runs:
+                run = [(knots[at+2*i], knots[at+2*i+1]) for i in range(n)]
+                at += 2*n
+                if any(not (b0-.001 <= s <= b1+.001 and a0-.001 <= f <= a1+.001) for s, f in run)                         or any(s2 <= s1 or f2 <= f1 for (s1, f1), (s2, f2) in zip(run, run[1:])):
+                    raise ValueError('compareFollow runs must rise inside their passages')
         if cue.get('visualStem','') not in {'', *stems}:
             raise ValueError('Unavailable visual stem')
         if cue.get('concertoFocus','') not in ('','balanced','piano-only','orchestra-only','piano','orchestra'):

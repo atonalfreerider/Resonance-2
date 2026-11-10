@@ -33,6 +33,24 @@ def find_bundle(pattern):
     return max(found, key=lambda p: (p/'aligned.mid.patterns.json').stat().st_mtime)
 
 
+def shift_bar(spec, bars):
+    """A printed bar spec moved on by whole bars: "62" -> "64", "9#2" -> "11#2"."""
+    bar, mark, time = str(spec).partition('#')
+    if ':' in bar:
+        raise ValueError(f'A follow run starts on a bar line, not {spec!r}')
+    return f'{int(bar) + bars}{mark}{time}'
+
+
+def bar_line(clock, spec, bars):
+    """The time of the bar line `bars` bars after `spec`; the line closing the last bar is the end."""
+    try:
+        return clock.seconds(shift_bar(spec, bars))
+    except ValueError:
+        if bars > 0 and '#' not in str(spec) and int(shift_bar(spec, bars - 1)) == clock.measures[-1]['number']:
+            return clock.seconds('end')
+        raise
+
+
 def timed_cues(director, clock):
     """The director's cues with every bar spec turned into recording seconds."""
     cues = []
@@ -59,6 +77,15 @@ def timed_cues(director, clock):
                 cue['compareMissingAt'] = round(clock.seconds(compare['missingAt']), 3)
             if compare.get('labels'):
                 cue['compareLabels'] = [str(x) for x in compare['labels']]
+            # Where the second passage is in the first, for a ghost playhead on the first wheel: runs of bars the
+            # second plays as the first did, [second bar, first bar, bars]; every bar line in a run is a knot.
+            if compare.get('follow'):
+                knots, runs = [], []
+                for second, first, bars in compare['follow']:
+                    for i in range(int(bars) + 1):
+                        knots += [round(bar_line(clock, second, i), 3), round(bar_line(clock, first, i), 3)]
+                    runs.append(int(bars) + 1)
+                cue['compareFollow'], cue['compareFollowRuns'] = knots, runs
         if 'start' not in cue:
             raise ValueError(f'Cue {i} needs "from" or "start"')
         cues.append(cue)

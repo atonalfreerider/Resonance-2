@@ -16,7 +16,10 @@ The menu enters Play mode, waits for the app, and then:
    bar, the tuck buttons, the song list, the transport, and the tutorial's Back / Next / Skip,
    step count and their row. In a vertical frame the captions start about two thirds of the way
    down (`RecordingMode.CaptionTop`), clear of the bottom of the frame where Shorts put their
-   title, channel name and buttons; the torus is framed above them.
+   title, channel name and buttons; the torus is framed above them. A tour's pictures and passage
+   comparisons take their own part of the frame (the top of a vertical one, the left of a horizontal
+   one) and the torus glides into the rest, so the two never cover each other
+   (`VisualizationViews.ShareScreen`).
 2. `RecordingSession` switches to the stacked layout for a vertical video (side by side for a
    horizontal one) and makes the tutorial or tour ready.
 3. The Recorder starts (Game View input at the video's size, 30 fps, constant frame rate, H.264

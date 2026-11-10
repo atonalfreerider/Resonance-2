@@ -248,7 +248,17 @@
   },
   {
    "from": "62",
-   "to": "66",
+   "to": "64",
+   "view": "Torus",
+   "text": "The melody returns (A′): this time the way home is shorter",
+   "speech": "The melody returns, but Chopin shortens the way home.",
+   "sourceIds": [
+    "score"
+   ]
+  },
+  {
+   "from": "64",
+   "to": "67",
    "view": "Torus",
    "compare": {
     "first": [
@@ -276,26 +286,78 @@
     "added": [
      "73",
      "end"
+    ],
+    "follow": [
+     [
+      "62",
+      "1",
+      5
+     ],
+     [
+      "67",
+      "14",
+      6
+     ]
     ]
    },
-   "text": "A and A′ side by side: bars 6 to 13 are left out of the return",
-   "speech": "The melody returns, but notice what Chopin leaves out. After this first phrase he skips the detour and the repeat, and goes straight to the climb. The range was built the first time; now the release comes sooner.",
-   "sourceIds": [
-    "score"
-   ]
-  },
-  {
-   "from": "66",
-   "to": "67",
-   "view": "Torus",
-   "narrate": false,
-   "text": "Straight to the climb",
+   "text": "A and A′ side by side: bars 6 to 13, in gold, are left out of the return",
+   "speech": "In gold, bars 6 to 13 of the first time through: a second phrase, then the opening again. Watch the return reach the cut.",
    "sourceIds": [
     "score"
    ]
   },
   {
    "from": "67",
+   "to": "68:2",
+   "view": "Torus",
+   "compare": {
+    "first": [
+     "1",
+     "21:2"
+    ],
+    "second": [
+     "62",
+     "end"
+    ],
+    "highlight": [
+     "6",
+     "14"
+    ],
+    "missingAt": "67",
+    "labels": [
+     "A",
+     "A′",
+     "bars 6–13",
+     "cut here",
+     "A and A′, side by side",
+     "A′ leaves out bars 6–13 of A, and adds an outro",
+     "outro"
+    ],
+    "added": [
+     "73",
+     "end"
+    ],
+    "follow": [
+     [
+      "62",
+      "1",
+      5
+     ],
+     [
+      "67",
+      "14",
+      6
+     ]
+    ]
+   },
+   "text": "Bar 67: the return skips bars 6–13 and goes straight to the climb",
+   "speech": "This time Chopin skips them, straight to the climb.",
+   "sourceIds": [
+    "score"
+   ]
+  },
+  {
+   "from": "68:2",
    "to": "70",
    "view": "Torus",
    "picture": "wodzinska",
@@ -309,6 +371,7 @@
   {
    "from": "70",
    "to": "73",
+   "narrationStart": "70:2",
    "view": "Torus",
    "text": "The sigh returns, over the chord path that opens Pachelbel's Canon: E, B, C♯ minor, G♯ minor, A",
    "speech": "Beneath the sigh, the chords walk the path of Pachelbel's Canon: each bright major chord answered by a darker minor one. Bittersweet.",

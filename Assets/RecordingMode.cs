@@ -12,6 +12,9 @@ public sealed class RecordingMode : MonoBehaviour
     public static bool Active {get;private set;}
     // Where a vertical frame's captions start, as a fraction of the height.
     public const float CaptionTop=.62f;
+    // A frame's step for fades and glides: while a video records, frames advance by the capture step, not the
+    // wall clock (rendering is slower than real time), so a fade lasts as long in the video as it does live.
+    public static float Step=>Time.captureDeltaTime>0?Time.captureDeltaTime:Time.unscaledDeltaTime;
     static readonly string[] Hidden={"controls","visualization-views","tuck-side-menu","tuck-song-library","song-library","rack-play-pause","load-progress","time-rack-seek","tutorial-back","tutorial-next","tutorial-skip","tutorial-progress","song-story-footer"};
     VisualElement root;readonly VisualElement[] found=new VisualElement[Hidden.Length];readonly bool[] hid=new bool[Hidden.Length];
     public void Bind(VisualElement ui){root=ui;}

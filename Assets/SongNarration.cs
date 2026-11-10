@@ -90,7 +90,7 @@ public sealed class SongNarration : MonoBehaviour
         Speaking=duck<1;
         // Duck quickly ahead of the voice, recover gently after it.
         // While a video records, frames advance by the capture step, not the wall clock (rendering is slower).
-        float dt=Time.captureDeltaTime>0?Time.captureDeltaTime:Time.unscaledDeltaTime;
+        float dt=RecordingMode.Step;
         MusicGain=Mathf.Lerp(MusicGain,duck,1-Mathf.Exp(-dt*(Speaking?16:released?50:4)));
         voice.volume=(GetComponent<Main>().Synth?.Volume??0)*.95f;
     }

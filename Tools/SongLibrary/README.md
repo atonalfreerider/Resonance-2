@@ -275,6 +275,22 @@ Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/narration.py PreparedS
 `build_director_tour.py` writes `story.draft.json` into the newest matching bundle, publishes it and writes
 the tour script with every cue's time and words to `Reports/SongProcessing/<bundle>/`.
 
+**Two passages side by side.** A cue's `compare` shows two passages as wheels on one card (`PassageComparison`),
+for a point made by comparison, such as an abridged return:
+
+```json
+"compare": {"first": ["1", "21:2"], "second": ["62", "end"], "highlight": ["6", "14"], "missingAt": "67",
+            "added": ["73", "end"], "follow": [["62", "1", 5], ["67", "14", 6]],
+            "labels": ["A", "A′", "bars 6–13", "cut here", "title", "note under the wheels", "outro"]}
+```
+
+`highlight` is lit on the first wheel and `missingAt` is cut open on the second; `added` is what the second adds.
+`follow` lists runs of bars the second plays as the first did (`[second bar, first bar, bars]`): a ghost playhead
+on the first wheel follows the music through them, and where the second skips, the ghost leaps across the lit
+span while the cut flashes. Keep the card up across the skip itself (two cues with the same `compare` keep one
+card). In the Torus view the card, like a history picture, takes its own part of the screen (the top in a
+portrait layout, the left in a landscape one) and the torus moves into the rest.
+
 **Checking a tour with TypeSafe (Jev).** `tour_check.py` asks TypeSafe's System One model two kinds of question,
 with the decisions kept in code and the answers cached by request in `SongLibraryData/typesafe-cache.json`:
 

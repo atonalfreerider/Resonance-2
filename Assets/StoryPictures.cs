@@ -20,6 +20,8 @@ public sealed class StoryPictures : MonoBehaviour
     Task<List<KeyValuePair<string,byte[]>>> pending;int revision=-1;
     string shown,wanted,loadedFolder;VisualizationViews.View lastView;int suppressedCue=-1,lastCue=-1;TutorialDirector tutorial;MidiPlayer clock;float alpha,placedAlpha=-1,placedWidth,placedHeight,placedLeft=-1,placedDock=-1;string placedPlacement;
     public string Shown=>alpha>.5f?shown:null;
+    // In the Torus view the picture has its own part of the screen (VisualizationViews.ShareScreen).
+    Rect sharedSlot=new(0,0,-1,-1),placedSlot=new(0,0,-1,-1);
     public int Loaded=>textures.Count;
     const float FadeSeconds=.45f;
 
@@ -109,7 +111,11 @@ public sealed class StoryPictures : MonoBehaviour
         double until=Math.Min(cue.end,cue.narrationEnd>0?Math.Min(cue.narrationEnd+1.2,cue.start+14):cue.start+8);
         bool timely=clock==null||clock.Position<until;
         wanted=timely&&!string.IsNullOrEmpty(cue.image)&&textures.ContainsKey(cue.image)?cue.image:null;
-        float step=Main.ReducedMotion?1:Time.unscaledDeltaTime/FadeSeconds;
+        // In the Torus view the picture takes its own part of the screen and the torus moves aside, so neither
+        // covers the other (a concerto's tori keep their compact corner layout).
+        bool concerto=clock?.HarmonicPrepared?.PianoConcerto==true;
+        sharedSlot=views.SharesScreen&&!concerto?views.ShareScreen(wanted!=null,SharedCard(wanted??shown)):new Rect(0,0,-1,-1);
+        float step=Main.ReducedMotion?1:RecordingMode.Step/FadeSeconds;
         // Fade out whatever is up before the next picture takes the card.
         if(shown!=wanted){alpha=Mathf.MoveTowards(alpha,0,step);if(alpha<=0){shown=wanted;if(shown!=null)Fill(cue);}}
         else if(shown!=null)alpha=Mathf.MoveTowards(alpha,1,step);
@@ -128,7 +134,25 @@ public sealed class StoryPictures : MonoBehaviour
     {
         var texture=textures[shown];picture.style.backgroundImage=new StyleBackground(texture);
         caption.text=cue.imageCaption??"";caption.style.display=string.IsNullOrEmpty(caption.text)?DisplayStyle.None:DisplayStyle.Flex;
-        credit.text=cue.imageCredit??"";placement=cue.imagePlacement??"";placedWidth=-1;
+        credit.text=cue.imageCredit??"";placement=cue.imagePlacement??"";placedWidth=-1;placedSlot=new Rect(0,0,-1,-1);
+    }
+    // The picture's size when it shares the screen with the torus: about a fifth of the height, across the top
+    // in a portrait layout; about a quarter of the width, at the left in a landscape one.
+    Vector2 SharedImage(string image)
+    {
+        float width=root.resolvedStyle.width,height=root.resolvedStyle.height;if(!float.IsFinite(width)||width<10)return Vector2.zero;
+        var texture=image!=null&&textures.TryGetValue(image,out var t)?t:null;
+        float aspect=texture!=null?Mathf.Clamp(texture.width/(float)Mathf.Max(1,texture.height),.55f,2.2f):1.4f,iw,ih;
+        if(views.Portrait){ih=Mathf.Clamp(height*.2f,140,420);iw=ih*aspect;float most=width*.8f;if(iw>most){iw=most;ih=iw/aspect;}}
+        else{iw=Mathf.Clamp(width*.24f,200,520);ih=iw/aspect;float most=height*.6f;if(ih>most){ih=most;iw=ih*aspect;}}
+        return new Vector2(iw,ih);
+    }
+    // The whole card: the picture, then its caption and credit (their height as laid out, once it has been).
+    Vector2 SharedCard(string image)
+    {
+        var size=SharedImage(image);if(size==Vector2.zero)return size;
+        float chrome=Chrome;if(image!=null&&image==shown&&card.resolvedStyle.display==DisplayStyle.Flex&&float.IsFinite(picture.resolvedStyle.height)){float laid=card.resolvedStyle.height-picture.resolvedStyle.height;if(float.IsFinite(laid)&&laid>chrome)chrome=laid;}
+        return new Vector2(Mathf.Max(size.x+16,MinCardWidth),size.y+chrome);
     }
     // Placed where the featured view leaves room, below the view bar and above the caption:
     // in the overview, the lyric column above the strip (between the wheels and the torus); in
@@ -142,6 +166,20 @@ public sealed class StoryPictures : MonoBehaviour
     {
         float width=root.resolvedStyle.width,height=root.resolvedStyle.height;
         if(!float.IsFinite(width)||width<1||height<1)return;
+        // Sharing the screen: inside its slot, fitted to it; it keeps its place while it fades out.
+        if(sharedSlot.width>10&&sharedSlot.height>10)
+        {
+            if(placedSlot.width>0&&(sharedSlot==placedSlot||wanted==null))return;
+            placedSlot=sharedSlot;placedWidth=-1;
+            var image=SharedImage(shown);var whole=SharedCard(shown);float chrome=whole.y-image.y;
+            float fit=Mathf.Min(1,(sharedSlot.width-16)/Mathf.Max(1,image.x),(sharedSlot.height-chrome)/Mathf.Max(1,image.y));
+            float iw=image.x*fit,ih=image.y*fit,cw=Mathf.Min(sharedSlot.width,Mathf.Max(iw+16,MinCardWidth)),ch=ih+chrome;
+            picture.style.width=iw;picture.style.height=ih;card.style.width=cw;
+            card.style.left=sharedSlot.x+(sharedSlot.width-cw)*.5f;
+            card.style.top=views.Portrait?sharedSlot.y:sharedSlot.y+Mathf.Max(0,(sharedSlot.height-ch)*.5f);
+            return;
+        }
+        placedSlot=new Rect(0,0,-1,-1);
         float left=views.PanelHidden?20:controls.resolvedStyle.width+20,dock=library!=null?library.DockedWidth:0;
         var view=views.Current;var strip=views.LyricStrip;
         bool instrumental=(clock?.HarmonicPrepared?.Lyrics?.Lines?.Length??0)==0;

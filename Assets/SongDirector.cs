@@ -15,8 +15,10 @@ public sealed class SongDirector : MonoBehaviour
         public float soloGain,narrationEnd; public double soloUntil; public string visualStem,concertoFocus,melodyTarget; public bool directedMelody; public int annotationPitchClass=-1,annotationMidiPitch=-1;
         // Two passages side by side (PassageComparison): [start, end) song seconds each, the span of the first that
         // the second leaves out, where in the second it is missing, what the second adds, and the labels (first,
-        // second, lit span, cut, title, note, added).
-        public double[] compareFirst,compareSecond,compareHighlight,compareAdded;public double compareMissingAt=-1;public string[] compareLabels; }
+        // second, lit span, cut, title, note, added). compareFollow: where the second passage is in the first, as
+        // knots (second time, first time, ...) in runs of compareFollowRuns knots; a ghost playhead on the first wheel
+        // follows it, and leaps across what the second leaves out.
+        public double[] compareFirst,compareSecond,compareHighlight,compareAdded,compareFollow;public double compareMissingAt=-1;public string[] compareLabels;public int[] compareFollowRuns; }
     [Serializable] public sealed class Narrator { public string name,voice,language; }
     [Serializable] public sealed class Story {
         public int version;public string title,midiSha256,audioSha256,patternsSha256,model;public double duration;public Cue[] cues;public Narrator narrator;
@@ -148,7 +150,7 @@ public sealed class SongDirector : MonoBehaviour
         // views, not uncoiling, not unrolled flat).
         orbit??=Camera.main!=null?Camera.main.GetComponent<CameraControl>():null;
         if(midi.IsPlaying&&orbit!=null&&orbit.enabled&&!main.Uncoiled&&!main.UncoilMoving&&(views.Current==VisualizationViews.View.Torus||views.Current==VisualizationViews.View.TorusLyrics||views.Current==VisualizationViews.View.Overview))
-            orbit.Turn(-OrbitSpeed*Time.unscaledDeltaTime);
+            orbit.Turn(-OrbitSpeed*RecordingMode.Step);
         if(index>=0){
             var active=story.cues[index];var narration=GetComponent<SongNarration>();
             bool release=(active.soloUntil>0&&now>=active.soloUntil)||(active.releaseSoloAfterNarration&&(narration==null||narration.CueFinished(index,now)));

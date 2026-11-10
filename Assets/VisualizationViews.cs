@@ -31,6 +31,20 @@ public sealed class VisualizationViews : MonoBehaviour
     public float SceneTopInset,SceneBottomInset;
     // How much closer the Torus view's camera sits (the tutorial doubles the torus in a portrait window).
     public float TorusZoom=1;
+    // Graphics that share the screen with the torus in the Torus view (a story picture, the passage comparison)
+    // ask for room every frame they want to show and are given a slot: above the torus in a portrait layout, at
+    // the left beside it in a landscape one. The torus glides into the rest of the screen, scaled down only if
+    // that is short, so neither covers the other; a vertical recording also keeps it above its captions. Only
+    // the scene camera's projection moves, so no viewport edge cuts anything off.
+    public bool SharesScreen=>Current==View.Torus&&camera!=null&&!camera.orthographic;
+    public bool Portrait {get;private set;}
+    public Rect GraphicSlot {get;private set;}
+    public Rect ShareScreen(bool wanted,Vector2 size){if(wanted){shareNext=true;shareSizeNext=Vector2.Max(shareSizeNext,size);}return GraphicSlot;}
+    bool shareNext,sharing,framed;Vector2 shareSizeNext,shareSize,framedShift;float framedScale=1;
+    // The torus's extent around the point the camera looks at, as fractions of the frame (the smaller side of the
+    // camera's part of the screen): half its width (with its chord labels), above, below; coiled, and uncoiled
+    // into the circle of fifths.
+    static readonly Vector3 CoiledExtent=new(.54f,.3f,.44f),UncoiledExtent=new(.44f,.38f,.37f);
     VisualElement root,panel,overlay,toolbar;Button tuck;
     DropdownField viewChoice;
     Toggle uncoil;
@@ -102,7 +116,7 @@ public sealed class VisualizationViews : MonoBehaviour
         using var perf=Perf.Views.Auto();
         if(root==null||camera==null)return;
         uncoil?.SetValueWithoutNotify(GetComponent<Main>().Uncoiled);
-        float blend=Main.ReducedMotion?1:1-Mathf.Exp(-Time.unscaledDeltaTime*8);
+        float blend=Main.ReducedMotion?1:1-Mathf.Exp(-RecordingMode.Step*8);
         panelOpen=Mathf.Lerp(panelOpen,PanelHidden||RecordingMode.Active?0:1,blend);
         float width=root.resolvedStyle.width,height=root.resolvedStyle.height;
         if(!float.IsFinite(width)||width<1||height<1)return;
@@ -171,6 +185,7 @@ public sealed class VisualizationViews : MonoBehaviour
         // The orbit's side framing recomputes the camera's place; while a view change lerps the
         // camera the two would fight and jitter, so it waits until the orbit is back in charge.
         if(orbit!=null&&orbit.enabled&&!cameraMoving)orbit.SideFrame=sideFrame*split;
+        FrameTorus(shown,height,portrait,blend);
         // Nothing to wheel before a song is chosen: the intro stands alone.
         overlay.style.visibility=timelineOpacity<.005f||!GetComponent<MidiPlayer>().Loaded?Visibility.Hidden:Visibility.Visible;
         // The lyric strip: between the wheels and the torus in the overview, larger in lyric mode.
@@ -220,7 +235,47 @@ public sealed class VisualizationViews : MonoBehaviour
             renderer.SetPropertyBlock(block);
         }
     }
+    // Where the torus sits in the Torus view: the middle of the camera's part of the screen, unless a graphic
+    // shares the screen or a vertical recording's captions take the lower part. Then the room left to the torus
+    // is worked out and the projection is shifted (and scaled down if the room is short) to put the torus in its
+    // middle, eased so it glides. Not while the tutorial frames the torus itself (insets, zoom).
+    void FrameTorus(Rect shown,float height,bool portrait,float blend)
+    {
+        sharing=shareNext;shareNext=false;if(sharing)shareSize=shareSizeNext;shareSizeNext=Vector2.zero;
+        Portrait=portrait;
+        bool recordingVertical=RecordingMode.Active&&portrait;
+        var room=shown;room.yMin=Mathf.Max(room.yMin,RecordingMode.Active?16:60);room.xMin+=16;room.xMax-=16;
+        if(recordingVertical)room.yMax=Mathf.Min(room.yMax,height*RecordingMode.CaptionTop-12);
+        if(sharing)
+        {
+            if(portrait){float h=Mathf.Min(shareSize.y,room.height*.5f);GraphicSlot=new Rect(room.x,room.y,room.width,h);room.yMin+=h+12;}
+            else{float w=Mathf.Min(shareSize.x,room.width*.48f),bottom=height-(RecordingMode.Active?110:130);GraphicSlot=new Rect(room.x+8,room.y,w,Mathf.Max(100,bottom-room.y));room.xMin+=w+40;}
+        }
+        bool own=SceneTopInset==0&&SceneBottomInset==0&&Mathf.Approximately(TorusZoom,1);
+        Vector2 shift=Vector2.zero;float scale=1;
+        if(SharesScreen&&own&&(sharing||recordingVertical)&&room.width>40&&room.height>40)
+        {
+            var main=GetComponent<Main>();var extent=Vector3.Lerp(CoiledExtent,UncoiledExtent,main!=null?main.UncoilAmount:0);
+            float frame=Mathf.Min(shown.width,shown.height);
+            scale=Mathf.Clamp(Mathf.Min(room.width/(2*extent.x*frame),room.height/((extent.y+extent.z)*frame)),.3f,1);
+            // The camera looks at the torus's centre, the middle of its part of the screen. That point moves so the
+            // torus itself (which reaches further below the point than above it) is centred in the room.
+            float x=portrait?shown.center.x:room.center.x,y=portrait?room.center.y-(extent.z-extent.y)*.5f*frame*scale:shown.center.y;
+            shift=new Vector2(x-shown.center.x,y-shown.center.y);
+        }
+        framedShift=Vector2.Lerp(framedShift,shift,blend);framedScale=Mathf.Lerp(framedScale,scale,blend);
+        if((framedShift-shift).sqrMagnitude<.04f)framedShift=shift;
+        if(Mathf.Abs(framedScale-scale)<.0005f)framedScale=scale;
+        if(camera.orthographic){framed=false;return;}
+        if(framedShift==Vector2.zero&&framedScale==1){if(framed){camera.ResetProjectionMatrix();framed=false;}return;}
+        // The ordinary projection, scaled about its centre and moved: a shift in normalised device coordinates is
+        // the off-centre term (the third column) of a perspective matrix. Panel y runs down, device y up.
+        camera.ResetProjectionMatrix();var p=camera.projectionMatrix;
+        p.m00*=framedScale;p.m11*=framedScale;
+        p.m02-=2*framedShift.x/Mathf.Max(1,shown.width);p.m12+=2*framedShift.y/Mathf.Max(1,shown.height);
+        camera.projectionMatrix=p;framed=true;
+    }
     static float Snap(float value)=>value<.0001f?0:value>.9999f?1:value;
     void OnDestroy(){if(clear!=null)Destroy(clear.gameObject);}
-    void OnDisable(){foreach(var renderer in renderers)if(renderer!=null){renderer.forceRenderingOff=false;renderer.GetPropertyBlock(block);block.SetFloat("_ViewOpacity",1);renderer.SetPropertyBlock(block);}foreach(var entry in replacedShaders)if(entry.Key!=null)entry.Key.shader=entry.Value;replacedShaders.Clear();if(orbit!=null)orbit.enabled=true;}
+    void OnDisable(){if(framed&&camera!=null){camera.ResetProjectionMatrix();framed=false;framedShift=Vector2.zero;framedScale=1;}foreach(var renderer in renderers)if(renderer!=null){renderer.forceRenderingOff=false;renderer.GetPropertyBlock(block);block.SetFloat("_ViewOpacity",1);renderer.SetPropertyBlock(block);}foreach(var entry in replacedShaders)if(entry.Key!=null)entry.Key.shader=entry.Value;replacedShaders.Clear();if(orbit!=null)orbit.enabled=true;}
 }

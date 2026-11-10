@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import build_director_tour
+import story
 import tour_check
 from score_bars import BarClock
 
@@ -60,6 +61,23 @@ class BarTimes(unittest.TestCase):
         self.assertEqual([(c['start'], c['end']) for c in cues], [(0, 2.5), (2.5, 8.5), (8.5, 11.0)])
         self.assertEqual(cues[1]['soloUntil'], 6.5)
         self.assertNotIn('from', cues[1])
+
+    def test_follow_runs_become_knots(self):
+        # The second passage (bars 2-3) plays bar 1 again at bar 2, then skips to bar 3 of the first at bar 3.
+        compare = dict(first=['1', '3:2'], second=['2', 'end'], follow=[['2', '1', 1], ['3', '2:1', 1]])
+        with self.assertRaises(ValueError):
+            build_director_tour.timed_cues(dict(cues=[dict(start=0, text='a', compare=compare)]), self.clock)  # 2:1 is not a bar line
+        compare['follow'] = [['2', '1', 1], ['3', '2', 1]]
+        cue = build_director_tour.timed_cues(dict(cues=[dict(start=0, text='a', compare=compare)]), self.clock)[0]
+        self.assertEqual(cue['compareFollow'], [4.5, 2.5, 8.5, 4.5, 8.5, 4.5, 10.5, 8.5])
+        self.assertEqual(cue['compareFollowRuns'], [2, 2])
+        self.assertEqual(build_director_tour.shift_bar('9#2', 2), '11#2')
+        story_cue = dict(cue, view='Torus', stem='', uncoil=False)
+        story.validate_cues([story_cue], 11.0, [])
+        for broken in (dict(compareFollowRuns=[3, 1]), dict(compareFollow=[4.5, 2.5, 4.4, 4.5, 8.5, 4.5, 10.5, 8.5]),
+                       dict(compareFollow=[4.5, 2.5, 8.5, 9.9, 8.5, 4.5, 10.5, 8.5])):
+            with self.assertRaises(ValueError):
+                story.validate_cues([dict(story_cue, **broken)], 11.0, [])
 
 
 class Checks(unittest.TestCase):
