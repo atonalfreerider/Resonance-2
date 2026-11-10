@@ -1,6 +1,7 @@
 {
  "title": "Chopin: the melody he loved most",
  "bundle": "Chopin---Etude-Op-10-No-3-in-E-major-*",
+ "assets": "SongLibraryData/scores/chopin-op10-3",
  "narrativeStyle": "John's directed tour: an étude as a study of the hand, the bittersweet single-voice melody, a bridge that swells, spins and is steadied by alternating sixths, and an abridged return",
  "narrationTargetFraction": 0.5,
  "narrator": {
@@ -32,7 +33,40 @@
    "url": "https://imslp.org/wiki/%C3%89tudes,_Op.10_(Chopin,_Fr%C3%A9d%C3%A9ric)"
   }
  ],
- "pictures": {},
+ "pictures": {
+  "delacroix": {
+   "file": "pictures/delacroix-1838.jpg",
+   "caption": "Chopin, painted by Eugène Delacroix in 1838",
+   "credit": "Eugène Delacroix, 1838 / Wikimedia Commons · Public domain",
+   "license": "Public domain",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Eug%C3%A8ne_Ferdinand_Victor_Delacroix_043.jpg",
+   "placement": "right"
+  },
+  "gutmann": {
+   "file": "pictures/gutmann-1879.jpg",
+   "caption": "Adolph Gutmann, Chopin's pupil and copyist",
+   "credit": "Lithograph, Allgemeine Moden-Zeitung, 1879 / Wikimedia Commons · Public domain",
+   "license": "Public domain",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Adolphe_Gutmann5.jpg",
+   "placement": "right"
+  },
+  "clean-copy": {
+   "file": "pictures/clean-copy-no3.jpg",
+   "caption": "Chopin's clean copy for the printer: still 'Vivace ma non troppo'",
+   "credit": "Frédéric Chopin, autograph, 1832-33 / Wikimedia Commons · Public domain",
+   "license": "Public domain",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Chopin_Op.10_No.3_opening.jpeg",
+   "placement": "center"
+  },
+  "wodzinska": {
+   "file": "pictures/wodzinska-1836.jpg",
+   "caption": "Chopin in 1836, a watercolour by Maria Wodzińska",
+   "credit": "Maria Wodzińska, 1836 / Wikimedia Commons · Public domain",
+   "license": "Public domain",
+   "commonsPage": "https://commons.wikimedia.org/wiki/File:Chopin,_by_Wodzinska.JPG",
+   "placement": "right"
+  }
+ },
  "cues": [
   {
    "start": 0,
@@ -42,7 +76,8 @@
    "speech": "Chopin told his pupil Adolph Gutmann that he had never in his life written another such beautiful melody. This is that melody: the Étude in E major, Opus 10, Number 3.",
    "sourceIds": [
     "niecks"
-   ]
+   ],
+   "picture": "delacroix"
   },
   {
    "from": "3",
@@ -59,12 +94,13 @@
   {
    "from": "6",
    "to": "9",
-   "view": "Torus",
+   "view": "Overview",
    "text": "“O, my fatherland!”",
    "speech": "Once, while Gutmann was studying it, Chopin lifted his clasped hands and exclaimed: O, my fatherland!",
    "sourceIds": [
     "niecks"
-   ]
+   ],
+   "picture": "gutmann"
   },
   {
    "from": "9",
@@ -77,7 +113,8 @@
    "sourceIds": [
     "henle",
     "wikipedia"
-   ]
+   ],
+   "picture": "clean-copy"
   },
   {
    "from": "14",
@@ -185,14 +222,15 @@
   {
    "from": "67",
    "to": "70",
-   "view": "Torus",
+   "view": "Overview",
    "narrate": true,
    "text": "The single voice again: hold one long note, sigh downward, each phrase lower than the last",
    "sourceIds": [
     "wikipedia",
     "score"
    ],
-   "speech": "Its nickname is Tristesse, sadness. Yet each phrase holds a long note, then sighs downward, beginning lower each time."
+   "speech": "Its nickname is Tristesse, sadness. Yet each phrase holds a long note, then sighs downward, beginning lower each time.",
+   "picture": "wodzinska"
   },
   {
    "from": "70",

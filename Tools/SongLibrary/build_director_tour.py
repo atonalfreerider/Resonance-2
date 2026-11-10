@@ -78,7 +78,13 @@ def build(director_path, bundle=None):
     director_path = Path(director_path).resolve()
     director = json.loads(director_path.read_text(encoding='utf-8'))
     bundle = Path(bundle).resolve() if bundle else find_bundle(director['bundle'])
-    draft = {k: v for k, v in director.items() if k not in ('cues', 'bundle')}
+    draft = {k: v for k, v in director.items() if k not in ('cues', 'bundle', 'assets')}
+    # Picture files named relative to the director's assets folder (e.g. SongLibraryData/scores/<song>), which
+    # holds the downloaded originals; publish copies them into the bundle at card size.
+    assets = (ROOT/director['assets']) if director.get('assets') else director_path.parent
+    for picture in draft.get('pictures', {}).values():
+        if not Path(picture['file']).is_absolute():
+            picture['file'] = str((assets/picture['file']).resolve())
     draft['cues'] = timed_cues(director, BarClock(bundle))
     atomic_json(bundle/'story.draft.json', draft)
     result = publish(bundle)
