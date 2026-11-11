@@ -314,6 +314,40 @@ Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/tour_check.py beats <d
 The evidence file (sources' passages, the beats, the candidate passages) lives with the song's source files in
 `SongLibraryData/scores/<song>/evidence.json`, not in git. The key is `typesafeKeyFile` in settings.
 
+### Narration takes, duck floors, word timing and the narration check
+
+```powershell
+Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/narration.py PreparedSongs/Library/<song> --check
+Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/narration_check.py PreparedSongs/Library/<song>
+Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/story_timing.py PreparedSongs/Library/<song>
+```
+
+- **A new take of one line.** A cue's `take` (a whole number, 0 when absent) is part of its voice's cache identity:
+  give a line `"take": 1` (then 2, ...) and `narration.py` renders that line again while every other line comes from
+  the cache. ElevenLabs also gets the take as the request's `seed`, so a take is a reading of its own and (best effort)
+  the same reading if it is ever rendered again. Take 0 adds nothing, so voices rendered before takes existed are reused.
+- **Duck floors.** A story's `duckFloor` (top level of the draft or director file) and a cue's own `duckFloor` (which
+  wins) keep a passage's music up under the voice: a linear music gain above 0 and at most 0.8, and the line's `duck`
+  becomes the larger of the measured duck and the floor, even where the voice then stands less than 10 dB clear.
+  narration.json keeps `duckMeasured` and `duckFloor` beside `duck` on such a line. SongNarration, `preview.mp3` and
+  the editor's package all play `duck`; changing a floor renders no speech again.
+- **Word timing.** After every render, `narration.py` runs `story_timing.py` in the model environment: each spoken
+  line's words (its `speech`, or its caption when it has none) are force-aligned in the voice track by the MMS aligner
+  (on the GPU when there is one; about ten seconds for a tour), and its segment gets `spokenWords`, `spokenStarts` and
+  `spokenEnds` (seconds from the line's start). `wordStarts`/`wordEnds` carry the same times for SongRecordingCaptions,
+  so the lit word follows the voice even where the speech is worded differently from the caption; the editor's
+  package reads `spokenStarts`. Run `story_timing.py` by hand to align an existing narration again.
+- **Hearing it back.** `narration_check.py` (or `--check` after a render) transcribes every line offline with Whisper
+  (`openai/whisper-small.en` from the local Hugging Face cache) and compares it with the script: a phrase said twice,
+  words missing, added or changed, and, critical, a changed note name, major/minor or number. What Whisper changes on
+  its own is tolerated: punctuation, case, hyphens, Op./Opus, No./Number, digits, dates and $, small words it drops
+  or swaps (an/in), homophones (sighs/size) and its spelling of names and foreign words (Gorlatch/Gorlach,
+  étude/etude). A repeated single word is flagged, not critical. Transcriptions are cached by each clip's
+  samples in `SongLibraryData/narration-check-cache`, so after a new take only that line is heard again. The report
+  (`narration-check.txt`, and `.json`) goes to `Reports/SongProcessing/<bundle>/`, with each issue's time in the
+  recording; the exit status is 1 on a critical issue and 2 when the narration cannot be checked (a narration older
+  than its story).
+
 ### Piano concerto tours
 
 `concertoFocus` selects `piano-only`, `orchestra-only`, `piano`, `orchestra`, or `balanced`. These

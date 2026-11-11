@@ -10,8 +10,8 @@ import urllib.request
 from pathlib import Path
 import numpy as np
 import soundfile as sf
-from common import DATA, atomic_json, read_json, sha, validate_bundle
-from story import validate_cues
+from common import DATA, MODEL_PYTHON, ROOT, atomic_json, read_json, run, sha, validate_bundle
+from story import duck_floor, validate_cues
 
 RATE=24000
 # Music under a spoken line is ducked until the voice stands this far above it.
@@ -123,12 +123,55 @@ PROVIDERS=('openai','cartesia','elevenlabs')
 MODELS=dict(openai='gpt-4o-mini-tts',cartesia='sonic-3.6',elevenlabs='eleven_v4')
 
 
+def speech_request(cue,provider,model,voice,language,narrator):
+    """One line's speech request and its cache identity. Take 0 adds nothing to either, so every line rendered before
+    takes existed keeps its cached voice; another take is a new identity, rendered once and then reused."""
+    take=cue.get('take',0)
+    if provider=='elevenlabs':
+        settings=dict(stability=.5,similarity_boost=.75)
+        if model not in ('eleven_v4','eleven_v4_turbo'):
+            settings.update(style=.15,use_speaker_boost=True)
+        text=cue.get('speech') or cue['text']
+        if narrator.get('delivery') and model in ('eleven_v4','eleven_v3'):
+            text='['+narrator['delivery']+'] '+text
+        body=dict(text=text,model_id=model,language_code=language[:2],voice_settings=settings)
+        # ElevenLabs samples a seed deterministically (best effort): a take is a reading of its own, and the same
+        # reading again if that take is ever rendered again.
+        if take:body['seed']=take
+    elif provider=='cartesia':
+        body=dict(model_id=model,voice=voice,transcript=cue.get('speech') or cue['text'],language=language,output_format=dict(container='wav',encoding='pcm_s16le',sample_rate=RATE),generation_config=dict(speed=1,volume=1))
+    else:body=dict(model=model,voice=voice,input=cue.get('speech') or cue['text'],instructions=DELIVERY,response_format='wav',speed=1.0)
+    identity=hashlib.sha256(json.dumps(dict(provider=provider,body=body,**({'voice':voice} if provider=='elevenlabs' else {}),**({'take':take} if take else {})),sort_keys=True).encode()).hexdigest()
+    return body,identity
+
+
+def align_words(bundle):
+    """Time every spoken word, for the captions and the editor's package: story_timing.py force-aligns each line's words
+    in the voice track just published and adds them to narration.json. It runs in the model environment (torchaudio)
+    whichever environment renders. Returns how many lines it aligned."""
+    try:run([MODEL_PYTHON,Path(__file__).with_name('story_timing.py'),bundle],timeout=1800)
+    except (subprocess.SubprocessError,OSError) as error:
+        detail=str(getattr(error,'stderr',None) or error).strip().splitlines()
+        # The voice track stands without word times (the captions estimate them); say so rather than hide it.
+        raise RuntimeError('The narration is published, but its words could not be aligned, so the captions estimate them'
+                           +(f' ({detail[-1]})' if detail else '')+'. Run story_timing.py on the bundle once that is fixed.') from None
+    return sum('spokenStarts' in s for s in read_json(Path(bundle)/'narration.json')['segments'])
+
+
+def check(bundle):
+    """narration_check.py on the narration just rendered, in the model environment (transformers): it prints its report
+    and returns 1 when a line has a critical difference from the script."""
+    return subprocess.run([str(MODEL_PYTHON),str(Path(__file__).with_name('narration_check.py')),str(bundle)],cwd=ROOT).returncode
+
+
 def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai',override_voice=None):
     bundle=Path(bundle).resolve();validate_bundle(bundle)
     story=read_json(bundle/'story.json');manifest=read_json(bundle/'aligned.mid.prepared.json')
     if not story or story['midiSha256']!=manifest['midiSha256'] or story['audioSha256']!=manifest['audioSha256'] or story['patternsSha256']!=sha(bundle/'aligned.mid.patterns.json'):
         raise ValueError('Generate a current story first')
     cues=validate_cues(story['cues'],story['duration'],[s['id'] for s in manifest.get('stems',[])],[s['id'] for s in story.get('sources',[])],bundle)
+    floor=story.get('duckFloor')
+    if floor is not None:duck_floor(floor,"The story's duckFloor")
     # The story names its narrator; a voice passed on the command line overrides it.
     narrator=story.get('narrator') or {}
     # A narrator from another provider brings its own key (settings: <provider>KeyFile).
@@ -145,18 +188,7 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
     def render(item):
         i,cue=item;window=speech_window(cue)
         if window is None:return i,None,1
-        if provider=='elevenlabs':
-            settings=dict(stability=.5,similarity_boost=.75)
-            if model not in ('eleven_v4','eleven_v4_turbo'):
-                settings.update(style=.15,use_speaker_boost=True)
-            text=cue.get('speech') or cue['text']
-            if narrator.get('delivery') and model in ('eleven_v4','eleven_v3'):
-                text='['+narrator['delivery']+'] '+text
-            body=dict(text=text,model_id=model,language_code=language[:2],voice_settings=settings)
-        elif provider=='cartesia':
-            body=dict(model_id=model,voice=voice,transcript=cue.get('speech') or cue['text'],language=language,output_format=dict(container='wav',encoding='pcm_s16le',sample_rate=RATE),generation_config=dict(speed=1,volume=1))
-        else:body=dict(model=model,voice=voice,input=cue.get('speech') or cue['text'],instructions=DELIVERY,response_format='wav',speed=1.0)
-        identity=hashlib.sha256(json.dumps(dict(provider=provider,body=body,**({'voice':voice} if provider=='elevenlabs' else {})),sort_keys=True).encode()).hexdigest();raw=cache/(identity+'.wav')
+        body,identity=speech_request(cue,provider,model,voice,language,narrator);raw=cache/(identity+'.wav')
         if not raw.exists():
             if provider=='elevenlabs':
                 headers={'xi-api-key':key,'Content-Type':'application/json'}
@@ -196,7 +228,12 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
         timeline[start:end]+=signal
         solo='' if cues[i].get('releaseSoloAfterNarration') or cues[i].get('soloUntil',0)>0 else cues[i]['stem'];under=music.get(solo,music[''])
         speech=band_rms(signal,RATE,0,len(signal)/RATE);level=band_rms(under[0],under[1],start/RATE,end/RATE)*(cues[i].get('soloGain',1) if solo else 1)
-        segments.append(dict(cue=i,start=start/RATE,end=end/RATE,tempoRatio=ratio,duck=round(duck_gain(speech,level),4)))
+        segment=dict(cue=i,start=start/RATE,end=end/RATE,tempoRatio=ratio,duck=round(duck_gain(speech,level),4))
+        # A floor keeps a passage's music up (the cue's own, else the story's): the line ducks no deeper, even where the
+        # voice then stands less than SPEECH_OVER_MUSIC_DB clear. Unity, the preview and the exporter read `duck`.
+        lowest=cues[i].get('duckFloor',floor)
+        if lowest is not None:segment.update(duck=round(max(segment['duck'],lowest),4),duckMeasured=segment['duck'],duckFloor=lowest)
+        segments.append(segment)
     spoken=sum(s['end']-s['start'] for s in segments)
     fraction=spoken/story['duration']
     target=story.get('narrationTargetFraction',2/3)
@@ -215,14 +252,18 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
     preview_mix(bundle,manifest,cues,segments,timeline,directory/'preview.mp3')
     metadata['previewPath']=(directory/'preview.mp3').relative_to(bundle).as_posix()
     atomic_json(bundle/'narration.json',metadata)
-    return dict(wav=str(wav),mp3=str(mp3),scenes=len(segments),duration=len(timeline)/RATE,narratedSeconds=spoken,musicOnlySeconds=story['duration']-spoken)
+    notify('Aligning the spoken words')
+    aligned=align_words(bundle)
+    return dict(wav=str(wav),mp3=str(mp3),scenes=len(segments),duration=len(timeline)/RATE,narratedSeconds=spoken,musicOnlySeconds=story['duration']-spoken,alignedLines=aligned)
 
 
 if __name__=='__main__':
     import argparse
     p=argparse.ArgumentParser();p.add_argument('bundle');p.add_argument('--key-file');p.add_argument('--voice',help="overrides the story's narrator");p.add_argument('--provider',choices=list(PROVIDERS))
+    p.add_argument('--check',action='store_true',help='then hear every line with Whisper and compare it with the script (narration_check.py); exit 1 on a critical difference')
     a=p.parse_args();settings=read_json(DATA/'settings.json') or {}
     provider=a.provider or settings.get('narrationProvider','openai')
     key_file=a.key_file or settings.get(provider+'KeyFile' if provider in ('cartesia','elevenlabs') else 'storyKeyFile')
     if not key_file:raise SystemExit('No key file: pass --key-file or configure SongLibraryData/settings.json')
     print(json.dumps(generate(a.bundle,key_file,settings.get('narrationVoice'),provider=provider,override_voice=a.voice),indent=2))
+    if a.check:raise SystemExit(check(Path(a.bundle).resolve()))

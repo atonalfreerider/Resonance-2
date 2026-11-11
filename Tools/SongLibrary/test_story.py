@@ -58,5 +58,20 @@ class StoryChecks(unittest.TestCase):
                 self.assertNotIn('test-only-secret',request.data.decode())
                 self.assertNotIn('test-only-secret',str(error.exception))
                 self.assertEqual((bundle/'story.json').read_text(),'previous story')
+    def test_published_story_keeps_takes_and_duck_floors(self):
+        # A director's story-level duckFloor and a cue's take and duckFloor reach story.json, where narration.py reads them.
+        from publish_story import publish
+        with tempfile.TemporaryDirectory() as folder:
+            bundle=Path(folder)
+            (bundle/'aligned.mid.prepared.json').write_text(json.dumps(dict(audioDuration=30,midiSha256='m',audioSha256='a',stems=[])))
+            (bundle/'aligned.mid.patterns.json').write_text('{}')
+            draft=dict(title='T',narrator=dict(name='N'),duckFloor=.35,cues=[dict(start=0,end=20,text='Listen.',take=2,duckFloor=.5)])
+            (bundle/'story.draft.json').write_text(json.dumps(draft))
+            with patch('publish_story.validate_bundle'):publish(bundle)
+            story=json.loads((bundle/'story.json').read_text(encoding='utf-8'))
+            self.assertEqual((story['duckFloor'],story['cues'][0]['take'],story['cues'][0]['duckFloor']),(.35,2,.5))
+            for bad in (dict(draft,duckFloor=0),dict(draft,duckFloor=1),dict(draft,cues=[dict(draft['cues'][0],take=-1)])):
+                (bundle/'story.draft.json').write_text(json.dumps(bad))
+                with self.subTest(bad=bad),patch('publish_story.validate_bundle'),self.assertRaises(ValueError):publish(bundle)
 
 if __name__=='__main__':unittest.main()

@@ -168,8 +168,22 @@ def validate_cues(cues, duration, stems, source_ids=(), bundle=None):
         validate_picture(cue, bundle)
         if 'soloGain' in cue and not (isinstance(cue['soloGain'], (int, float)) and 0 < cue['soloGain'] <= 4 and cue['stem']):
             raise ValueError('soloGain needs a soloed stem and a value up to 4')
+        # A new take renders this line again while every other line is reused (narration.py); ElevenLabs gets it as the
+        # request's seed, whose range bounds it.
+        if 'take' in cue and not (type(cue['take']) is int and 0 <= cue['take'] <= 4294967295):
+            raise ValueError('take must be a whole number from 0 (the first take) to 4294967295')
+        if 'duckFloor' in cue:
+            duck_floor(cue['duckFloor'])
         last = end
     return cues
+
+
+def duck_floor(value, name='duckFloor'):
+    """The lowest music gain a spoken line may duck to (linear): a passage that keeps its music up under the voice.
+    At most 0.8, the gentlest duck narration.py ever uses, so a floor only lifts a line within the ducks' own range."""
+    if not (isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and 0 < value <= .8):
+        raise ValueError(f'{name} must be a linear music gain above 0 and at most 0.8')
+    return value
 
 
 def validate_picture(cue, bundle):

@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from PIL import Image
 from common import atomic_json, read_json, sha, validate_bundle
-from story import settle_transitions, validate_cues
+from story import duck_floor, settle_transitions, validate_cues
 
 PICTURES = 'story/pictures'
 LONG_EDGE = 720
@@ -78,6 +78,8 @@ def publish(bundle, draft_path=None):
                  cues=cues)
     for field in ('pianoMelody','orchestraMelody'):
         if field in draft: story[field]=draft[field]
+    # The music level no spoken line ducks below; narration.py reads it (a cue's own duckFloor wins).
+    if 'duckFloor' in draft: story['duckFloor']=duck_floor(draft['duckFloor'],"The draft's duckFloor")
     atomic_json(bundle/'story.json', story)
     spoken = [c for c in cues if c.get('narrate', True)]
     words = sum(len((c.get('speech') or c['text']).split()) for c in spoken)
