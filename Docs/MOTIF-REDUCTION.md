@@ -1620,3 +1620,34 @@ Generator order signs on the wheel:
 - §14.8 (step 1): an empty `annotationAnchor` is no anchor, like a missing one: `SongDirector.Read` and `validate_cues`
   accept it instead of rejecting it as outside the grammar. Every other value must match the grammar against the whole
   string (`\z` in C#, `re.fullmatch` in Python), since `$` alone also accepts a trailing newline.
+- §1, §3 A2 (step 2): a score import's ticks are in the score's division, and the aligned MIDI's PPQ can differ (480
+  against 32,640 for the étude, so "480 in every bundle seen" does not hold). An import note's MIDI tick is therefore
+  round((tick + ScoreLeadInBeats·division)·ppq/division), rounded half to even as the importer writes its MIDI, not
+  tick + ScoreLeadInBeats·ppq. Unison doubles in two voices (the étude's E2 in both left-hand voices) take the MIDI note
+  nearest their written length, and the 98% share is counted against the larger of the two note counts.
+- §3 A1 (step 2): in compound meters (a dotted-quarter tactus) weight 1 falls on the tactus's thirds, the eighths, not
+  on its half, which is a sixteenth between two of them.
+- §3 A2 (step 2): without a score, a short note (at most half a slot, its lane moving on within a slot) is a grace only
+  when it leads into a longer note: at most three such onsets, a slot apart at most, then an onset holding a longer note.
+  A longer run is a roll, tremolo or run. Under the Rach2 Allegro's half-note tactus (a slot is a sixteenth) the literal
+  rule made 1,150 32nd strokes of its timpani rolls into graces, each attached to a note up to 48 beats later; now 20
+  notes are graces, each before a longer note, and Ticket to Ride keeps its 30 guitar slides.
+- §3 A4 (step 2): the skyline counts an earlier note as still sounding only while it lasts more than one slot past the
+  onset, so a legato release a few ticks late (as transcriptions have) does not hide the next note of the line. A staff's
+  voices with fewer than 8 notes are not lost: they form that staff's "other voices" rest stream. Notes an accepted import
+  did not match form their lane's line and rest.
+- §3 A5 (step 2): a pitch class with a spelling inside the local key's span (tonic −1 … +5 in major, the harmonic-minor
+  −4 … +5 in minor) takes that spelling; only chromatic notes take the spelling nearest the centre of gravity. The centre
+  alone drifts in flat-heavy passages: on the Nocturne (MIDI only) it spelled 17 of B♭ minor's 49 leading tones B𝄫, and
+  the diatonic B♭ and C of D♭ major as C𝄫 and D𝄫. F28 (a G♭ chord before F7) fails without the span. The étude's
+  agreement with its score spelling stays at the 97.2% that §3 quotes. Each key region after the first is spelled
+  nearest the key before it (D♭ major moves to G♭ major, not F♯), and every region's tonic then follows its notes'
+  spelling, so a score written in F♯ keeps F♯.
+- §5 C6 (step 2): the naming order (P, then the chord frame, then the regional key) is read as an order of descriptions.
+  P names the altered notes whenever the first-beat chords change between major and minor on the same root and P leaves
+  fewer altered notes than the plain tonal image (2 bits, 1.5 when it moves only sixths). The chord frame t_k^H places a
+  member only when it reproduces it exactly and neither transposition does so without altered notes; otherwise the
+  cheaper of tonal and real wins, and the regional key names the tonal image's altered notes. Clean sequences whose
+  chords move with them so stay "tonal sequence" and "real sequence" (t^H's 2 bits would otherwise undercut T_k's 2.5).
+  "Lowered" and "raised" are measured against the local key's signature (natural minor in minor keys). On the étude this
+  names 15 = 14, 16 = 6, 19 = 18, 31 = 30 and 73/74 = 17 as §5 C6 measures them.

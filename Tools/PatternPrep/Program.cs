@@ -26,7 +26,8 @@ if(args.Length==1&&args[0]=="--test-harmony"){KeyContext.SelfTest();KeyAnalysis.
 if(args.Length==2&&args[0]=="--fixture"){SelfTests.Fixture(args[1]);return;}
 if(args.Length==3&&args[0]=="--write-fixture"){SelfTests.WriteFixture(args[1],args[2]);return;}
 if(args.Length>=1&&args[0]=="--sweep"){SelfTests.Sweep(args.Skip(1).ToArray());return;}
-if(args.Length>=1&&args[0]=="--self-test"){KeyContext.SelfTest();KeyAnalysis.SelfTest();SelfTests.Run(args.Contains("--verbose"));return;}
+if(args.Length>=1&&args[0]=="--self-test-motifs"){SelfTests.RunMotifs(args.Contains("--verbose"));return;}
+if(args.Length>=1&&args[0]=="--self-test"){KeyContext.SelfTest();KeyAnalysis.SelfTest();SelfTests.Run(args.Contains("--verbose"));SelfTests.RunMotifs(args.Contains("--verbose"));return;}
 if(args.Length>=1&&args[0]=="--syllables"){foreach(var w in args.Skip(1)){var parts=LyricEnglish.Syllables(w);var stress=LyricEnglish.Stress(w,parts.Length);Console.WriteLine($"{w}: {string.Join("-",parts)} [{string.Join("",stress)}] rhyme {LyricEnglish.RhymeKey(w,parts,stress)}");}return;}
 if(args.Length>=1&&args[0]=="--verbose"){FormAnalysis.Verbose=true;args=args.Skip(1).ToArray();}
 if(args.Length==0)throw new ArgumentException("PatternPrep score.mid [legacy-authored.json] | --self-test");
