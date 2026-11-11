@@ -197,6 +197,69 @@ class HandPhoto(unittest.TestCase):
         self.assertIn('maxTextureSize: 1024', default)
         self.assertIn('textureCompression: 2', default)
 
+    @staticmethod
+    def black_key_groups(picture, top, bottom):
+        """The black keys seen whole on rows top to bottom (darker than .45 of the brightest within 45 px, at least 10 px
+        wide, none cut by the picture's edges), in groups: a new group where a gap is over 1.35 times the narrowest."""
+        grey = picture.convert('L')
+        rows = range(top, bottom)
+        profile = [sum(grey.getpixel((x, y)) for y in rows)/len(rows) for x in range(grey.width)]
+        keys, start = [], None
+        for x in range(grey.width + 1):
+            dark = x < grey.width and profile[x] < .45*max(profile[max(0, x - 45):x + 46])
+            if dark and start is None:
+                start = x
+            elif not dark and start is not None:
+                if x - start >= 10 and start > 0 and x < grey.width:
+                    keys.append((start + x - 1)/2)
+                start = None
+        gaps = [b - a for a, b in zip(keys, keys[1:])]
+        groups = [[keys[0]]] if keys else []
+        for key, gap in zip(keys[1:], gaps):
+            if gap > 1.35*min(gaps):
+                groups.append([key])
+            else:
+                groups[-1].append(key)
+        return groups
+
+    def assert_keyboard(self, groups):
+        # The groups between the outer two (which the picture's edges may cut) alternate two and three, as a piano's do.
+        inner = [len(g) for g in groups[1:-1]]
+        self.assertGreaterEqual(len(inner), 2, groups)
+        self.assertLessEqual(set(inner), {2, 3}, inner)
+        self.assertTrue(all(a != b for a, b in zip(inner, inner[1:])), f'black keys in groups of {inner}')
+
+    def test_keyboard(self):
+        """An image generator does not always draw a piano's keyboard: the black keys must alternate in twos and threes
+        (the first picture had two pairs side by side). Read on rows between the keys' top edge and the highest fingertip,
+        where no finger covers them."""
+        from PIL import Image
+        notes = json.loads((self.folder/'right-hand.json').read_text(encoding='utf-8'))
+        with Image.open(self.folder/notes['image']) as picture:
+            top = notes['keyboardTop']*picture.height
+            tip = min(y for x, y in notes['tips'].values())*picture.height
+            groups = self.black_key_groups(picture, int(top + .35*(tip - top)), int(top + .65*(tip - top)))
+        self.assert_keyboard(groups)
+
+    def test_keyboard_check(self):
+        """The check itself: black keys drawn in groups of 3 2 3 2 3 pass; with two pairs side by side they fail."""
+        from PIL import Image, ImageDraw
+
+        def keyboard(sizes):
+            picture = Image.new('L', (1024, 60), 200)
+            draw = ImageDraw.Draw(picture)
+            x = 30
+            for size in sizes:
+                for _ in range(size):
+                    draw.rectangle([x, 0, x + 38, 59], fill=10)
+                    x += 66
+                x += 34
+            return picture
+
+        self.assert_keyboard(self.black_key_groups(keyboard([3, 2, 3, 2, 3]), 10, 50))
+        with self.assertRaises(AssertionError):
+            self.assert_keyboard(self.black_key_groups(keyboard([3, 2, 2, 3, 2]), 10, 50))
+
 
 class Checks(unittest.TestCase):
     def test_claims_and_beats_decisions(self):

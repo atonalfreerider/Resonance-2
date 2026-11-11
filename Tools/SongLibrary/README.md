@@ -311,7 +311,9 @@ label, in a dark pill on the dark ground above the keys, to each of its fingerti
 `side` is `right` or `left`; one to three groups, each of fingers 1–5 (a finger in one group only) and a label of
 up to 40 characters (the finger numbers when it is empty or absent). With `alternate` (two groups or more) the
 groups take turns with the music: at each onset of that hand's notes (the score track named for it, "Right hand"),
-counted from the cue's start, so the first group has the first note; without such a track, at each beat. The
+counted from the cue's start, so the first group has the first note; without such a track, at each beat. A turn
+shorter than 120 ms (two notes a few hundredths apart) is not shown: the turn before carries on through it and the
+count stays right; each turn eases in over 80 ms, and the waiting group's label stays readable. The
 song clock decides, so seeks and recordings agree. The card shows for the whole cue; two cues in a row with the
 same `hand` keep one card and count on through both. One graphic per cue: a cue with a `hand` cannot also have a
 picture or a `compare` (publishing refuses it, as Director mode does). In the Torus view the card takes its own
@@ -320,14 +322,19 @@ landscape one. The card is cut from the photograph to fill that part of the scre
 sharpness: the fingertips with room round them, the knuckles, and the dark ground above the keys that the labels need.
 
 The photograph, `Assets/Resources/PianistHand/right-hand.jpg`, was generated with OpenAI's `chatgpt-image-latest`;
-its prompt, date and settings are under `source` in `right-hand.json` beside it. That file also says where the
+its prompt, date and settings are under `source` in `right-hand.json` beside it. The generator drew a keyboard no
+piano has (two pairs of black keys side by side), so the picture was retouched: the stray black key moved one key to
+the right, and the A# at the right edge added (`source.retouched` says what changed). That file also says where the
 fingertips are: `tips`, the centre of each nail as `[x, y]`, fractions of the picture's width and height from its
 top-left corner, for fingers `"1"` to `"5"`; `side`, the hand it shows; and `keyboardTop`, the fraction of the height
 above which the picture is dark enough for the labels. To replace the photograph, overwrite the JPEG in place (so its
 import settings stay: sRGB, clamped, at most 1024 pixels, no mipmaps) and write the new picture's anchors into the
-JSON. The app checks them as it starts (five fingertips inside the picture, in order across the hand from the thumb,
-all below `keyboardTop`) and, when they are wrong, shows no hand and says why in the console; `test_director.py`
-checks the same.
+JSON. Look at the keyboard before anything else: its black keys must alternate in groups of two and three (ask for "a
+real piano keyboard, its black keys in alternating groups of two and three" in the prompt; generators still get it
+wrong). The app checks the anchors as it starts (five fingertips inside the picture, in order across the hand from the
+thumb, all below `keyboardTop`) and, when they are wrong, shows no hand and says why in the console;
+`test_director.py` checks the same, and that the black keys between the fingertips and `keyboardTop` alternate two and
+three.
 
 **Checking a tour with TypeSafe (Jev).** `tour_check.py` asks TypeSafe's System One model two kinds of question,
 with the decisions kept in code and the answers cached by request in `SongLibraryData/typesafe-cache.json`:

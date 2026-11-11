@@ -249,7 +249,8 @@ public sealed class VisualizationViews : MonoBehaviour
         if(sharing)
         {
             if(portrait){float h=Mathf.Min(shareSize.y,room.height*.5f);GraphicSlot=new Rect(room.x,room.y,room.width,h);room.yMin+=h+12;}
-            else{float w=Mathf.Min(shareSize.x,room.width*.48f),bottom=height-(RecordingMode.Active?110:130);GraphicSlot=new Rect(room.x+8,room.y,w,Mathf.Max(100,bottom-room.y));room.xMin+=w+40;}
+            // Beside the slot a wider gutter: the torus's extent leaves out the lit chord label's growth, which reaches into it.
+            else{float w=Mathf.Min(shareSize.x,room.width*.48f),bottom=height-(RecordingMode.Active?110:130);GraphicSlot=new Rect(room.x+8,room.y,w,Mathf.Max(100,bottom-room.y));room.xMin+=w+64;}
         }
         bool own=SceneTopInset==0&&SceneBottomInset==0&&Mathf.Approximately(TorusZoom,1);
         Vector2 shift=Vector2.zero;float scale=1;
