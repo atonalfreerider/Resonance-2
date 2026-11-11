@@ -18,11 +18,13 @@ public static partial class SelfTests
         MotifGroup(verbose);
         MotifReduction(verbose);
         MotifCells(verbose);
+        MotifIteration(verbose);
         Console.WriteLine("PASS: motif contract (F24) — a version 6 layer round-trips with the §13.1 field names, HasMotifs is not written, a version 5 bundle reads as Schema 0");
         Console.WriteLine("PASS: motif ingest — tick grid, metric weights and printed bars after a silent lead-in, score import (scaled ticks, staves, voices, tpc, graces, directions), transcription snap, skyline and voice streams, principal stream; B♭ minor's leading tone is A (F28)");
         Console.WriteLine("PASS: motif transform group — costs, composition, images, stabilisers and orders; names: tonal sequence up a second (F3), the leading tone of A minor (F4), the parallel minor (F5)");
         Console.WriteLine("PASS: motif reduction (F25) — diminution tokens E4[N− Rep] F4[N+ Rep Rep], appoggiaturas and turns; arrivals at bars 4 (half), 8, 12 (half), 16 cut a period into 4 + 4 + 4 + 4, never at a decorated held note");
         Console.WriteLine("PASS: motif cells (F1–F6, F14, F18, F26, F27) — neighbour chirality, exact mirror, tonal and tonicizing sequences, parallel minor, modal mixture, ornamented and lengthened-head variants, distinct figures, phase on beat 2; every member decodes from its prototype");
+        Console.WriteLine("PASS: motif iteration (F7–F10, F15–F17, F20) — tritone and diminished-seventh cycles, an alternation, doubling with contrary motion, liquidation, a nested power and a two-cell unit power, drum loops; F3's sequence as a power; the near relation extends an exact sequence");
     }
 
     // Line(score, startBeat, "C4/8 B3/16 C4/16 D4/16*5 …"): a monophonic line, note after note. A token is
@@ -60,11 +62,13 @@ public static partial class SelfTests
         score.Note(beat, length, ScorePitch(bass), 80 / 127f, 2, 2);
     }
 
-    static MotifInput Ingest(Score score, int key = 3, bool minor = false, SongFormAnalysis.ChordStep[] chords = null, SongSettings song = null, string folder = null, string[] names = null)
+    static MotifInput Ingest(Score score, int key = 3, bool minor = false, SongFormAnalysis.ChordStep[] chords = null, SongSettings song = null, string folder = null, string[] names = null) =>
+        Ingest(score, out _, key, minor, chords, song, folder, names);
+    static MotifInput Ingest(Score score, out PreparedPatternSong data, int key = 3, bool minor = false, SongFormAnalysis.ChordStep[] chords = null, SongSettings song = null, string folder = null, string[] names = null)
     {
         var cycles = score.Cycles();
         var harmony = ChordTimeline.Build(cycles, key, minor);
-        var data = new PreparedPatternSong
+        data = new PreparedPatternSong
         {
             Notes = cycles.Notes.ToArray(), Measures = cycles.Measures.ToArray(), EndBeat = score.Beat, TrackNames = names ?? MotifTrackNames, Key = key, Minor = minor, LeadVocalTrack = -1,
             Tempos = new[] { new PreparedPatternSong.Tempo { Beat = 0, Seconds = 0, Microseconds = 500000 } }, Chords = chords ?? ChordTimeline.Steps(harmony).ToArray()
@@ -615,5 +619,189 @@ public static partial class SelfTests
         var again = CellLexicon.Build(input);
         Check(again.Cells.Length == lex.Cells.Length && again.Cells.Zip(lex.Cells).All(p => p.First.Start == p.Second.Start && p.First.End == p.Second.End && p.First.Paradigm == p.Second.Paradigm && p.First.Text == p.Second.Text)
             && again.Atoms.Select(a => a.Letter + a.Kind + a.Members).SequenceEqual(lex.Atoms.Select(a => a.Letter + a.Kind + a.Members)), "motif cells: two runs give the same lexicon");
+    }
+
+    // Stages B–D on a fixture: the lexicon (every member decoding) and the iteration.
+    static (MotifInput input, CellLexicon lex, Iteration it) Iterate(Score score, string name, bool verbose, int key = 3, bool minor = false, SongFormAnalysis.ChordStep[] chords = null)
+    {
+        var (input, lex) = Lexicon(score, name, false, key, minor, chords);
+        var it = Iteration.Build(input, lex);
+        if (verbose) DumpIteration(input, it, name);
+        return (input, lex, it);
+    }
+    static readonly string[] RelationKinds = { "Return", "Power", "Run", "Doubling", "Alternation", "Liquidation", "CrossReference" };
+    static void DumpIteration(MotifInput input, Iteration it, string name)
+    {
+        double q = input.Ppq;
+        Console.WriteLine($"  {name} iteration:");
+        foreach (var r in it.Relations)
+            Console.WriteLine($"    {r.Id} {RelationKinds[r.Kind]}{(r.Source.Length > 0 ? "/" + r.Source : "")} [{r.Start / q:0.###}, {r.End / q:0.###}) ×{r.Count} unit {r.Unit / q:0.###} step ({r.Step.Steps},{r.Step.Semitones}{(r.Step.Frame == Transform.Real ? " real" : "")}{(r.Step.Inverted ? " I" : "")}) "
+                + $"period {r.Period} order {r.Order} sym {{{string.Join(",", r.Symmetry)}}} \"{r.Pattern}\" streams {r.StreamA}/{r.StreamB}{(r.Contrary ? " contrary" : "")}{(r.CrossScale ? " cross-scale" : "")} exact {r.Exactness:0.##} parent {r.Parent} children [{string.Join(",", r.Children)}] {r.Bits:0.0} bits — {r.Text}");
+        var g = input.Grid;
+        Console.WriteLine("    bars: " + string.Join(" | ", Enumerable.Range(g.FirstBar, g.Bars - g.FirstBar).Select(b => $"{g.Printed[b]} {it.Labels[b].Text}{(it.Labels[b].Inherited ? "*" : "")}")));
+    }
+
+    // Stage D (§6): runs and cycles (F7–F9), doubling and contrary motion (F10), liquidation (F15), a nested power (F16), a
+    // unit of two cells stepping by a semitone (F17), drum loops (F20) and F3's tonal sequence as a cell power.
+    static void MotifIteration(bool verbose)
+    {
+        static Iteration.Relation[] Of(Iteration it, int kind) => it.Relations.Where(r => r.Kind == kind).ToArray();
+        const int Power = PreparedPatternSong.MotifRelations.Power, Run = PreparedPatternSong.MotifRelations.Run, Doubling = PreparedPatternSong.MotifRelations.Doubling;
+        static string Show(IEnumerable<Iteration.Relation> rs) => string.Join("; ", rs.Select(r => $"{RelationKinds[r.Kind]} {r.Source} [{r.Start / (double)MotifPpq:0.##}, {r.End / (double)MotifPpq:0.##}) ×{r.Count} ({r.Step.Steps},{r.Step.Semitones}) P{r.Period} O{r.Order} {{{string.Join(",", r.Symmetry)}}} \"{r.Pattern}\""));
+
+        // F3: the tonal sequence (C D E C, D E F D, E F G E) is one paradigm whose consecutive cells step +1: a power.
+        var f3 = new Score(); Bars(f3, 3);
+        Line(f3, 0, "C4/4 D4/4 E4/4 C4/4 D4/4 E4/4 F4/4 D4/4 E4/4 F4/4 G4/4 E4/4");
+        var (input, lex, it) = Iterate(f3, "F3", verbose);
+        var cellPower = Of(it, Power).FirstOrDefault(r => r.Source == Iteration.FromCells && r.StreamA == input.Streams.Principal);
+        Check(cellPower != null && cellPower.Count == 3 && cellPower.Step.Steps == 1 && cellPower.Step.Frame == Transform.Tonal && cellPower.Start == 0 && cellPower.Unit == 4 * MotifPpq && cellPower.Order == 0,
+            "F3: a power of three statements stepping +1 tonally (a translation): " + Show(Of(it, Power)));
+
+        // F7: 24 left-hand sixteenth tritones, each a semitone below the one before: a 6-cycle on the tritone's symmetry.
+        var f7 = new Score(); Bars(f7, 3, 2);
+        for (int k = 0; k < 24; k++) foreach (string p in new[] { "F3", "B3" }) f7.Note(k / 4.0, .25, ScorePitch(p) - k, 80 / 127f, 2, 2);
+        (input, lex, it) = Iterate(f7, "F7", verbose);
+        int bass = input.Streams.All.Single(s => s.Kind == MotifStreams.Texture && s.Track == 2).Id;
+        var tritones = Of(it, Run).Where(r => r.StreamA == bass).ToArray();
+        Check(tritones.Length == 1 && tritones[0].Count == 24 && tritones[0].Real && tritones[0].Step.Semitones == -1 && tritones[0].Pattern == "" && tritones[0].Period == 6 && tritones[0].Order == 6 && tritones[0].Symmetry.SequenceEqual(new[] { 0, 6 }),
+            "F7: one run of 24 tritones, Semitones −1, Period 6, Order 6, Symmetry {0, 6}: " + Show(Of(it, Run)));
+
+        // F8: twelve quarter-note diminished sevenths, each a semitone lower: a 3-cycle on {0, 3, 6, 9}.
+        var f8 = new Score(); Bars(f8, 3);
+        for (int k = 0; k < 12; k++) foreach (string p in new[] { "B3", "D4", "F4", "Ab4" }) f8.Note(k, 1, ScorePitch(p) - k, 64 / 127f, 1, 1);
+        (input, lex, it) = Iterate(f8, "F8", verbose);
+        var sevenths = Of(it, Run);
+        Check(sevenths.Length == 1 && sevenths[0].Count == 12 && sevenths[0].Real && sevenths[0].Step.Semitones == -1 && sevenths[0].Symmetry.SequenceEqual(new[] { 0, 3, 6, 9 }) && sevenths[0].Period == 3 && sevenths[0].Order == 3,
+            "F8: one run of 12 diminished sevenths, Symmetry {0, 3, 6, 9}, Period 3: " + Show(sevenths));
+
+        // F9: {C5, E5} ↔ {G4, B♭4} eight times in sixteenths: a major and a minor third are one hand shape in scale steps, so
+        // the run is tonal (a fourth down and up in steps, whatever the semitones); an alternation.
+        var f9 = new Score(); Bars(f9, 2, 2);
+        for (int k = 0; k < 16; k++) Line(f9, k / 4.0, k % 2 == 0 ? "C5+E5/16" : "G4+Bb4/16");
+        (input, lex, it) = Iterate(f9, "F9", verbose);
+        var alternation = Of(it, Run);
+        Check(alternation.Length == 1 && alternation[0].Count == 16 && alternation[0].Order == 2 && !alternation[0].Real && alternation[0].Pattern == "-3,+3" && alternation[0].Symmetry.SequenceEqual(new[] { 0 }),
+            "F9: one tonal run of 16 alternating thirds, Order 2: " + Show(alternation));
+
+        // F10: three bars of right-hand sixths; the left hand doubles them two octaves lower for two bars, then alternately one
+        // and two octaves lower, so that its top rises where the right hand's falls (and back): each of the last four notes is
+        // reached in contrary motion.
+        var f10 = new Score(); Bars(f10, 3, 2);
+        string[] sixths = { "E5+C6", "D5+B5", "C5+A5", "B4+G5", "C5+A5", "D5+B5", "E5+C6", "F5+D6", "A#4+G5", "E5+C#6", "A#4+G5", "E5+C#6" };
+        for (int k = 0; k < sixths.Length; k++)
+        {
+            Line(f10, k / 2.0, sixths[k] + "/8");
+            int register = k < 8 || k % 2 == 1 ? -24 : -12;
+            foreach (string p in sixths[k].Split('+')) f10.Note(k / 2.0, .5, ScorePitch(p) + register, 80 / 127f, 2, 2);
+        }
+        (input, lex, it) = Iterate(f10, "F10", verbose);
+        int upper = input.Streams.All.Single(s => s.Kind == MotifStreams.Texture && s.Track == 3).Id, lower = input.Streams.All.Single(s => s.Kind == MotifStreams.Texture && s.Track == 2).Id;
+        var doubling = Of(it, Doubling).Where(r => !r.Contrary).ToArray();
+        int lowerNotes = input.Events.Count(e => e.Track == 2);
+        int covered = doubling.Length == 0 ? 0 : input.Events.Count(e => e.Track == 2 && e.Tick >= doubling[0].Start && e.Tick < doubling[0].End);
+        Check(doubling.Length == 1 && doubling[0].StreamA == upper && doubling[0].StreamB == lower && covered >= .9 * lowerNotes && doubling[0].Pattern.Split(',').Contains("-24") && doubling[0].Pattern == "-24,-12",
+            $"F10: the left hand doubles the right ({covered} of {lowerNotes} notes) at registers -24,-12: " + Show(Of(it, Doubling)));
+        var contrary = Of(it, Doubling).Where(r => r.Contrary).ToArray();
+        Check(contrary.Length == 1 && contrary[0].Count == 4 && contrary[0].Start == 4 * MotifPpq && contrary[0].End == 6 * MotifPpq && contrary[0].Pattern == "-12,-24",
+            "F10: the last four events move in contrary motion: " + Show(contrary));
+        // A doubled onset the left hand does not copy, alone among copies, leaves the doubling whole (the étude's bar 51).
+        var f10b = new Score(); Bars(f10b, 3, 2);
+        for (int k = 0; k < 12; k++)
+        {
+            Line(f10b, k / 2.0, sixths[k % 8] + "/8");
+            foreach (string p in sixths[k % 8].Split('+')) f10b.Note(k / 2.0, .5, ScorePitch(p) - 24 - (k == 5 && p == sixths[5].Split('+')[0] ? 1 : 0), 80 / 127f, 2, 2);
+        }
+        (input, lex, it) = Iterate(f10b, "F10 (one undoubled note)", verbose);
+        var whole = Of(it, Doubling).Where(r => !r.Contrary).ToArray();
+        Check(whole.Length == 1 && whole[0].Start == 0 && whole[0].End == 6 * MotifPpq && whole[0].Count == 12 && whole[0].Pattern == "-24", "F10: one undoubled note inside a doubling does not split it: " + Show(Of(it, Doubling)));
+
+        // F15: a 2-bar unit, then 1 bar ×2, ½ bar ×4 and 1 beat ×8 (4/4): the principal line's period shrinks from the bar to
+        // the beat.
+        var f15 = new Score(); Bars(f15, 8);
+        Line(f15, 0, "C5/8 D5/8 E5/4 G5/4 E5/8 C5/8 D5/4 F5/8 E5/8 D5/2" + string.Concat(Enumerable.Repeat(" E5/8 F5/8 G5/4 A5/8 G5/8 F5/4", 2))
+            + string.Concat(Enumerable.Repeat(" G5/8 A5/8 B5/4", 4)) + string.Concat(Enumerable.Repeat(" C6/8 B5/16 A5/16", 8)));
+        (input, lex, it) = Iterate(f15, "F15", verbose);
+        var liquidation = Of(it, PreparedPatternSong.MotifRelations.Liquidation);
+        var periods = liquidation.Length == 1 ? liquidation[0].Pattern.Split(',').Select(int.Parse).ToArray() : Array.Empty<int>();
+        Check(liquidation.Length == 1 && liquidation[0].Count >= 3 && periods.Length >= 2 && periods.Zip(periods.Skip(1)).All(p => p.Second < p.First) && periods[^1] * 4 <= periods[0]
+            && liquidation[0].Start == 8 * MotifPpq && liquidation[0].End == 32 * MotifPpq && liquidation[0].Pattern == "16,4", "F15: a liquidation over bars 3–8 whose period shrinks to a quarter: " + Show(liquidation));
+
+        // F16: a 2-bar unit U twice, then U a step higher twice (2/4): (U²)² ↑1.
+        var f16 = new Score(); Bars(f16, 8, 2);
+        for (int k = 0; k < 4; k++)
+        {
+            bool up = k >= 2;
+            Line(f16, 4 * k, up ? "F5/8 A5/8 G5/16 F5/16 E5/8 D5/4 A4/4" : "E5/8 G5/8 F5/16 E5/16 D5/8 C5/4 G4/4");
+            Line(f16, 4 * k, up ? "D3/2 A2/2" : "C3/2 G2/2", 2, 2);
+        }
+        (input, lex, it) = Iterate(f16, "F16", verbose);
+        var nested = Of(it, Power).Where(r => r.Source != Iteration.FromCells && r.Count == 2 && r.Step.Steps == 1 && r.Step.Frame == Transform.Tonal).ToArray();
+        Check(nested.Length == 1 && nested[0].Start == 0 && nested[0].Unit == 8 * MotifPpq && nested[0].Children.Length == 2
+            && nested[0].Children.All(c => it.Relations[c].IsPower && it.Relations[c].Count == 2 && it.Relations[c].Step.Equals(Transform.Identity) && it.Relations[c].Unit == 4 * MotifPpq && it.Relations[c].Parent == nested[0].Id),
+            "F16: Power(Count 2, StepSteps +1) whose iterations are Power(Count 2, step 0): " + Show(Of(it, Power).Where(r => r.Source != Iteration.FromCells)));
+
+        // F17: bars of tritone dyads stepping +5, −1, +5 (two cells of two), each bar a semitone below the one before.
+        var f17 = new Score(); Bars(f17, 4, 2);
+        for (int bar = 0; bar < 4; bar++)
+            for (int k = 0; k < 4; k++)
+            {
+                int low = ScorePitch("C4") + new[] { 0, 5, 4, 9 }[k] - bar;
+                f17.Note(2 * bar + k / 2.0, .5, low, 96 / 127f, 3, 3); f17.Note(2 * bar + k / 2.0, .5, low + 6, 96 / 127f, 3, 3);
+            }
+        (input, lex, it) = Iterate(f17, "F17", verbose);
+        var stepping = Of(it, Power).Where(r => r.Source == Iteration.FromBlock && r.Unit == 2 * MotifPpq && r.Count == 4 && r.Step.Semitones == -1 && r.Step.Frame == Transform.Real).ToArray();
+        Check(stepping.Length == 1 && stepping[0].Start == 0 && Of(it, Run).Length == 0, "F17: a unit power of the bar, Count 4, StepSemitones −1, real (and no run): " + Show(it.Relations));
+
+        // The near relation (§6 D1 with §7 E1's similarity and a θ): a bar stated three times, each a semitone lower, the first
+        // with another first note (as the étude's bar 38 begins with the chord that ends the bars before). Exact relations
+        // reach only bars 2–3; with θ the soft relation carries the sequence back to bar 1, extending the exact block rather
+        // than displacing it.
+        var near = new Score(); Bars(near, 5, 2);
+        for (int bar = 0; bar < 3; bar++)
+            for (int k = 0; k < 8; k++) near.Note(2 * bar + k / 4.0, .25, ScorePitch(new[] { "C5", "E5", "G5", "E5" }[k % 4]) - bar - (bar == 0 && k == 0 ? 3 : 0), 96 / 127f, 3, 3);
+        Line(near, 6, "C5/2 G4/2");
+        (input, lex) = Lexicon(near, "near", false);
+        var exactOnly = Iteration.Build(input, lex); var soft = Iteration.Build(input, lex, .5);
+        if (verbose) { DumpIteration(input, exactOnly, "near (no θ)"); DumpIteration(input, soft, "near (θ 0.5)"); }
+        static bool Falling(Iteration.Relation r) => r.Source == Iteration.FromBlock && r.Unit == 2 * MotifPpq && r.Step.Semitones == -1;   // the bar, a semitone lower
+        var hardBlocks = Of(exactOnly, Power).Where(Falling).ToArray(); var softBlocks = Of(soft, Power).Where(Falling).ToArray();
+        Check(hardBlocks.Length == 1 && hardBlocks[0].Start == 2 * MotifPpq && hardBlocks[0].Count == 2 && hardBlocks[0].Step.Semitones == -1 && hardBlocks[0].Real && hardBlocks[0].Exactness == 1,
+            "near: without θ the exact relation finds bars 2–3 a semitone apart: " + Show(hardBlocks));
+        Check(softBlocks.Length == 1 && softBlocks[0].Start == 0 && softBlocks[0].Count == 3 && softBlocks[0].Step.Semitones == -1 && softBlocks[0].Real && Math.Abs(softBlocks[0].Exactness - .75) < 1e-9,
+            "near: with θ the sequence reaches back to bar 1, three bars at T−1, three of four column pairs exact: " + Show(softBlocks));
+        var cols = soft.Cols; int c11 = input.Grid.ColumnAt(0), c21 = input.Grid.ColumnAt(2 * MotifPpq), c22 = input.Grid.ColumnAt(3 * MotifPpq);
+        var (best, at) = cols.Best(c11, c21);
+        Check(Math.Abs(cols.Similarity(c11, c21, -1) - .75) < 1e-9 && Math.Abs(cols.Similarity(c11, c21, 0) - .525) < 1e-9 && Math.Abs(cols.Similarity(c21, c22, 0) - 1) < 1e-9 && at == -1 && Math.Abs(best - .71) < 1e-9
+            && cols.Relate(c11, c21).Holds(Iteration.NearKind, -1) && !cols.Relate(c11, c21).Real,
+            $"near: §7 E1's sim_k counts exact matches 1 and tonal credit 0.7 (Dice); S takes 0.04 off a transposed match: sim −1 {cols.Similarity(c11, c21, -1):0.###}, sim 0 {cols.Similarity(c11, c21, 0):0.###}, S {best:0.###} at {at}");
+
+        // F20: eight bars of one groove, a fill, eight bars of the groove. Every drum group loops eight times on each side of
+        // the fill, which is literal there; the drum bars of the form analysis are untouched.
+        var f20 = new Score(); Bars(f20, 17);
+        for (int bar = 0; bar < 17; bar++) f20.Groove(4 * bar, 4, 1, bar == 8);
+        var drumsInput = Ingest(f20, out var drumsData);
+        var drumOptions = new JsonSerializerOptions { IncludeFields = true };
+        DrumCompression.Build(drumsData);
+        string drumBars = JsonSerializer.Serialize(drumsData.DrumBars, drumOptions) + JsonSerializer.Serialize(drumsData.DrumFamilies, drumOptions);
+        var drumsLex = CellLexicon.Build(drumsInput);
+        var drumsIt = Iteration.Build(drumsInput, drumsLex);
+        if (verbose) { DumpCells(drumsInput, drumsLex, "F20"); DumpIteration(drumsInput, drumsIt, "F20"); }
+        Check(drumsLex.DecodeErrors.Length == 0, "F20: every drum member decodes: " + string.Join("; ", drumsLex.DecodeErrors));
+        var drumStreams = drumsInput.Streams.All.Where(s => s.Kind == MotifStreams.Drums).Select(s => s.Id).ToArray();
+        var loops = Of(drumsIt, Power).Where(r => r.Source == Iteration.FromCells && drumStreams.Contains(r.StreamA)).ToArray();
+        Check(loops.Length >= 2 && loops.All(r => r.Count == 8 && r.Step.Equals(Transform.Identity) && r.Order == 1 && (r.Start == 0 || r.Start == 36 * MotifPpq)) && loops.Any(r => r.Start == 0) && loops.Any(r => r.Start == 36 * MotifPpq),
+            "F20: drum powers of Count 8 on either side of the fill: " + Show(loops));
+        foreach (int s in drumStreams)
+        {
+            var fill = drumsLex.Of(s).FirstOrDefault(c => c.Start == 32 * MotifPpq); var groove = drumsLex.Of(s).FirstOrDefault(c => c.Start == 0);
+            Check(fill == null || fill.Paradigm < 0 || !fill.Exact || groove == null || fill.Paradigm != groove.Paradigm, $"F20: the fill bar of drum stream {s} is literal or a variant, not the groove");
+        }
+        DrumCompression.Build(drumsData);
+        Check(JsonSerializer.Serialize(drumsData.DrumBars, drumOptions) + JsonSerializer.Serialize(drumsData.DrumFamilies, drumOptions) == drumBars, "F20: DrumBars and DrumFamilies are unchanged by the motif stages");
+
+        // Determinism (§9 G6): the iteration twice gives the same relations and labels.
+        var again = Iteration.Build(drumsInput, drumsLex);
+        Check(again.Relations.Length == drumsIt.Relations.Length && again.Relations.Zip(drumsIt.Relations).All(p => p.First.Start == p.Second.Start && p.First.End == p.Second.End && p.First.Kind == p.Second.Kind && p.First.Count == p.Second.Count && p.First.Text == p.Second.Text)
+            && again.Labels.Select(l => l.Text).SequenceEqual(drumsIt.Labels.Select(l => l.Text)), "motif iteration: two runs give the same relations");
     }
 }

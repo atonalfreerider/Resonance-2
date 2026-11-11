@@ -33,10 +33,12 @@ public sealed record MotifSettings
     public int RunMinEvents { get; init; } = 6;                   // catches the tritone chains and alternating sixths, not chance pairs
     public int RunMaxPeriod { get; init; } = 2;
     public int DoublingMinOnsets { get; init; } = 8;
+    public double DoublingShare { get; init; } = .75;             // an isolated undoubled onset does not end a doubling (the étude's bar 51)
     public double ContraryShare { get; init; } = .75;
     public int ContraryMinEvents { get; init; } = 4;
     public int LiquidationMinBars { get; init; } = 3;
     public double LiquidationEnd { get; init; } = .25;            // ends at ≤ ¼ of its starting period: 8 → 4 → 2
+    public double LiquidationShare { get; init; } = .75;          // a bar's period: ≥ 75% of its principal line repeats at that lag (or as its neighbour)
     // §7 returns
     public double ThetaQuantile { get; init; } = .95;             // the piece's own background similarity
     public double ThetaMin { get; init; } = .45;

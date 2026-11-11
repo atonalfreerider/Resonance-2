@@ -1703,3 +1703,34 @@ Generator order signs on the wheel:
   Arp when half its steps leap, otherwise a plain line P); a texture's is Shape; drums form no atom (their paradigms are
   grooves). A run of neighbours only (N N …) is the Osc family. A P family that holds a falling line opened by a held head
   is named "sigh", whichever of its paradigms comes first.
+- §6 D1, D2 (step 4): the near relation needs θ (§7 E2), and "blocks never cross a section boundary" needs sections; stage E
+  supplies both, so `Iteration.Build` takes θ (none: blocks relate by exact, real and tonal transposition only) and the
+  boundaries, and the orchestrator computes E1–E2 and the provisional sections first. Near is a fallback: a near block never
+  displaces a block an exact, real or tonal relation found, except one it extends (the same step, units on its grid, wholly
+  inside it). Ranked by coverage alone, the étude's shifted soft chains (17.2 → 18.2 → 19.2 at T−3, exactness 0) pushed out
+  the exact t−2 sequences of bars 18–19 and 71–72 that §6 D2 measures, while 38 → 39 → 40 (E8) and 58–59 (E10) need near to
+  reach their first bar (bar 38 opens with the chord that ends 37; the left hand of 59 is not 58's). With θ = 0.533 (the
+  q95 of §7 E2, computed by brute force) and the boundaries 45.5 and 126.5 the étude gives §6 D2's blocks and E6–E10; without
+  the boundaries the downbeat tie-break starts B1 at 21.1, a beat early (both phases relate 7 of 8 columns, 5 exactly).
+- §6 D2 (step 4): blocks of equal coverage, exactness, downbeat and start are ordered by the shorter unit (X⁸, not (X²)⁴: a
+  power's cost does not grow with n), and every chain length is a candidate, so a shorter chain nests where the longest
+  would cross an outer block's unit (B1's first 2-bar repeat). One-tactus units are tried inside provisional phrases: the
+  arrival cuts of §8 F1 (§4 B2), since stage F runs later.
+- §6 D4 (step 4): a run is real or tonal, as D1 relates columns by T_k or t_d: a real run keeps its hand shape and its
+  periodic lowest-note steps in semitones, a tonal run keeps both in scale steps (its alterations free, its cycle on the
+  7-clock, Symmetry {0}). F9's {C5, E5} ↔ {G4, B♭4} pairs a major and a minor third, so it is no real run; the étude's sixths
+  in bar 53 (major, then minor, the lowest note moving by a tritone, then a fourth, always a fifth in steps) are E9's run
+  only as a tonal one. "Gaps ≤ ½ tactus" are the silences between one event's end and the next onset: F8's quarter-note
+  chords lie a whole tactus apart.
+- §6 D5 (step 4): a doubling tolerates isolated shared onsets that are not octave copies: it is a stretch of shared onsets
+  (no onset of either between) of which at least `DoublingShare` (75%) are copies, scored +1 per copy and −3 otherwise and
+  starting and ending on a copy. The étude's bar 51 has one (G♯3 under the right hand's A5), which cut 46–53 in two and
+  failed E9. A contrary span starts at the first event the two top lines reach by opposite steps, not at the note they leave
+  together: in the étude it starts at 52.2, as E9 has it, not at 52.1+¾ (stretches of at least four events scored the same
+  way). F10's last four notes are therefore each reached in contrary motion (left-hand registers −12, −24, −12, −24).
+- §6 D7 (step 4): a principal-line note repeats at lag p when the same pitch sounds p before or after it within the bar,
+  and a bar repeats its neighbour when at least `LiquidationShare` (75%) of the two bars' notes coincide in place and pitch
+  (a Dice share), not exactly: the étude's 55 begins with the F♯4 held over from 54 and 57 adds two notes to 56, so the
+  exact rule left 54–57 without a period and 54–61 without its liquidation ("8,4,2").
+- §6 D8, D3 (step 4): the identity is no cross-scale generator (every loop inside a loop would qualify); tonal steps compare
+  in scale steps. A cell joins one cell power at most (`MotifCell.Relation` names one).
