@@ -97,6 +97,23 @@ class BarTimes(unittest.TestCase):
             with self.subTest(anchor=anchor), self.assertRaises(ValueError):
                 story.validate_cues([dict(cue, annotationAnchor=anchor)], 11.0, [])
 
+    def test_annotation_until(self):
+        # An arrow leaves once its note has sounded: a bar spec like soloUntil, published as 0 (to the cue's end) or a
+        # time inside the cue (SongDirector.Read checks the same).
+        director = dict(cues=[dict({'from': '1', 'to': '3'}, text='C natural', annotationTarget='note', annotationMidiPitch=60,
+                                   annotationUntil='2:2')])
+        cue = build_director_tour.timed_cues(director, self.clock)[0]
+        self.assertEqual((cue['start'], cue['annotationUntil'], cue['end']), (2.5, 6.5, 8.5))
+        cue = dict(cue, view='Torus', stem='', uncoil=False)
+        for until in (6.5, 2.501, 8.5, 0, 0.0):
+            with self.subTest(until=until):
+                story.validate_cues([dict(cue, annotationUntil=until)], 11.0, [])
+        for until in (2.5, 1.0, 8.6, -1, True, False, float('nan'), float('inf'), '2:2', None):
+            with self.subTest(until=until), self.assertRaises(ValueError):
+                story.validate_cues([dict(cue, annotationUntil=until)], 11.0, [])
+        with self.assertRaises(ValueError):
+            build_director_tour.timed_cues(dict(cues=[dict(director['cues'][0], annotationUntil='2:3')]), self.clock)  # 2/4 has two beats
+
 
 class Checks(unittest.TestCase):
     def test_claims_and_beats_decisions(self):

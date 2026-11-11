@@ -3,10 +3,10 @@
 For bundles ingested from a MuseScore score (library.py ingest --score). The director file lives in
 Tools/SongLibrary/directors/ and is committed; the bundle (and so story.draft.json, story.json and the narration)
 is not. A cue says where it starts and ends as bar specs ("from": "17", "to": "21", "46:2" for a beat,
-"9#2" for the second time a bar is played, "end"), or in seconds ("start"/"end"); soloUntil, narrationStart and
-narrationEnd may be bar specs too. score_bars.BarClock turns them into recording seconds through the aligned tempo
-map, so the cues follow the recording wherever the performer took time. A cue without an end runs to the next
-cue's start.
+"9#2" for the second time a bar is played, "end"), or in seconds ("start"/"end"); soloUntil, narrationStart,
+narrationEnd and annotationUntil may be bar specs too. score_bars.BarClock turns them into recording seconds
+through the aligned tempo map, so the cues follow the recording wherever the performer took time. A cue without
+an end runs to the next cue's start.
 
     Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/build_director_tour.py Tools/SongLibrary/directors/chopin-op10-3.json
     Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/narration.py PreparedSongs/Library/<bundle>
@@ -22,7 +22,7 @@ from common import ROOT, atomic_json
 from publish_story import publish
 from score_bars import BarClock
 
-TIMED = ('soloUntil', 'narrationStart', 'narrationEnd')
+TIMED = ('soloUntil', 'narrationStart', 'narrationEnd', 'annotationUntil')
 
 
 def find_bundle(pattern):

@@ -142,6 +142,9 @@ def validate_cues(cues, duration, stems, source_ids=(), bundle=None):
             raise ValueError('Invalid concerto melody target')
         if 'soloUntil' in cue and (not isinstance(cue['soloUntil'], (int, float)) or isinstance(cue['soloUntil'], bool) or not math.isfinite(cue['soloUntil']) or not start < cue['soloUntil'] <= end or not cue['stem']):
             raise ValueError('soloUntil must fall within a soloed scene')
+        # An arrow can leave once the event it points at has passed; 0 keeps it to the scene's end (SongDirector.Read agrees).
+        if 'annotationUntil' in cue and (not isinstance(cue['annotationUntil'], (int, float)) or isinstance(cue['annotationUntil'], bool) or not math.isfinite(cue['annotationUntil']) or (cue['annotationUntil'] != 0 and not start < cue['annotationUntil'] <= end)):
+            raise ValueError('annotationUntil must be 0 or fall within its scene')
         if not isinstance(cue['uncoil'], bool) or (cue['uncoil'] and cue['view'] != 'Torus'):
             raise ValueError('Uncoil requires the Torus view')
         if not isinstance(cue['text'], str) or not 1 <= len(cue['text']) <= 450:

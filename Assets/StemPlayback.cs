@@ -130,6 +130,17 @@ public sealed class StemPlayback : MonoBehaviour
     public void Stop(){foreach(var item in cache.Values)item.Source?.Stop();}
     void Update()
     {
+        if(MidiSolo&&midi.IsPlaying){
+            var frames=cache[SelectedId].Score.Frames;
+            while(synthIndex<frames.Length&&frames[synthIndex].Time<=midi.Position+.1*midi.playbackSpeed){
+                var frame=frames[synthIndex++];ScheduleSynth(midi.ClockDspStart+(frame.Time-midi.ClockPosition)/midi.playbackSpeed,frame);
+            }
+        }
+    }
+    // The gains in LateUpdate, after SongDirector (order 80) picks the solo and SongNarration (90) sets the duck: the
+    // crossfade and the duck are heard in the frame they are decided (from Update, a frame late).
+    void LateUpdate()
+    {
         float step=RecordingMode.Step/CrossfadeSeconds,volume=GetComponent<Main>().Synth?.Volume??0;   // the capture step while a video records
         volume*=GetComponent<SongNarration>()?.MusicGain??1;
         MasterGain=Mathf.MoveTowards(MasterGain,SelectedId==""?1:0,step);
@@ -137,12 +148,6 @@ public sealed class StemPlayback : MonoBehaviour
         foreach(var entry in cache){entry.Value.Gain=Mathf.MoveTowards(entry.Value.Gain,entry.Key==SelectedId?1:0,step);if(entry.Value.Source!=null)entry.Value.Source.volume=entry.Value.Gain*volume*(entry.Key==SelectedId?Mathf.Clamp(SoloGain,.25f,4):1);}
         var synth=GetComponent<Main>().Synth;
         if(synth!=null)synth.PlaybackGain=MidiSolo?cache[SelectedId].Gain*(GetComponent<SongNarration>()?.MusicGain??1)*Mathf.Clamp(SoloGain,.25f,4):1;
-        if(MidiSolo&&midi.IsPlaying){
-            var frames=cache[SelectedId].Score.Frames;
-            while(synthIndex<frames.Length&&frames[synthIndex].Time<=midi.Position+.1*midi.playbackSpeed){
-                var frame=frames[synthIndex++];ScheduleSynth(midi.ClockDspStart+(frame.Time-midi.ClockPosition)/midi.playbackSpeed,frame);
-            }
-        }
     }
     public VisualElement BuildUI()
     {

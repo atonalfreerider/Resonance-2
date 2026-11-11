@@ -16,6 +16,9 @@ public sealed class SongNarration : MonoBehaviour
     Task<Decoded> pending;Manifest manifest;int revision=-1;bool running;
     public bool Enabled {get;private set;}=true;
     public bool Ready=>manifest!=null&&voice!=null&&voice.clip!=null;
+    // narration.json's hash of the voice track that is loaded ("" until one is): a recording's report names it.
+    public string Sha256=>manifest?.sha256??"";
+    // SongAudio and StemPlayback apply it in LateUpdate, so the music plays each frame's gain in that frame.
     public float MusicGain {get;private set;}=1;
     // The music gain while a line is spoken when a manifest predates measured ducking.
     public const float DefaultDuck=.42f;

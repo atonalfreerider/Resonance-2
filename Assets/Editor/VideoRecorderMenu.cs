@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using UnityEditor;
@@ -11,8 +12,8 @@ using UnityEngine;
 // (1080x1920, for Shorts and Reels) or horizontal (1920x1080), with the Unity Recorder. The
 // Recorder renders every frame at a constant 30 fps with the audio rendered in step
 // (AudioRenderer), so the picture never drops frames or drifts from the sound. The app is put in
-// recording mode (no controls, captions raised in a vertical frame), made ready, and played from
-// the top as the Recorder starts; when the tour ends the Recorder stops. For the tutorial, the
+// recording mode (no controls, captions raised in a vertical frame), made ready, and played as the
+// Recorder starts (a tour from its first cue); when the tour ends the Recorder stops. For the tutorial, the
 // Shorts and the full tour are then cut from the video (Tools/Video/cut_shorts.py).
 // Files: Recordings/Videos/<name>-<orientation>-<time>.mp4, with a JSON of step times beside it.
 static class VideoRecorderMenu
@@ -41,6 +42,7 @@ static class VideoRecorderMenu
     [InitializeOnLoadMethod] static void Hook()
     {
         EditorApplication.playModeStateChanged+=state=>{if(state==PlayModeStateChange.EnteredPlayMode&&SessionState.GetString(Request,"").Length>0)Wait();};
+        EditorApplication.update+=Deliver;
     }
 
     static RecorderController controller;static RecordingSession session;static string video;static double deadline;
@@ -97,19 +99,28 @@ static class VideoRecorderMenu
         EditorApplication.delayCall+=()=>RunTool("Tools/Video/edit_package.py",report,"Editor package",
             tutorial?()=>RunTool("Tools/Video/cut_shorts.py",report,"Shorts"):null);
     }
-    // A Tools/ script with the song library's Python, in the background; its output goes to the console.
+    // A tool's process exits on a thread-pool thread, where EditorApplication.delayCall must not be touched: what it
+    // reports waits here for the main thread.
+    static readonly ConcurrentQueue<Action> finished=new();
+    static void Deliver(){while(finished.TryDequeue(out var report))report();}
+    // A Tools/ script with the song library's Python, in the background; its output goes to the console, as an error
+    // when it fails (edit_package.py exits 2 when a package does not match its take).
     public static void RunTool(string script,string argument,string label,Action then=null)
     {
         string root=Path.GetFullPath(Path.Combine(Application.dataPath,".."));
         string python=Path.Combine(root,"Tools/SongLibrary/.venv/Scripts/python.exe");script=Path.Combine(root,script);
         if(!File.Exists(python)||!File.Exists(script)){UnityEngine.Debug.LogWarning($"{label}: {python} or {script} is missing.");then?.Invoke();return;}
-        // Both pipes are drained as the tool writes (reading them only after it exits could fill a pipe and stall it).
+        // Both pipes are drained as the tool writes (reading them only after it exits could fill a pipe and stall it),
+        // in UTF-8 both ways: song and take names can hold any letter, whatever the console's code page.
         var output=new System.Text.StringBuilder();
-        var process=new Process{StartInfo=new ProcessStartInfo(python,$"\"{script}\" \"{argument}\""){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true,WorkingDirectory=root},EnableRaisingEvents=true};
+        var start=new ProcessStartInfo(python,$"\"{script}\" \"{argument}\""){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true,WorkingDirectory=root,
+            StandardOutputEncoding=System.Text.Encoding.UTF8,StandardErrorEncoding=System.Text.Encoding.UTF8};
+        start.EnvironmentVariables["PYTHONUTF8"]="1";
+        var process=new Process{StartInfo=start,EnableRaisingEvents=true};
         process.OutputDataReceived+=(_,e)=>{if(e.Data!=null)lock(output)output.AppendLine(e.Data);};
         process.ErrorDataReceived+=(_,e)=>{if(e.Data!=null)lock(output)output.AppendLine(e.Data);};
         process.Exited+=(_,__)=>{process.WaitForExit();int code=process.ExitCode;string text;lock(output)text=output.ToString();
-            EditorApplication.delayCall+=()=>{if(code==0)UnityEngine.Debug.Log($"{label}: {text}");else UnityEngine.Debug.LogError($"{label} failed: {text}");then?.Invoke();};};
+            finished.Enqueue(()=>{if(code==0)UnityEngine.Debug.Log($"{label}: {text}");else UnityEngine.Debug.LogError($"{label} failed (exit {code}): {text}");then?.Invoke();});};
         process.Start();process.BeginOutputReadLine();process.BeginErrorReadLine();
     }
     static string Slug(string s){var chars=s.ToLowerInvariant().ToCharArray();for(int i=0;i<chars.Length;i++)if(!char.IsLetterOrDigit(chars[i]))chars[i]='-';return new string(chars).Trim('-');}

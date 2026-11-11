@@ -14,6 +14,9 @@ public sealed class SongDirector : MonoBehaviour
     [Serializable] public sealed class Cue { public double start,end;public string text,speech,view,stem,annotationTarget,annotationLabel,image,imageCaption,imageCredit,imagePlacement;public bool uncoil,releaseSoloAfterNarration;
         // soloGain: how much louder a quiet stem plays while this cue solos it (1 when absent); narrationEnd: when its voice stops.
         public float soloGain,narrationEnd; public double soloUntil; public string visualStem,concertoFocus,melodyTarget; public bool directedMelody; public int annotationPitchClass=-1,annotationMidiPitch=-1;
+        // annotationUntil: when the arrow and its label leave, once what they point at has played (song seconds inside
+        // the cue; 0 keeps them to the cue's end). StoryAnnotations fades them out.
+        public double annotationUntil;
         // annotationAnchor (optional): where on the structure wheel a patterns arrow points: a node's arc by label
         // ("section:A′", "phrase:a3", "node:A′/a1"), the omission slit ("omission:A′"), a power's staircase ("run:B1"),
         // an atom ("atom:N"), a relation's span ("relation:3"), the ghost cursor or the centre glyph ("ghost", "glyph").
@@ -28,6 +31,8 @@ public sealed class SongDirector : MonoBehaviour
     [Serializable] public sealed class Story {
         public int version;public string title,midiSha256,audioSha256,patternsSha256,model;public double duration;public Cue[] cues;public Narrator narrator;
         public PreparedPatternSong.MelodyStrand[] pianoMelody,orchestraMelody;
+        // The SHA-256 of the story.json bytes this was read from (not in the file): a recording's report names the story it played.
+        [NonSerialized] public string sha256="";
     }
     static readonly string[] Placements={"","right","left","center"};
     // The anchor grammar of Docs/MOTIF-REDUCTION.md §14.8, the same as story.py's validate_cues. \z, not $: $ also
@@ -47,6 +52,9 @@ public sealed class SongDirector : MonoBehaviour
     public bool Available=>story!=null;
     public int Revision {get;private set;}
     public Story Current=>story;
+    public string StorySha256=>story?.sha256??"";
+    // Where a tour (and a recorded take) starts: its first cue, so a silent head before the music is never played.
+    public double TourStart=>story!=null&&story.cues.Length>0?story.cues[0].start:0;
     public string Folder=>string.IsNullOrEmpty(source)?"":Path.GetDirectoryName(Path.GetFullPath(source));
     public Cue CurrentCue=>Directing&&story!=null&&current>=0&&current<story.cues.Length?story.cues[current]:null;
     public string Caption=>caption?.text??"";
@@ -70,11 +78,14 @@ public sealed class SongDirector : MonoBehaviour
         footer.style.display=DisplayStyle.None;toggle.SetEnabled(false);
     }
     static string Hash(string path){using var h=System.Security.Cryptography.SHA256.Create();using var s=File.OpenRead(path);return BitConverter.ToString(h.ComputeHash(s)).Replace("-","").ToLowerInvariant();}
+    static string Hash(byte[] bytes){using var h=System.Security.Cryptography.SHA256.Create();return BitConverter.ToString(h.ComputeHash(bytes)).Replace("-","").ToLowerInvariant();}
     static Story Read(string score)
     {
         string directory=Path.GetDirectoryName(Path.GetFullPath(score));string path=Path.Combine(directory,"story.json");
         if(!File.Exists(path))return null;
-        var value=JsonUtility.FromJson<Story>(File.ReadAllText(path));
+        // Read once, so the hash is of the very bytes parsed (story.json can be rewritten while the app runs).
+        byte[] bytes=File.ReadAllBytes(path);using var text=new StreamReader(new MemoryStream(bytes),System.Text.Encoding.UTF8,true);
+        var value=JsonUtility.FromJson<Story>(text.ReadToEnd());
         var manifest=JsonUtility.FromJson<SongAudio.Prepared>(File.ReadAllText(score+".prepared.json"));
         if(value==null||manifest==null||value.version!=1||value.midiSha256!=manifest.midiSha256||value.audioSha256!=manifest.audioSha256||
             value.patternsSha256!=Hash(score+".patterns.json")||!double.IsFinite(value.duration)||Math.Abs(value.duration-manifest.audioDuration)>.01)
@@ -86,6 +97,7 @@ public sealed class SongDirector : MonoBehaviour
                 string.IsNullOrWhiteSpace(cue.text)||cue.text.Length>450||!Enum.GetNames(typeof(VisualizationViews.View)).Contains(cue.view)||
                 (cue.uncoil&&cue.view!="Torus")||cue.stem==null||(cue.stem!=""&&!(manifest.stems??Array.Empty<StemPlayback.Stem>()).Any(s=>s.id==cue.stem))||
                 !double.IsFinite(cue.soloUntil)||(cue.soloUntil!=0&&(cue.soloUntil<=cue.start||cue.soloUntil>cue.end||cue.stem==""))||
+                !double.IsFinite(cue.annotationUntil)||(cue.annotationUntil!=0&&(cue.annotationUntil<=cue.start||cue.annotationUntil>cue.end))||
                 (!string.IsNullOrEmpty(cue.visualStem)&&!(manifest.stems??Array.Empty<StemPlayback.Stem>()).Any(s=>s.id==cue.visualStem))||
                 !new[]{"","balanced","piano-only","orchestra-only","piano","orchestra"}.Contains(cue.concertoFocus??"")||
                 !new[]{"","both","piano","orchestra","three"}.Contains(cue.melodyTarget??"")||
@@ -96,6 +108,7 @@ public sealed class SongDirector : MonoBehaviour
                 throw new InvalidDataException("Invalid story cue; no controls applied.");
             end=cue.end;
         }
+        value.sha256=Hash(bytes);
         return value;
     }
     public void SetDirecting(bool enabled)
@@ -108,7 +121,7 @@ public sealed class SongDirector : MonoBehaviour
     }
     public void Reload(){if(Directing)SetDirecting(false);source=null;}
     // The song list's guided tour: load the song, wait for its story, stems and narration, then
-    // play the story from the top.
+    // play the story from its first cue.
     public void Tour(SongLibraryPanel.Song song){StopAllCoroutines();StartCoroutine(RunTour(song));}
     System.Collections.IEnumerator RunTour(SongLibraryPanel.Song song)
     {
@@ -122,7 +135,7 @@ public sealed class SongDirector : MonoBehaviour
         float waited=0;
         while(waited<120&&(!ThisSong()||audio.Busy||stems.IsLoading||pending!=null||source!=midi.midiPath||(story!=null&&narration!=null&&narration.Pending))){waited+=Time.unscaledDeltaTime;yield return null;}
         if(!ThisSong()||story==null||!audio.Ready){status.text="No guided tour for this song yet.";yield break;}
-        midi.Pause();midi.Seek(0);SetDirecting(true);
+        midi.Pause();midi.Seek(TourStart);SetDirecting(true);
         if(Directing)midi.Play();
     }
     void Update()

@@ -52,7 +52,10 @@ static class PerformanceRecorderMenu
         Directory.CreateDirectory(Takes);
         string remote=$"/sdcard/Android/data/{Package}/files/Performances/.";
         var p=Process.Start(new ProcessStartInfo(adb,$"pull \"{remote}\" \"{Takes}\""){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true});
-        string output=p.StandardOutput.ReadToEnd()+p.StandardError.ReadToEnd();p.WaitForExit();
+        // Both pipes drain at once: read one to its end before the other, and adb can stall writing the other (one
+        // error line per file when a pull fails) while the editor waits on the first.
+        var pulled=p.StandardOutput.ReadToEndAsync();var errors=p.StandardError.ReadToEndAsync();p.WaitForExit();
+        string output=pulled.Result+errors.Result;
         if(p.ExitCode!=0&&!output.Contains("pulled")){Debug.LogWarning("Performances: adb pull: "+output.Trim());return output.Contains("no devices")?-1:Directory.GetFiles(Takes,"*"+VrPerformance.Extension).Length;}
         return Directory.GetFiles(Takes,"*"+VrPerformance.Extension).Length;
     }
@@ -122,7 +125,8 @@ static class PerformanceRecorderMenu
         string loud=Path.ChangeExtension(video,".loud.mp4");
         try
         {
-            var p=Process.Start(new ProcessStartInfo("ffmpeg",$"-v error -y -i \"{video}\" -c:v copy -af loudnorm=I=-16:TP=-1.5:LRA=11 -c:a aac -b:a 192k \"{loud}\""){UseShellExecute=false,CreateNoWindow=true,RedirectStandardError=true});
+            // loudnorm works at 192 kHz and hands on a raised rate unless told otherwise: -ar keeps the take's 48 kHz.
+            var p=Process.Start(new ProcessStartInfo("ffmpeg",$"-v error -y -i \"{video}\" -c:v copy -af loudnorm=I=-16:TP=-1.5:LRA=11 -ar 48000 -c:a aac -b:a 192k \"{loud}\""){UseShellExecute=false,CreateNoWindow=true,RedirectStandardError=true});
             string error=p.StandardError.ReadToEnd();p.WaitForExit();
             if(p.ExitCode==0&&File.Exists(loud)){File.Delete(video);File.Move(loud,video);}
             else Debug.LogWarning("Performances: loudness not adjusted: "+error.Trim());

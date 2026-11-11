@@ -166,6 +166,9 @@ public sealed class SongAudio : MonoBehaviour
         ExplorerInputFocus.ClaimUI();field.Focus();
 #endif
     }
-    void Update(){if(status!=null)status.text=Status;if(main.Synth!=null){Source.volume=main.Synth.Volume*(GetComponent<StemPlayback>()?.MasterGain??1)*(GetComponent<SongNarration>()?.MusicGain??1);Source.pitch=1;main.Synth.GetComponent<AudioSource>().mute=Ready&&midi.IsPlaying&&!(GetComponent<StemPlayback>()?.MidiSolo??false);}}
+    void Update(){if(status!=null)status.text=Status;}
+    // After SongDirector (order 80) has picked this frame's solo and SongNarration (90) its duck: set in Update, the
+    // music played each frame's gain a frame late (RecordingSession.Report.duckLagFrames).
+    void LateUpdate(){if(main.Synth!=null){Source.volume=main.Synth.Volume*(GetComponent<StemPlayback>()?.MasterGain??1)*(GetComponent<SongNarration>()?.MusicGain??1);Source.pitch=1;main.Synth.GetComponent<AudioSource>().mute=Ready&&midi.IsPlaying&&!(GetComponent<StemPlayback>()?.MidiSolo??false);}}
     void OnDestroy(){generation++;if(Source!=null&&Source.clip!=null)Destroy(Source.clip);}
 }

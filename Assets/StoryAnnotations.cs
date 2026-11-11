@@ -5,15 +5,19 @@ using UnityEngine.UIElements;
 [DefaultExecutionOrder(1160)]
 public sealed class StoryAnnotations : MonoBehaviour
 {
-    SongDirector director;Main main;FeaturedInstrument featured;PatternWheelDeck wheels;
-    VisualElement root,controls;ArrowCanvas canvas;Label label;bool enabledArrows=true;Vector2 labelPosition;
+    SongDirector director;Main main;FeaturedInstrument featured;PatternWheelDeck wheels;MidiPlayer midi;
+    VisualElement root,controls;ArrowCanvas canvas;Label label;bool enabledArrows=true;Vector2 labelPosition;float opacity=1;
     readonly List<Vector3> worldPoints=new();
     readonly Label[] voiceLabels=new Label[3];
+    // How long the arrow and its label take to leave once their cue's annotationUntil has passed (song seconds).
+    public const float FadeSeconds=.4f;
     public int ArrowCount=>canvas?.Targets.Count??0;
     public string TargetName=>director?.CurrentCue?.annotationTarget??"none";
+    // The arrows' and label's opacity this frame; 0 while they are hidden.
+    public float Opacity {get;private set;}
     public void Bind(VisualElement ui,VisualElement panel,PatternWheelDeck patterns,VisualElement settings)
     {
-        director=GetComponent<SongDirector>();main=GetComponent<Main>();featured=GetComponent<FeaturedInstrument>();
+        director=GetComponent<SongDirector>();main=GetComponent<Main>();featured=GetComponent<FeaturedInstrument>();midi=GetComponent<MidiPlayer>();
         root=ui;controls=panel;wheels=patterns;
         var toggle=new Toggle("Story guide arrows"){name="story-guide-arrows",value=true};toggle.RegisterValueChangedCallback(e=>enabledArrows=e.newValue);settings.Add(toggle);
         canvas=new ArrowCanvas{name="story-guide-overlay",pickingMode=PickingMode.Ignore};
@@ -23,12 +27,21 @@ public sealed class StoryAnnotations : MonoBehaviour
         for(int i=0;i<voiceLabels.Length;i++){var tip=new Label{pickingMode=PickingMode.Ignore,enableRichText=false};tip.style.position=Position.Absolute;tip.style.fontSize=12;tip.style.color=new Color(.88f,.96f,1);canvas.Add(tip);voiceLabels[i]=tip;}
         canvas.style.display=DisplayStyle.None;
     }
+    // 1 until the cue's annotationUntil, then down to 0 over FadeSeconds. The song clock decides, so the arrow stays
+    // away for the rest of the cue and a seek back inside the cue brings it back.
+    float Presence(SongDirector.Cue cue)
+    {
+        if(cue.annotationUntil<=0||midi==null||midi.Position<cue.annotationUntil)return 1;
+        if(Main.ReducedMotion)return 0;
+        float t=Mathf.Clamp01(1-(float)(midi.Position-cue.annotationUntil)/FadeSeconds);return t*t*(3-2*t);
+    }
     void LateUpdate()
     {
         if(canvas==null||root.panel==null)return;
-        canvas.Targets.Clear();var cue=director.CurrentCue;
+        canvas.Targets.Clear();var cue=director.CurrentCue;Opacity=0;
         foreach(var tip in voiceLabels)tip.style.display=DisplayStyle.None;
-        if(!enabledArrows||cue==null||main.UncoilMoving){canvas.style.display=DisplayStyle.None;return;}
+        float presence=cue!=null?Presence(cue):0;
+        if(!enabledArrows||cue==null||main.UncoilMoving||presence<=0){canvas.style.display=DisplayStyle.None;return;}
         float width=root.resolvedStyle.width,height=root.resolvedStyle.height;
         if(!float.IsFinite(width)||width<1||height<1)return;
         float left=GetComponent<VisualizationViews>().PanelHidden?20:controls.resolvedStyle.width+20;
@@ -68,7 +81,8 @@ public sealed class StoryAnnotations : MonoBehaviour
         // Reflow only when the viewport or side panel changes, never with notes.
         labelPosition=new Vector2(Mathf.Min(left+16,Mathf.Max(16,width-225)),90);
         label.text=cue.annotationLabel??"";label.style.left=labelPosition.x;label.style.top=labelPosition.y;
-        canvas.Start=labelPosition+new Vector2(100,42);canvas.style.display=DisplayStyle.Flex;canvas.MarkDirtyRepaint();
+        if(presence!=opacity){opacity=presence;canvas.style.opacity=presence;}
+        canvas.Start=labelPosition+new Vector2(100,42);canvas.style.display=DisplayStyle.Flex;canvas.MarkDirtyRepaint();Opacity=presence;
     }
     sealed class ArrowCanvas : VisualElement
     {

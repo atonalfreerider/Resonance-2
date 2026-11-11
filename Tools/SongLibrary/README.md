@@ -252,17 +252,23 @@ Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/narration.py Prepar
   Director mode plays, for checking the balance by ear.
 - **Tours in the song list.** A song with a story and narration shows a **▶ Tour** button on
   its card: it loads the song, waits for the story, stems and voice, and plays the tour from
-  the top in Director mode, the camera slowly orbiting the torus in the Torus and overview
-  views (paused while it uncoils). The card shows the story's title.
+  its first cue's start in Director mode (a recorded take starts there too, so a silent head
+  before the first cue is never played), the camera slowly orbiting the torus in the Torus and
+  overview views (paused while it uncoils). The card shows the story's title.
 - **Spoken forms.** A draft's `speech` wording is what Cartesia reads: JAY-Z as "Jay Z", R&B as
   "R and B", pronunciations of names.
+- **Arrows that leave.** A cue's arrow and label (`annotationTarget`) stay for the whole cue
+  unless it sets `annotationUntil` (recording seconds inside the cue; 0 or absent keeps them to
+  the cue's end): once the song passes it, `StoryAnnotations` fades them out over 0.4 s and
+  keeps them hidden for the rest of the cue. Seeking back inside the cue shows them again.
 
 ### Tours written in bars (songs ingested from a score)
 
 For a song ingested with `library.py ingest <recording> --score <score.mscz>`, a director writes cues in printed
 bars instead of seconds: `Tools/SongLibrary/directors/<song>.json` (committed) holds the draft with a `bundle`
 glob, and each cue says `"from": "17", "to": "21:2"` (bar 21, beat 2; `"9#2"` is the second time bar 9 is
-played; `"end"` the end of the last bar). `soloUntil`, `narrationStart` and `narrationEnd` may be bar specs too.
+played; `"end"` the end of the last bar). `soloUntil`, `narrationStart`, `narrationEnd` and `annotationUntil` may
+be bar specs too (`"annotationUntil": "75:2"` takes an arrow away once the note it points at has played).
 `score_bars.BarClock` turns them into recording seconds through the bundle's score import and aligned tempo
 map, so every cue follows the performer's timing.
 
