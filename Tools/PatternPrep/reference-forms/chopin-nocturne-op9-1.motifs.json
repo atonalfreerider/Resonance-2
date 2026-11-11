@@ -1,0 +1,20 @@
+{
+  "title": "Chopin Nocturne Op. 9 No. 1",
+  "spec": "Docs/MOTIF-REDUCTION.md §15.2, N1–N5. MIDI only, 6/4: measure 0 is the 3/4 pickup, bar b ≥ 1 starts at beat 3 + 6(b − 1).",
+  "bundle": "F-Chopin---Nocturne-Op-9-No-1-in-B-flat-minor-Rubinstein-*",
+  "tuning": "PeriodKappa 1.25 (§10 period DP; the spec's default is 1.0): with 1.0 the Nocturne's B takes five periods and N3 counts 10 level-2 prototypes; from 1.25 (or λ 0.75) four, while the étude's B keeps its five periods (E5) for every λ in {0.5, 0.75, 1} and κ in {0.75 … 2}. Every other parameter at its §10 default (Motifs/MotifSettings.cs); no song.json override",
+  "tolerance": 0.5,
+  "sectionsId": "N1 form",
+  "sections": [["A", 0, 108, 0.5, 3], ["B", 108, 417, 3, 6], ["A′", 417, null, 6, 0.5]],
+  "return": {
+    "id": "N2 reprise", "node": "A′", "source": "A", "omitsNonEmpty": true, "tolerance": 6,
+    "matches": [[45, 105, 417, 477]],
+    "deletedBefore": { "beat": 45, "minBeats": 36 }
+  },
+  "relations": [
+    { "id": "N3 refrain", "kindAnyOf": ["Return", "Power"], "within": [105, 315], "unit": 48, "minCount": 2, "tolerance": 6 }
+  ],
+  "level2Prototypes": { "id": "N3 families", "max": 9 },
+  "projectedFrom": { "id": "N4 reprise projected", "section": "A′" },
+  "stats": { "id": "N5 code", "timeId": "N5 time", "maxBitsPerNote": 7.0, "maxSeconds": 3.0 }
+}

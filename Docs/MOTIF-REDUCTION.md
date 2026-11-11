@@ -1803,3 +1803,50 @@ Generator order signs on the wheel:
   (μ⁻′ ↓8ve [♭6])², Appendix A's (S′ ↓8ve [♭6])²); U, V, W … name units of several cells. F11's and the étude's 2-bar sixths unit
   is one cell of the principal line, so B1 reads (ι²)² ↑1 and (ν²)² ↑1. The formula's first line starts with the sections
   ("A · B · A′    A′ = A − (a2 a1′) + Coda", as §15 E16 and §13.1's fragment have it), not with "Étude =" as Appendix A writes it.
+- §9 G1, G4 (step 7): the code covers each note once: the coding streams are the score voices (with each staff's "other voices"),
+  the lanes' lines and rests, and the drum groups; graces are coded from their hosts. Textures and both hands are views of the
+  same notes, so they are neither decoded nor priced, though their members still count as derived (§9 G3) and their cells are
+  exported (§9 G5). A literal's first note is coded from the lead the decoder holds there, not the lead the score has: the encoder
+  runs the decoder cell by cell. A real image can spell a note differently, and the next literal stays exact. Verify then
+  decodes the whole code again from scratch, so a residual changed in between is caught (F22).
+- §9 G4 (step 7): each note's articulation is its analysed onset against the decoded one (ticks), the transcription's offset,
+  its duration in ticks, and its velocity as k/127. Two escapes keep the gate lossless on synthetic input: a velocity that is
+  not k/127 (PopScore's .5 × loudness) is stored as its float, and a note off the tick grid (IngestScore's 0.52-beat note) as
+  its exact beat or length. These cost 32 or 64 bits in BitsArticulation. L_articulation's duration symbol is the deviation
+  in ticks, not slots, from the prototype note's duration (members), the next onset (literal leads) or the lead's (the notes
+  struck with it).
+- §9 G1 (step 7), what the formula leaves open:
+  - Residual (L(ρ)): a member's further chord notes (γ(Δm), plus 3 when altered) and graces (2 + γ(interval)).
+  - L_streams: 8 bits per coding stream, 1 per rest between cells, and 2 + 7 + log2(#columns) per grace without a host.
+  - Replacement by a power or a return: only where the member restates the member one unit earlier (a power) or at the
+    aligned source position (a return's match) under the step or the transposition: same paradigm, same length, elements
+    differing by exactly that. Each member is replaced once, by the returns first and then by stage D's powers in order.
+  - A return costs log2(#columns) + L(T_K), plus γ(columns) per match, and log2(#columns) + γ(columns) per gap or
+    substitution.
+- §9 G3, G5 (step 7):
+  - Derived coverage: unit powers, returns' matches and cross-references count the pitched notes of their spans (a
+    cross-reference only the principal line's, a doubling only StreamB's).
+  - The caption's "cells" is the exported paradigm count, texture shapes included (91 on the étude, not the example's 24).
+  - "Lowest coverage first" means the fewest notes in a stream's member cells. The byte cap takes each stream's share of
+    the JSON from one serialisation and drops enough streams at once: the Rach2 Allegro's export went from 1.6 s to 0.4 s,
+    with the same 27 streams left out.
+  - A cell's "8 largest" sparks are ranked by kind (insertions and deletions, substitutions, alterations, a held head,
+    shifts), then by beat.
+- §12.1 (step 7):
+  - Program.cs's preparation is now a local function, `Prepare`, shared by the main path, `--motifs-report` and
+    `--sweep-motifs`; `SelfTests.SweepMotifs` takes it as a delegate.
+  - Fail-soft also covers an exception in stages A–F (`Status = "analysis failed: …"`), not only a Verify mismatch. A member
+    stage C cannot decode counts as a Verify failure.
+  - Ingest warnings, such as an ignored score import, are added to `Status`.
+- §10 (step 7): `PeriodKappa` is 1.25, not 1.0, as recorded in the golden files. With 1.0 the Nocturne's B splits off a 5-bar
+  period at 138 and N3 counts 10 level-2 prototypes against ≤ 9. From κ 1.25 (or λ 0.75) B has four periods, and the étude's B
+  keeps the five of §15.1 E5 for every λ in {0.5, 0.75, 1} and κ in {0.75 … 2}. This moves κ in the direction §10 already
+  argues ("κ = 0.5 would split 38–41 | 42–45").
+- §15.0 (step 7), the golden files:
+  - They extend §15.0's shape: a list of `checks` (a node, relation, cell, paradigm or atom matching every constraint, or
+    `absent`), `should` items that only warn, a tolerance for each end of a section, and `reviewedSections`, `formGrammar`,
+    `level2Prototypes`, `projectedFrom` and `eachSectionHasPower` for N3, N4, T1 and T3.
+  - When a glob matches several bundles, the newest `aligned.mid` wins: the étude also has the superseded 5bfb46.
+  - E19's jitter is σ in ticks at 480 a quarter (§0.4), and no note moves before the score's start (F21's "never before 0"),
+    so a jittered pickup cannot fall into the silent lead-in.
+  - A failed assertion makes `--sweep-motifs` exit with 1.

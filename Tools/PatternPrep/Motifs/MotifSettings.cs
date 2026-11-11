@@ -60,7 +60,7 @@ public sealed record MotifSettings
     // §8 hierarchy
     public double PhraseMinBars { get; init; } = 2;
     public double PeriodLambda { get; init; } = .5;               // × the median evidence
-    public double PeriodKappa { get; init; } = 1;                 // 0.5 would split 38–41 | 42–45
+    public double PeriodKappa { get; init; } = 1.25;              // tuned from 1.0 (step 7): the Nocturne's B in 4 periods (§15.2 N3), the étude's 5 kept; 0.5 would split 38–41 | 42–45
     public int[] PeriodBars { get; init; } = { 2, 4, 8, 12, 16 };
     public double SubPhraseBars { get; init; } = 6;               // a phrase this long splits into sub-phrases …
     public double FamilyHoldBars { get; init; } = 2;              // … where a new family of the principal line holds this long

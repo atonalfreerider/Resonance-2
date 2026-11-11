@@ -21,6 +21,7 @@ public static partial class SelfTests
         MotifIteration(verbose);
         MotifReturns(verbose);
         MotifHierarchy(verbose);
+        MotifCoding(verbose);
         Console.WriteLine("PASS: motif contract (F24) — a version 6 layer round-trips with the §13.1 field names, HasMotifs is not written, a version 5 bundle reads as Schema 0");
         Console.WriteLine("PASS: motif ingest — tick grid, metric weights and printed bars after a silent lead-in, score import (scaled ticks, staves, voices, tpc, graces, directions), transcription snap, skyline and voice streams, principal stream; B♭ minor's leading tone is A (F28)");
         Console.WriteLine("PASS: motif transform group — costs, composition, images, stabilisers and orders; names: tonal sequence up a second (F3), the leading tone of A minor (F4), the parallel minor (F5)");
@@ -29,6 +30,7 @@ public static partial class SelfTests
         Console.WriteLine("PASS: motif iteration (F7–F10, F15–F17, F20) — tritone and diminished-seventh cycles, an alternation, doubling with contrary motion, liquidation, a nested power and a two-cell unit power, drum loops; F3's sequence as a power; the near relation extends an exact sequence");
         Console.WriteLine("PASS: motif returns (F11–F13 at level 1, F19, F21) — the étude-shaped ternary is A B A′ with A′ = A − (a2 a1′) + coda and a1′ ≅ a1 inside A; a head-deleted reprise; the omission stays a2 + a1′ when a1′ equals a1 and under transcription noise; pop sections verbatim with (V2 C2) ← (V1 C1) and C3 ← C1 a whole tone up");
         Console.WriteLine("PASS: motif hierarchy (F11 in full, F12, F13) — phrases a1 a2 a1′ a3 with a3 cut at the sigh head, periods B1 … with B1 = (U²)² ↑1, A′ = a1 · a3′ · Coda omitting a2 and a1′ (also when a1′ equals a1), a head-deleted reprise omitting x; bar 16 = bar 6 a sixth higher; pop copies inherit their phrases; the formula and caption lines");
+        Console.WriteLine("PASS: motif code (F22, F23) — every fixture decodes back to its notes from the description (prototypes, members under g with their edits, literals, graces, articulation); a mutated residual is caught; two runs and another culture give a byte-identical layer; the export's indices, caps and caption hold; a failure disables the layer by default and throws in strict mode");
     }
 
     // Line(score, startBeat, "C4/8 B3/16 C4/16 D4/16*5 …"): a monophonic line, note after note. A token is
@@ -66,19 +68,35 @@ public static partial class SelfTests
         score.Note(beat, length, ScorePitch(bass), 80 / 127f, 2, 2);
     }
 
-    static MotifInput Ingest(Score score, int key = 3, bool minor = false, SongFormAnalysis.ChordStep[] chords = null, SongSettings song = null, string folder = null, string[] names = null) =>
-        Ingest(score, out _, key, minor, chords, song, folder, names);
-    static MotifInput Ingest(Score score, out PreparedPatternSong data, int key = 3, bool minor = false, SongFormAnalysis.ChordStep[] chords = null, SongSettings song = null, string folder = null, string[] names = null)
+    // Every fixture's ingest also runs stages A–G and the lossless gate, strict (§16: each fixture asserts Verify, F22).
+    static MotifInput Ingest(Score score, int key = 3, bool minor = false, SongFormAnalysis.ChordStep[] chords = null, SongSettings song = null, string folder = null, string[] names = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string caller = "", [System.Runtime.CompilerServices.CallerLineNumber] int line = 0) =>
+        Ingest(score, out _, key, minor, chords, song, folder, names, caller, line);
+    static MotifInput Ingest(Score score, out PreparedPatternSong data, int key = 3, bool minor = false, SongFormAnalysis.ChordStep[] chords = null, SongSettings song = null, string folder = null, string[] names = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string caller = "", [System.Runtime.CompilerServices.CallerLineNumber] int line = 0)
     {
-        var cycles = score.Cycles();
-        var harmony = ChordTimeline.Build(cycles, key, minor);
-        data = new PreparedPatternSong
+        data = FixtureData(score, key, minor, chords, names, out var cycles, out var harmony);
+        var settings = MotifSettings.FromSong(song ?? new SongSettings());
+        Verified(data, cycles, harmony, settings, folder, $"the fixture ingested by {caller} (line {line})");
+        return MotifInput.Read(data, cycles, harmony, settings, folder, MotifPpq);
+    }
+    static PreparedPatternSong FixtureData(Score score, int key, bool minor, SongFormAnalysis.ChordStep[] chords, string[] names, out MidiCycleAnalysis cycles, out ChordTimeline.Grid harmony)
+    {
+        cycles = score.Cycles();
+        harmony = ChordTimeline.Build(cycles, key, minor);
+        var data = new PreparedPatternSong
         {
             Notes = cycles.Notes.ToArray(), Measures = cycles.Measures.ToArray(), EndBeat = score.Beat, TrackNames = names ?? MotifTrackNames, Key = key, Minor = minor, LeadVocalTrack = -1,
             Tempos = new[] { new PreparedPatternSong.Tempo { Beat = 0, Seconds = 0, Microseconds = 500000 } }, Chords = chords ?? ChordTimeline.Steps(harmony).ToArray()
         };
         MelodySelection.Build(data);
-        return MotifInput.Read(data, cycles, harmony, MotifSettings.FromSong(song ?? new SongSettings()), folder, MotifPpq);
+        return data;
+    }
+    // Stages A–G with the lossless gate (MotifVerify.Check) on a fixture: a decode failure fails the self-test.
+    static MotifAnalysis.Result Verified(PreparedPatternSong data, MidiCycleAnalysis cycles, ChordTimeline.Grid harmony, MotifSettings settings, string folder, string name)
+    {
+        try { return MotifAnalysis.Run(data, cycles, harmony, settings, folder, MotifPpq); }
+        catch (InvalidDataException e) { throw new Exception($"FAIL: F22: {name} does not decode losslessly: {e.Message}"); }
     }
     // The leads of a stream in [from, to) beats, as a cell starting at `from`.
     static (CellNote[] notes, long start) Cell(MotifInput input, int stream, double from, double to)
@@ -1151,6 +1169,620 @@ public static partial class SelfTests
             "F19: the eight pop sections are level 1, (V2 C2) and C3 inherit the phrases of V1 and C1: " + Show(top) + "; " + Show(Kids(top[3])));
     }
 
+    // ---------------------------------------------------------------------------------------------------------------
+    // §15: real pieces against their golden files (PatternPrep --sweep-motifs reference-forms/*.motifs.json).
+    //
+    // A golden file names its bundle by a folder glob in PreparedSongs/Library (the newest aligned.mid wins when several match;
+    // none: the piece is skipped, since PreparedSongs is not in git), then states what the layer must show. The sweep prepares
+    // the bundle as a regeneration would (song.json, score-import.json), runs the motif stages twice in strict mode (Verify
+    // throws, the two layers must be byte-identical), writes nothing, and prints PASS, FAIL or WARN (a "should" item) per
+    // assertion. Assertions, all in bundle beats:
+    // - "sections": the level-1 nodes exactly, [label, start, end] with an optional tolerance per end (null: unchecked);
+    //   "reviewedSections": level 1 is data.Sections verbatim; "formGrammar": data.FormGrammar unchanged.
+    // - "return": the level-1 return of node to source: "omits" (or "omitsNonEmpty"), its "edits" in order ([op, source…,
+    //   target…]), "matches" ([s0, s1, t0, t1]: one match edit starts at s0 → t0 and one ends at s1 → t1), "deletedBefore".
+    // - "phrases": a section's children, by their boundaries (and optionally labels).
+    // - "paradigms": a paradigm whose members start exactly at "members" (or include "membersInclude"), with its atom, sign,
+    //   members' steps ("steps": {beat: steps}) and "memberAt" constraints.
+    // - "relations", "checks": something exists ("absent": nothing does) matching every constraint: a field equal (beats within
+    //   the tolerance), "minX"/"maxX", "xAnyOf", "xContains", "within"/"covers" a span, "children" of a node, "sparks" of a cell.
+    // - "stats": notes, the model against the literal and entropy baselines, derived share, mirrored cells, bits a note, seconds.
+    // - "level2Prototypes", "projectedFrom", "eachSectionHasPower", "formula"; "noise": seeded perturbations of the notes, of
+    //   which "noisePass" must keep level 1 and the deletion.
+    public static void SweepMotifs(string[] references, Func<string, MotifAnalysis.Prepared> prepare)
+    {
+        int passed = 0, failed = 0, warned = 0, skipped = 0;
+        foreach (string reference in references)
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(reference));
+            var g = doc.RootElement; string title = Text(g, "title", Path.GetFileName(reference));
+            string glob = Text(g, "bundle", "");
+            string bundle = FindBundle(reference, glob, out int matches);
+            if (bundle == null) { Console.WriteLine($"SKIP {title}: no bundle in PreparedSongs/Library matches \"{glob}\""); skipped++; continue; }
+            Console.WriteLine($"== {title}: {Path.GetFileName(bundle)}{(matches > 1 ? $" (the newest of {matches} matches)" : "")}");
+            var sweep = new GoldenSweep(g);
+            try
+            {
+                var prepared = prepare(Path.Combine(bundle, "aligned.mid"));
+                MotifAnalysis.Result Run(MotifAnalysis.Prepared p) => MotifAnalysis.Run(p.Data, p.Cycles, p.Analysis.Grid, MotifSettings.FromSong(p.Settings, MotifAnalysis.Overrides(p.Folder)), p.Folder, p.Ppq);
+                MotifAnalysis.Result first, second;
+                try { first = Run(prepared); second = Run(prepared); }
+                catch (InvalidDataException e) { sweep.Report(false, false, "Verify", "strict Verify: " + e.Message); first = second = null; }
+                if (first != null)
+                {
+                    var options = new JsonSerializerOptions { IncludeFields = true };
+                    sweep.Report(true, false, "Verify", $"strict Verify passes: {first.Layer.Stats.Notes:N0} notes decode from the description");
+                    sweep.Report(JsonSerializer.Serialize(first.Layer, options) == JsonSerializer.Serialize(second.Layer, options), false, "determinism", "two runs give a byte-identical layer");
+                    Console.WriteLine("  timings (warm): " + MotifAnalysis.Timings(second));
+                    if (first.Layer.Status.Length > 0) Console.WriteLine("  status: " + first.Layer.Status);
+                    Console.WriteLine("  caption: " + first.Layer.Caption);
+                    sweep.Evaluate(first.Layer, prepared.Data, second.Seconds);
+                    if (g.TryGetProperty("noise", out var noise) && noise.ValueKind == JsonValueKind.Array) sweep.Noise(prepared, noise, Run);
+                }
+            }
+            catch (Exception e) when (e is not OutOfMemoryException) { sweep.Report(false, false, "run", $"{e.GetType().Name}: {e.Message}"); }
+            Console.WriteLine($"  {title}: {sweep.Passed} passed, {sweep.Failed} failed, {sweep.Warned} warnings");
+            passed += sweep.Passed; failed += sweep.Failed; warned += sweep.Warned;
+        }
+        Console.WriteLine($"SWEEP: {passed} passed, {failed} failed, {warned} warnings, {skipped} skipped");
+        if (failed > 0) Environment.ExitCode = 1;
+    }
+
+    // The bundle folder whose name matches the glob (* any characters), the newest aligned.mid among several.
+    static string FindBundle(string reference, string glob, out int matches)
+    {
+        matches = 0;
+        string library = null;
+        for (var dir = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(reference))); dir != null && library == null; dir = dir.Parent)
+            if (Directory.Exists(Path.Combine(dir.FullName, "PreparedSongs", "Library"))) library = Path.Combine(dir.FullName, "PreparedSongs", "Library");
+        library ??= Path.Combine(Directory.GetCurrentDirectory(), "PreparedSongs", "Library");
+        if (glob.Length == 0 || !Directory.Exists(library)) return null;
+        var pattern = new System.Text.RegularExpressions.Regex("^" + System.Text.RegularExpressions.Regex.Escape(glob).Replace("\\*", ".*") + "$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        var found = Directory.GetDirectories(library).Where(d => pattern.IsMatch(Path.GetFileName(d)) && File.Exists(Path.Combine(d, "aligned.mid")))
+            .OrderByDescending(d => File.GetLastWriteTimeUtc(Path.Combine(d, "aligned.mid"))).ThenBy(d => Path.GetFileName(d), StringComparer.Ordinal).ToList();
+        matches = found.Count;
+        return found.FirstOrDefault();
+    }
+    static string Text(JsonElement e, string name, string fallback) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : fallback;
+
+    sealed class GoldenSweep
+    {
+        readonly JsonElement golden; readonly double tolerance;
+        public int Passed, Failed, Warned;
+        PreparedPatternSong.MotifLayer m;
+        static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+        static readonly string[] NodeKinds = { "Piece", "Section", "Phrase", "Period", "SubPhrase", "Power", "Unit", "Coda", "Intro", "Arrival" };
+        static readonly string[] RelationKindNames = { "Return", "Power", "Run", "Doubling", "Alternation", "Liquidation", "CrossReference" };
+        static readonly string[] SparkKinds = { "Inserted", "Deleted", "Substituted", "Altered", "Shifted", "Lengthened", "Octave", "Ornament" };
+        static readonly string[] EditOps = { "match", "delete", "insert", "substitute" };
+
+        public GoldenSweep(JsonElement golden) { this.golden = golden; tolerance = Number(golden, "tolerance", .5); }
+
+        public void Report(bool ok, bool should, string id, string text)
+        {
+            if (ok) { Passed++; Console.WriteLine($"  PASS {id}: {text}"); }
+            else if (should) { Warned++; Console.WriteLine($"  WARN {id}: {text}"); }
+            else { Failed++; Console.WriteLine($"  FAIL {id}: {text}"); }
+        }
+        static double Number(JsonElement e, string name, double fallback) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : fallback;
+        static bool Flag(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
+        static string F(double x) => x.ToString("0.###", Inv);
+        string Span(double a, double b) => $"[{F(a)}, {F(b)})";
+        string Label(int node) => node >= 0 && node < m.Nodes.Length ? m.Nodes[node].Label : "";
+
+        public void Evaluate(PreparedPatternSong.MotifLayer layer, PreparedPatternSong data, double seconds)
+        {
+            m = layer;
+            var top = Children(0);
+            if (golden.TryGetProperty("sections", out var sections))
+            {
+                var want = sections.EnumerateArray().ToArray(); bool ok = top.Length == want.Length;
+                for (int i = 0; ok && i < want.Length; i++)
+                {
+                    var w = want[i].EnumerateArray().ToArray(); var n = m.Nodes[top[i]];
+                    double t0 = w.Length > 3 && w[3].ValueKind == JsonValueKind.Number ? w[3].GetDouble() : tolerance, t1 = w.Length > 4 && w[4].ValueKind == JsonValueKind.Number ? w[4].GetDouble() : t0;
+                    ok = n.Label == w[0].GetString() && (w[1].ValueKind != JsonValueKind.Number || Math.Abs(n.Start - w[1].GetDouble()) <= t0 + 1e-9)
+                        && (w[2].ValueKind != JsonValueKind.Number || Math.Abs(n.End - w[2].GetDouble()) <= t1 + 1e-9);
+                }
+                Report(ok, false, Id(golden, "sectionsId", "form"), $"level 1 is {string.Join(" ", want.Select(w => w[0].GetString()))}: {Level1()}");
+            }
+            if (Flag(golden, "reviewedSections"))
+            {
+                var s = data.Sections; bool ok = top.Length == s.Length;
+                for (int i = 0; ok && i < s.Length; i++) { var n = m.Nodes[top[i]]; ok = n.Label == s[i].DisplayName && Math.Abs(n.Start - s[i].Start) < 1e-6 && Math.Abs(n.End - s[i].End) < 1e-6; }
+                Report(ok, false, Id(golden, "reviewedId", "sections"), $"level 1 is data.Sections verbatim ({s.Length}): {Level1()}");
+            }
+            if (golden.TryGetProperty("formGrammar", out var grammar)) Report(data.FormGrammar == grammar.GetString(), false, "grammar", $"FormGrammar is \"{grammar.GetString()}\": \"{data.FormGrammar}\"");
+            if (golden.TryGetProperty("return", out var ret)) Return(ret);
+            if (golden.TryGetProperty("phrases", out var phrases))
+                foreach (var p in phrases.EnumerateObject())
+                {
+                    var spec = p.Value; double tol = spec.ValueKind == JsonValueKind.Object ? Number(spec, "tolerance", tolerance) : tolerance;
+                    var cuts = (spec.ValueKind == JsonValueKind.Object ? spec.GetProperty("cuts") : spec).EnumerateArray().Select(x => x.GetDouble()).ToArray();
+                    var labels = spec.ValueKind == JsonValueKind.Object && spec.TryGetProperty("labels", out var l) ? l.EnumerateArray().Select(x => x.GetString()).ToArray() : null;
+                    int section = top.FirstOrDefault(i => m.Nodes[i].Label == p.Name, -1);
+                    var kids = section >= 0 ? Children(section) : Array.Empty<int>();
+                    bool ok = kids.Length == cuts.Length - 1;
+                    for (int i = 0; ok && i < kids.Length; i++) ok = Math.Abs(m.Nodes[kids[i]].Start - cuts[i]) <= tol + 1e-9 && Math.Abs(m.Nodes[kids[i]].End - cuts[i + 1]) <= tol + 1e-9 && (labels == null || m.Nodes[kids[i]].Label == labels[i]);
+                    Report(ok, spec.ValueKind == JsonValueKind.Object && Flag(spec, "should"), spec.ValueKind == JsonValueKind.Object ? Id(spec, "id", "phrases " + p.Name) : "phrases " + p.Name,
+                        $"{p.Name} = {string.Join(" · ", (labels ?? Enumerable.Repeat("", cuts.Length - 1).ToArray()).Select((x, i) => (x.Length > 0 ? x + " " : "") + Span(cuts[i], cuts[i + 1])))} (±{F(tol)}): {string.Join(" · ", kids.Select(k => m.Nodes[k].Label + " " + Span(m.Nodes[k].Start, m.Nodes[k].End)))}");
+                }
+            if (golden.TryGetProperty("paradigms", out var paradigms)) foreach (var p in paradigms.EnumerateArray()) Exists(p, "paradigm");
+            if (golden.TryGetProperty("relations", out var relations)) foreach (var r in relations.EnumerateArray()) Exists(r, "relation");
+            if (golden.TryGetProperty("checks", out var checks)) foreach (var c in checks.EnumerateArray()) Exists(c, Text(c, "what", "node"));
+            if (golden.TryGetProperty("formula", out var formula))
+            {
+                string first = m.Formula.Split('\n')[0]; bool ok = !formula.TryGetProperty("startsWith", out var sw) || first.StartsWith(sw.GetString(), StringComparison.Ordinal);
+                if (formula.TryGetProperty("captionContains", out var cc)) foreach (var x in cc.EnumerateArray()) ok &= m.Caption.Contains(x.GetString(), StringComparison.Ordinal);
+                Report(ok, false, Id(formula, "id", "formula"), $"formula \"{first}\", caption \"{m.Caption}\"");
+            }
+            if (golden.TryGetProperty("level2Prototypes", out var l2))
+            {
+                var fresh = m.Nodes.Where(n => n.Level == 2 && !n.Projected && n.Prototype < 0).ToArray();
+                int max = (int)Number(l2, "max", int.MaxValue);
+                Report(fresh.Length <= max, Flag(l2, "should"), Id(l2, "id", "families"), $"at most {max} level-2 prototypes: {fresh.Length} ({string.Join(", ", fresh.Select(n => n.Label))})");
+            }
+            if (golden.TryGetProperty("projectedFrom", out var pf))
+            {
+                string section = Text(pf, "section", "A′"); int s = top.FirstOrDefault(i => m.Nodes[i].Label == section, -1);
+                var kids = s >= 0 ? Children(s) : Array.Empty<int>();
+                var fresh = kids.Where(k => !m.Nodes[k].Projected && m.Nodes[k].Kind != PreparedPatternSong.MotifKinds.Coda).ToArray();
+                Report(s >= 0 && kids.Length > 0 && fresh.Length == 0, Flag(pf, "should"), Id(pf, "id", "projected"), $"inside {section} every level-2 node but the coda is projected: {string.Join(" · ", kids.Select(k => m.Nodes[k].Label + (m.Nodes[k].Projected ? " (projected)" : "")))}");
+            }
+            if (golden.TryGetProperty("eachSectionHasPower", out var each))
+            {
+                var prefixes = each.GetProperty("labels").EnumerateArray().Select(x => x.GetString()).ToArray(); int min = (int)Number(each, "minCount", 2);
+                var missing = top.Where(i => prefixes.Any(p => m.Nodes[i].Label.StartsWith(p, StringComparison.Ordinal)))
+                    .Where(i => !m.Relations.Any(r => r.Kind == PreparedPatternSong.MotifRelations.Power && r.Count >= min && r.Start >= m.Nodes[i].Start - 1e-9 && r.End <= m.Nodes[i].End + 1e-9)).Select(i => m.Nodes[i].Label).ToArray();
+                Report(missing.Length == 0, Flag(each, "should"), Id(each, "id", "powers"), $"every {string.Join(" and ", prefixes)} holds a Power with Count ≥ {min}{(missing.Length > 0 ? ": not " + string.Join(", ", missing) : "")}");
+            }
+            if (golden.TryGetProperty("stats", out var stats)) Stats(stats, seconds);
+        }
+        string Level1() => string.Join(" ", Children(0).Select(i => m.Nodes[i].Label + " " + Span(m.Nodes[i].Start, m.Nodes[i].End)));
+        int[] Children(int node) { var n = m.Nodes[node]; var r = new int[n.ChildCount]; for (int k = 0; k < r.Length; k++) r[k] = n.FirstChild + k; return r; }
+        static string Id(JsonElement e, string name, string fallback) => Text(e, name, fallback);
+
+        void Return(JsonElement spec)
+        {
+            double tol = Number(spec, "tolerance", 1);
+            string node = Text(spec, "node", "A′"), source = Text(spec, "source", "A");
+            var level1 = m.Relations.Where(r => r.Kind == PreparedPatternSong.MotifRelations.Return && r.Level == 1).ToArray();
+            var r = level1.FirstOrDefault(x => Label(x.Node) == node);
+            string id = Id(spec, "id", "return");
+            if (r == null) { Report(false, false, id, $"a level-1 return makes {node}: {string.Join("; ", level1.Select(x => Label(x.Node) + " ← " + Label(x.Source)))}"); return; }
+            var edits = Enumerable.Range(r.FirstEdit, r.EditCount).Select(i => m.Edits[i]).ToArray();
+            string Show() => string.Join(", ", edits.Select(e => EditOps[e.Op] + (e.SourceStart >= 0 ? " " + Span(e.SourceStart, e.SourceEnd) : "") + (e.TargetStart >= 0 ? " → " + Span(e.TargetStart, e.TargetEnd) : "")));
+            bool ok = Label(r.Source) == source;
+            string omitted = r.Node >= 0 ? m.Nodes[r.Node].Omits : "";
+            if (spec.TryGetProperty("omits", out var omits)) ok &= omitted == omits.GetString();
+            if (Flag(spec, "omitsNonEmpty")) ok &= omitted.Length > 0;
+            if (spec.TryGetProperty("edits", out var want))
+            {
+                var w = want.EnumerateArray().ToArray(); ok &= w.Length == edits.Length;
+                for (int i = 0; ok && i < w.Length; i++)
+                {
+                    var x = w[i].EnumerateArray().ToArray(); var e = edits[i];
+                    ok = EditOps[e.Op] == x[0].GetString();
+                    double[] got = e.Op == PreparedPatternSong.MotifEdits.Insert ? new[] { e.TargetStart, e.TargetEnd } : e.Op == PreparedPatternSong.MotifEdits.Delete ? new[] { e.SourceStart, e.SourceEnd } : new[] { e.SourceStart, e.SourceEnd, e.TargetStart, e.TargetEnd };
+                    for (int k = 1; ok && k < x.Length && k - 1 < got.Length; k++) ok = Math.Abs(got[k - 1] - x[k].GetDouble()) <= tol + 1e-9;
+                }
+            }
+            if (spec.TryGetProperty("matches", out var spans))
+                foreach (var s in spans.EnumerateArray())
+                {
+                    var x = s.EnumerateArray().Select(v => v.GetDouble()).ToArray();
+                    // Matched columns: a match or a substitution (a column restated below 0.999).
+                    static bool Matched(PreparedPatternSong.MotifEdit e) => e.Op is PreparedPatternSong.MotifEdits.Match or PreparedPatternSong.MotifEdits.Substitute;
+                    int a = Array.FindIndex(edits, e => Matched(e) && Math.Abs(e.SourceStart - x[0]) <= tol + 1e-9 && Math.Abs(e.TargetStart - x[2]) <= tol + 1e-9);
+                    int b = Array.FindLastIndex(edits, e => Matched(e) && Math.Abs(e.SourceEnd - x[1]) <= tol + 1e-9 && Math.Abs(e.TargetEnd - x[3]) <= tol + 1e-9);
+                    ok &= a >= 0 && b >= a;
+                }
+            if (spec.TryGetProperty("deletedBefore", out var db))
+            {
+                double beat = Number(db, "beat", 0), min = Number(db, "minBeats", 0);
+                ok &= edits.Any(e => e.Op == PreparedPatternSong.MotifEdits.Delete && e.SourceEnd <= beat + tol + 1e-9 && e.SourceEnd - e.SourceStart >= min - 1e-9);
+            }
+            Report(ok, false, id, $"{Label(r.Node)} ← {Label(r.Source)} omitting \"{omitted}\": {Show()}");
+        }
+
+        void Stats(JsonElement spec, double seconds)
+        {
+            var s = m.Stats; string id = Id(spec, "id", "stats");
+            var parts = new List<(bool ok, string text)>();
+            if (spec.TryGetProperty("notes", out var notes)) parts.Add((s.Notes == notes.GetInt32(), $"{s.Notes} notes (want {notes.GetInt32()})"));
+            double model = s.BitsModel;
+            if (spec.TryGetProperty("maxModelOverLiteral", out var ml)) parts.Add((model <= ml.GetDouble() * s.BitsLiteral + 1e-6, $"model/literal {F(model / Math.Max(1, s.BitsLiteral))} ≤ {F(ml.GetDouble())}"));
+            if (spec.TryGetProperty("maxModelOverEntropy", out var me)) parts.Add((model <= me.GetDouble() * s.BitsEntropy + 1e-6, $"model/entropy {F(model / Math.Max(1, s.BitsEntropy))} ≤ {F(me.GetDouble())}"));
+            if (spec.TryGetProperty("minDerived", out var md)) parts.Add((s.Derived >= md.GetDouble() - 1e-6, $"derived {F(s.Derived)} ≥ {F(md.GetDouble())}"));
+            if (spec.TryGetProperty("minMirroredCells", out var mc)) parts.Add((s.MirroredCells >= mc.GetInt32(), $"{s.MirroredCells} mirrored cells ≥ {mc.GetInt32()}"));
+            if (spec.TryGetProperty("maxBitsPerNote", out var bn)) parts.Add((model <= bn.GetDouble() * s.Notes + 1e-6, $"{F(model / Math.Max(1, s.Notes))} bits a note ≤ {F(bn.GetDouble())}"));
+            if (spec.TryGetProperty("minPowerCount", out var pc)) parts.Add((m.Relations.Any(r => r.Kind == PreparedPatternSong.MotifRelations.Power && r.Count >= pc.GetInt32()), $"a Power with Count ≥ {pc.GetInt32()} (most {m.Relations.Where(r => r.Kind == PreparedPatternSong.MotifRelations.Power).Select(r => r.Count).DefaultIfEmpty(0).Max()})"));
+            foreach (var (ok, text) in parts) Report(ok, false, id, text + FormattableString.Invariant($" (literal {s.BitsLiteral:0}, entropy {s.BitsEntropy:0}, model {s.BitsModel:0} bits)"));
+            if (spec.TryGetProperty("maxSeconds", out var ms)) Report(seconds <= ms.GetDouble(), false, Id(spec, "timeId", "time"), $"the motif stages take {F(seconds)} s warm ≤ {F(ms.GetDouble())} s");
+        }
+
+        // A check: something of its kind matching every constraint exists (minMatches of them), or with "absent" nothing does.
+        void Exists(JsonElement spec, string what)
+        {
+            double tol = Number(spec, "tolerance", tolerance);
+            int count = what switch { "node" => m.Nodes.Length, "relation" => m.Relations.Length, "cell" => m.Cells.Length, "paradigm" => m.Paradigms.Length, "atom" => m.Atoms.Length, "cellOrRelation" => m.Cells.Length + m.Relations.Length, _ => 0 };
+            var hits = new List<string>();
+            for (int i = 0; i < count; i++)
+            {
+                string kind = what == "cellOrRelation" ? (i < m.Cells.Length ? "cell" : "relation") : what;
+                int index = what == "cellOrRelation" && i >= m.Cells.Length ? i - m.Cells.Length : i;
+                if (Matches(spec, kind, index, tol)) hits.Add(Describe(kind, index));
+            }
+            int need = (int)Number(spec, "minMatches", 1); bool absent = Flag(spec, "absent");
+            bool ok = absent ? hits.Count == 0 : hits.Count >= need;
+            string text = Text(spec, "note", "") is { Length: > 0 } note ? note : Constraints(spec);
+            Report(ok, Flag(spec, "should"), Id(spec, "id", what), $"{(absent ? "no " : need > 1 ? need + "× " : "")}{what} {text}: {(hits.Count == 0 ? "none" : string.Join("; ", hits.Take(4)) + (hits.Count > 4 ? $" (+{hits.Count - 4})" : ""))}");
+        }
+        static string Constraints(JsonElement spec) => string.Join(", ", spec.EnumerateObject().Where(p => p.Name is not ("what" or "id" or "should" or "note" or "tolerance" or "minMatches" or "absent")).Select(p => $"{p.Name} {p.Value.GetRawText()}"));
+        string Describe(string kind, int i)
+        {
+            switch (kind)
+            {
+                case "node": { var n = m.Nodes[i]; return $"{n.Label} {Span(n.Start, n.End)} {NodeKinds[Math.Clamp(n.Kind, 0, NodeKinds.Length - 1)]}"; }
+                case "relation": { var r = m.Relations[i]; return $"{RelationKindNames[Math.Clamp(r.Kind, 0, RelationKindNames.Length - 1)]} {Span(r.Start, r.End)} ×{r.Count} ({r.Steps},{r.Semitones}) \"{r.Text}\""; }
+                case "cell": { var c = m.Cells[i]; return $"cell {Span(c.Start, c.End)} stream {c.Stream} ({c.Steps},{c.Semitones}) \"{c.Text}\""; }
+                case "paradigm": { var p = m.Paradigms[i]; return $"{p.Letter} ({p.Name}) at {string.Join(" ", Members(i).Select(c => F(m.Cells[c].Start)))}"; }
+                default: { var a = m.Atoms[i]; return $"{a.Kind} {a.Name} +{a.Positive} −{a.Negative}"; }
+            }
+        }
+        IEnumerable<int> Members(int paradigm) { for (int c = 0; c < m.Cells.Length; c++) if (m.Cells[c].Paradigm == paradigm) yield return c; }
+        string StreamRole(int s) => s < 0 || s >= m.Streams.Length ? "" : s == m.PrincipalStream ? "principal" : m.Streams[s].Kind == MotifStreams.Drums ? "drums" : m.Streams[s].Kind + (m.Streams[s].Bass ? " bass" : "");
+
+        // A field of one object, or null when it has none: numbers as double, flags as bool, texts as string, lists as int[].
+        object Field(string kind, int i, string name)
+        {
+            switch (kind)
+            {
+                case "node":
+                    {
+                        var n = m.Nodes[i];
+                        return name switch
+                        {
+                            "label" => n.Label, "kind" => NodeKinds[Math.Clamp(n.Kind, 0, NodeKinds.Length - 1)], "level" => (double)n.Level, "start" => n.Start, "end" => n.End, "count" => (double)n.Count,
+                            "stepSteps" => (double)n.StepSteps, "stepSemitones" => (double)n.StepSemitones, "steps" => (double)n.Steps, "semitones" => (double)n.Semitones, "order" => (double)n.Order,
+                            "real" => n.Real, "projected" => n.Projected, "inverted" => n.Inverted, "omits" => n.Omits, "text" => n.Text, "unit" => (n.End - n.Start) / Math.Max(1, n.Count),
+                            "prototype" => Label(n.Prototype), "parent" => Label(n.Parent), "childCount" => (double)n.ChildCount, _ => null
+                        };
+                    }
+                case "relation":
+                    {
+                        var r = m.Relations[i];
+                        double matched = 0;
+                        if (name == "matchedShare" && r.EditCount > 0) { for (int e = r.FirstEdit; e < r.FirstEdit + r.EditCount; e++) if (m.Edits[e].Op is PreparedPatternSong.MotifEdits.Match or PreparedPatternSong.MotifEdits.Substitute) matched += m.Edits[e].TargetEnd - m.Edits[e].TargetStart; matched /= Math.Max(1e-9, r.End - r.Start); }
+                        return name switch
+                        {
+                            "kind" => RelationKindNames[Math.Clamp(r.Kind, 0, RelationKindNames.Length - 1)], "level" => (double)r.Level, "start" => r.Start, "end" => r.End, "sourceStart" => r.SourceStart, "sourceEnd" => r.SourceEnd,
+                            "count" => (double)r.Count, "steps" => (double)r.Steps, "semitones" => (double)r.Semitones, "period" => (double)r.Period, "order" => (double)r.Order, "symmetry" => r.Symmetry,
+                            "pattern" => r.Pattern, "contrary" => r.Contrary, "crossScale" => r.CrossScale, "modeChange" => r.ModeChange, "real" => r.Real, "inverted" => r.Inverted, "text" => r.Text,
+                            "unit" => r.SourceStart >= 0 ? r.SourceEnd - r.SourceStart : r.End - r.Start, "node" => Label(r.Node), "source" => Label(r.Source), "streamRole" => StreamRole(r.StreamA), "streamBRole" => StreamRole(r.StreamB),
+                            "matchedShare" => matched, _ => null
+                        };
+                    }
+                case "cell":
+                    {
+                        var c = m.Cells[i];
+                        return name switch
+                        {
+                            "start" => c.Start, "end" => c.End, "stream" => StreamRole(c.Stream), "steps" => (double)c.Steps, "semitones" => (double)c.Semitones, "inverted" => c.Inverted, "exact" => c.Exact,
+                            "real" => c.Real, "modeChange" => c.ModeChange, "text" => c.Text, "degree" => (double)c.Degree, "paradigm" => c.Paradigm >= 0 ? m.Paradigms[c.Paradigm].Letter : "", _ => null
+                        };
+                    }
+                case "paradigm":
+                    {
+                        var p = m.Paradigms[i]; var a = p.Atom >= 0 ? m.Atoms[p.Atom] : null;
+                        return name switch
+                        {
+                            "atom" => a?.Kind ?? "", "atomName" => a?.Name ?? "", "sign" => (double)p.Sign, "stream" => StreamRole(p.Stream), "letter" => p.Letter, "name" => p.Name, "clock" => (double)p.Clock,
+                            "mirrored" => (double)p.Mirrored, "variants" => (double)p.Variants, "memberCount" => (double)p.Members, "prototypeAt" => p.PrototypeCell >= 0 ? m.Cells[p.PrototypeCell].Start : -1, _ => null
+                        };
+                    }
+                default:
+                    {
+                        var a = m.Atoms[i];
+                        return name switch { "kind" => a.Kind, "name" => a.Name, "positive" => (double)a.Positive, "negative" => (double)a.Negative, "neutral" => (double)a.Neutral, "members" => (double)a.Members, "paradigms" => (double)a.Paradigms, _ => null };
+                    }
+            }
+        }
+        static readonly HashSet<string> Beats = new() { "start", "end", "sourceStart", "sourceEnd", "unit", "prototypeAt" };
+
+        bool Matches(JsonElement spec, string kind, int i, double tol)
+        {
+            foreach (var p in spec.EnumerateObject())
+            {
+                string key = p.Name; var v = p.Value;
+                if (key is "what" or "id" or "should" or "note" or "tolerance" or "minMatches" or "absent") continue;
+                switch (key)
+                {
+                    case "within": { var x = v.EnumerateArray().Select(y => y.GetDouble()).ToArray(); if (!(Num(kind, i, "start") >= x[0] - tol - 1e-9 && Num(kind, i, "end") <= x[1] + tol + 1e-9)) return false; continue; }
+                    case "covers": { var x = v.EnumerateArray().Select(y => y.GetDouble()).ToArray(); if (!(Num(kind, i, "start") <= x[0] + tol + 1e-9 && Num(kind, i, "end") >= x[1] - tol - 1e-9)) return false; continue; }
+                    case "children" when kind == "node":
+                        {
+                            var kids = Children(i);
+                            if (v.TryGetProperty("count", out var cnt) && kids.Length != cnt.GetInt32()) return false;
+                            if (v.TryGetProperty("each", out var each) && !kids.All(k => Matches(each, "node", k, tol))) return false;
+                            continue;
+                        }
+                    case "nestedCount" when kind == "relation":
+                        {
+                            var r = m.Relations[i]; if (r.Node < 0) return false;
+                            var kids = Children(r.Node);
+                            if (kids.Length == 0 || !kids.All(k => m.Nodes[k].Kind == PreparedPatternSong.MotifKinds.Power && m.Nodes[k].Count == v.GetInt32())) return false;
+                            continue;
+                        }
+                    case "sparks" when kind == "cell":
+                        {
+                            var c = m.Cells[i]; var list = Enumerable.Range(Math.Max(0, c.FirstSpark), c.SparkCount).Select(k => m.Sparks[k]).ToArray();
+                            foreach (var s in v.EnumerateArray())
+                            {
+                                var hits = list.Where(x => (!s.TryGetProperty("kind", out var k) || SparkKinds[Math.Clamp(x.Kind, 0, SparkKinds.Length - 1)] == k.GetString()) && (!s.TryGetProperty("pitch", out var pt) || x.Pitch == pt.GetInt32())
+                                    && (!s.TryGetProperty("tagContains", out var tg) || x.Tag.Contains(tg.GetString(), StringComparison.Ordinal))).Count();
+                                if (s.TryGetProperty("count", out var n) ? hits != n.GetInt32() : hits == 0) return false;
+                            }
+                            continue;
+                        }
+                    case "members" or "membersInclude" or "membersAny" when kind == "paradigm":
+                        {
+                            var starts = Members(i).Select(c => m.Cells[c].Start).ToArray(); var want = v.EnumerateArray().Select(y => y.GetDouble()).ToArray();
+                            bool Has(double b) => starts.Any(s => Math.Abs(s - b) < 1e-6);
+                            if (key == "members" && !(starts.Length == want.Length && want.All(Has))) return false;
+                            if (key == "membersInclude" && !want.All(Has)) return false;
+                            if (key == "membersAny" && !want.Any(Has)) return false;
+                            continue;
+                        }
+                    case "membersIn" when kind == "paradigm":
+                        {
+                            var starts = Members(i).Select(c => m.Cells[c].Start).ToArray();
+                            foreach (var span in v.EnumerateArray()) { var x = span.EnumerateArray().Select(y => y.GetDouble()).ToArray(); if (!starts.Any(s => s >= x[0] - 1e-9 && s < x[1] - 1e-9)) return false; }
+                            continue;
+                        }
+                    case "noInverted" when kind == "paradigm": { if (Members(i).Any(c => m.Cells[c].Inverted) == v.GetBoolean()) return false; continue; }
+                    case "substitutions" when kind == "relation":
+                        {
+                            var r = m.Relations[i]; var subs = Enumerable.Range(Math.Max(0, r.FirstEdit), r.EditCount).Select(k => m.Edits[k]).Where(e => e.Op == PreparedPatternSong.MotifEdits.Substitute).ToArray();
+                            if (v.TryGetProperty("count", out var n) && subs.Length != n.GetInt32()) return false;
+                            if (v.TryGetProperty("at", out var at) && !subs.Any(e => Math.Abs(e.TargetStart - at.GetDouble()) <= tol + 1e-9)) return false;
+                            continue;
+                        }
+                    case "steps" when kind == "paradigm" && v.ValueKind == JsonValueKind.Object:
+                    case "memberAt" when kind == "paradigm":
+                        {
+                            foreach (var at in v.EnumerateObject())
+                            {
+                                double beat = double.Parse(at.Name, Inv);
+                                int c = Members(i).FirstOrDefault(k => Math.Abs(m.Cells[k].Start - beat) < 1e-6, -1);
+                                if (c < 0) return false;
+                                if (key == "steps" ? m.Cells[c].Steps != at.Value.GetInt32() : !Matches(at.Value, "cell", c, tol)) return false;
+                            }
+                            continue;
+                        }
+                }
+                // A generic field constraint: x, minX, maxX, xAnyOf, xContains, xIn.
+                string field = key; int mode = 0;   // 0 equal, 1 min, 2 max, 3 any of, 4 contains, 5 in
+                if (key.StartsWith("min", StringComparison.Ordinal) && key.Length > 3 && char.IsUpper(key[3])) { field = char.ToLowerInvariant(key[3]) + key[4..]; mode = 1; }
+                else if (key.StartsWith("max", StringComparison.Ordinal) && key.Length > 3 && char.IsUpper(key[3])) { field = char.ToLowerInvariant(key[3]) + key[4..]; mode = 2; }
+                else if (key.EndsWith("AnyOf", StringComparison.Ordinal)) { field = key[..^5]; mode = 3; }
+                else if (key.EndsWith("Contains", StringComparison.Ordinal)) { field = key[..^8]; mode = 4; }
+                else if (key.EndsWith("In", StringComparison.Ordinal) && v.ValueKind == JsonValueKind.Array) { field = key[..^2]; mode = 5; }
+                var value = Field(kind, i, field);
+                if (value == null) throw new ArgumentException($"golden file: {kind} has no field \"{field}\" (constraint \"{key}\")");
+                double t = Beats.Contains(field) ? tol + 1e-9 : 1e-9;
+                bool Same(object a, JsonElement b) => a switch
+                {
+                    double d => b.ValueKind == JsonValueKind.Number && Math.Abs(d - b.GetDouble()) <= t,
+                    bool f => b.ValueKind is JsonValueKind.True or JsonValueKind.False && f == b.GetBoolean(),
+                    string s => b.ValueKind == JsonValueKind.String && s == b.GetString(),
+                    int[] xs => b.ValueKind == JsonValueKind.Array && xs.SequenceEqual(b.EnumerateArray().Select(y => y.GetInt32())),
+                    _ => false
+                };
+                bool ok = mode switch
+                {
+                    1 => value is double d1 && d1 >= v.GetDouble() - t,
+                    2 => value is double d2 && d2 <= v.GetDouble() + t,
+                    3 => v.EnumerateArray().Any(x => Same(value, x)),
+                    4 => value is string s4 && (v.ValueKind == JsonValueKind.Array ? v.EnumerateArray().All(x => s4.Contains(x.GetString(), StringComparison.Ordinal)) : s4.Contains(v.GetString(), StringComparison.Ordinal))
+                        || value is int[] xs4 && xs4.Contains(v.GetInt32()),
+                    5 => value is double d5 && d5 >= v[0].GetDouble() - t && d5 <= v[1].GetDouble() + t,
+                    _ => Same(value, v)
+                };
+                if (!ok) return false;
+            }
+            return true;
+        }
+        double Num(string kind, int i, string name) => Field(kind, i, name) is double d ? d : double.NaN;
+
+        // §15.1 E19: seeded perturbations of the notes (onsets jittered and re-quantised to sixteenths, durations ±20%, notes
+        // dropped and added), the import's voices and spelling removed (staves stay lanes), transcription mode at 0.125 beat.
+        // A run passes when level 1 keeps its labels and boundaries and the level-1 deletion stays (±noiseTolerance beats).
+        public void Noise(MotifAnalysis.Prepared clean, JsonElement noise, Func<MotifAnalysis.Prepared, MotifAnalysis.Result> run)
+        {
+            var sections = golden.GetProperty("sections").EnumerateArray().Select(s => s.EnumerateArray().ToArray()).ToArray();
+            var delete = golden.TryGetProperty("return", out var ret) && ret.TryGetProperty("edits", out var edits)
+                ? edits.EnumerateArray().Select(e => e.EnumerateArray().ToArray()).FirstOrDefault(e => e[0].GetString() == "delete") : null;
+            double tol = Number(golden, "noiseTolerance", 2); int need = (int)Number(golden, "noisePass", 0), pass = 0, runs = 0;
+            foreach (var spec in noise.EnumerateArray())
+            {
+                runs++;
+                int seed = (int)Number(spec, "seed", runs);
+                string outcome;
+                try
+                {
+                    var r = run(Perturbed(clean, seed, Number(spec, "jitter", 0), Number(spec, "drop", 0), Number(spec, "extra", 0)));
+                    m = r.Layer; var top = Children(0);
+                    bool ok = top.Length == sections.Length;
+                    for (int i = 0; ok && i < top.Length; i++) ok = m.Nodes[top[i]].Label == sections[i][0].GetString() && (i == 0 || Math.Abs(m.Nodes[top[i]].Start - sections[i][1].GetDouble()) <= tol + 1e-9);
+                    var level1 = m.Relations.FirstOrDefault(x => x.Kind == PreparedPatternSong.MotifRelations.Return && x.Level == 1);
+                    var deleted = level1 == null ? Array.Empty<PreparedPatternSong.MotifEdit>() : Enumerable.Range(level1.FirstEdit, level1.EditCount).Select(k => m.Edits[k]).Where(e => e.Op == PreparedPatternSong.MotifEdits.Delete).ToArray();
+                    if (delete != null) ok &= deleted.Any(e => Math.Abs(e.SourceStart - delete[1].GetDouble()) <= tol + 1e-9 && Math.Abs(e.SourceEnd - delete[2].GetDouble()) <= tol + 1e-9);
+                    if (ok) pass++;
+                    outcome = $"{(ok ? "keeps" : "loses")} it: {Level1()}; deletes {string.Join(", ", deleted.Select(e => Span(e.SourceStart, e.SourceEnd)))}";
+                }
+                catch (InvalidDataException e) { outcome = "Verify fails: " + e.Message; }
+                Console.WriteLine($"    noise seed {seed} (jitter {F(Number(spec, "jitter", 0))} ticks, drop {F(Number(spec, "drop", 0))}, extra {F(Number(spec, "extra", 0))}) {outcome}");
+            }
+            Report(pass >= need, false, Id(golden, "noiseId", "noise"), $"level 1 and the deletion survive {pass} of {runs} perturbations (need {need}, ±{F(tol)} beats)");
+        }
+    }
+
+    // A bundle with its notes perturbed (§15.1 E19; §0.4: σ in ticks at 480 a quarter) and prepared again as a transcription.
+    static MotifAnalysis.Prepared Perturbed(MotifAnalysis.Prepared clean, int seed, double jitter, double drop, double extra)
+    {
+        var random = new Random(seed); int ppq = clean.Ppq; double sigma = jitter / 480.0;
+        // Never before the score's start (F21's "never before 0"): a pickup jittered into the silent lead-in would move the span.
+        double first = Math.Max(0, clean.Settings.ScoreLeadInBeats);
+        var kept = new List<MidiCycleAnalysis.Hit>();
+        foreach (var n in clean.Cycles.Notes)
+        {
+            if (random.NextDouble() < drop) continue;
+            double u1 = 1 - random.NextDouble(), u2 = random.NextDouble(), shift = sigma * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+            double beat = Math.Max(Math.Min(first, n.Beat), Math.Round((n.Beat + shift) * 4, MidpointRounding.AwayFromZero) / 4);
+            double length = Math.Max(1, Math.Round(n.Length * (.8 + .4 * random.NextDouble()) * ppq)) / ppq;
+            kept.Add(new MidiCycleAnalysis.Hit { Beat = beat, Length = length, Pitch = n.Pitch, Velocity = n.Velocity, Channel = n.Channel, Track = n.Track });
+        }
+        int extras = (int)Math.Round(extra * kept.Count); int[] moves = { -1, 1, -2, 2, 12 };
+        for (int i = 0; i < extras; i++)
+        {
+            var n = kept[random.Next(kept.Count)];
+            kept.Add(new MidiCycleAnalysis.Hit { Beat = n.Beat, Length = n.Length, Pitch = Math.Clamp(n.Pitch + moves[random.Next(moves.Length)], 0, 127), Velocity = n.Velocity, Channel = n.Channel, Track = n.Track });
+        }
+        kept = kept.OrderBy(n => n.Beat).ThenBy(n => n.Track).ThenBy(n => n.Channel).ThenBy(n => n.Pitch).ThenBy(n => n.Length).ToList();
+        var cycles = MidiCycleAnalysis.Restore(new PreparedPatternSong { EndBeat = clean.Cycles.EndBeat, Tempos = clean.Data.Tempos, Measures = clean.Cycles.Measures.ToArray(), Notes = kept.ToArray(), Disks = Array.Empty<PreparedPatternSong.Disk>() });
+        var options = new JsonSerializerOptions { IncludeFields = true };
+        var settings = JsonSerializer.Deserialize<SongSettings>(JsonSerializer.Serialize(clean.Settings, options), options);
+        settings.PatternTimingToleranceBeats = .125;
+        var names = clean.Data.TrackNames;
+        var analysis = FormAnalysis.Build(cycles, settings, names);
+        var data = PreparedPatternSong.Capture(cycles, analysis.Form);
+        data.TrackNames = names; data.Style = analysis.Style; data.Title = clean.Data.Title; data.Tempos = clean.Data.Tempos;
+        data.Key = settings.Key; data.Minor = settings.Minor; data.LeadVocalTrack = clean.Data.LeadVocalTrack; data.PianoTracks = clean.Data.PianoTracks;
+        for (int i = 0; i < data.Sections.Length; i++) { var info = analysis.Sections[i]; data.Sections[i].Label = info.Label; data.Sections[i].Role = info.Role; data.Sections[i].Letter = info.Letter; data.Sections[i].PhraseBars = info.PhraseBars; }
+        FormAnalysis.Apply(analysis, data);
+        MelodySelection.Build(data);
+        return new MotifAnalysis.Prepared(data, cycles, analysis, settings, null, ppq);   // no score import: no voices, no spelling
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Stage G (§9): the code, its bits, the lossless gate and the export (F22, F23), on F11.
+
+    static void MotifCoding(bool verbose)
+    {
+        var options = new JsonSerializerOptions { IncludeFields = true };
+        MotifAnalysis.Result Run(MotifSettings settings = null)
+        {
+            var data = FixtureData(TernaryMotifScore(), 3, false, null, null, out var cycles, out var harmony);
+            return MotifAnalysis.Run(data, cycles, harmony, settings ?? MotifSettings.FromSong(new SongSettings()), null, MotifPpq);
+        }
+        var r = Run(); var m = r.Layer;
+        if (verbose) MotifAnalysis.Report(m, Console.Out);
+
+        // F23: F11 twice, and once more under a culture that writes decimal commas and U+2212, give one byte-identical layer.
+        string json = JsonSerializer.Serialize(m, options), again = JsonSerializer.Serialize(Run().Layer, options), other;
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        try { System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("sv-SE"); other = JsonSerializer.Serialize(Run().Layer, options); }
+        finally { System.Globalization.CultureInfo.CurrentCulture = culture; }
+        Check(json == again && json == other, $"F23: two runs give a byte-identical layer ({json.Length} and {again.Length} chars), and so does a run under sv-SE ({other.Length})");
+
+        // F22: one decoded residual changed through the test hook (an altered note's pitch, then a duration) is caught.
+        foreach (var (what, mutate) in new (string, Action<MotifCode>)[]
+        {
+            ("an altered note's pitch", code => code.Streams.SelectMany(s => s.Cells).SelectMany(c => c.Sparks).First(x => x.Kind == PreparedPatternSong.MotifSparks.Altered).Pitch += 1),
+            ("a duration", code => code.Streams.SelectMany(s => s.Cells).First(c => c.Events.Length > 0).Events[0].Lead.Duration += 1),
+        })
+        {
+            bool caught = false;
+            try { MotifVerify.Mutate = mutate; Run(); }
+            catch (InvalidDataException) { caught = true; }
+            finally { MotifVerify.Mutate = null; }
+            Check(caught, $"F22: Verify catches {what} changed in the code");
+        }
+        // The default path disables the layer and says why; strict callers get the exception.
+        var fixture = FixtureData(TernaryMotifScore(), 3, false, null, null, out var fixtureCycles, out var fixtureHarmony);
+        var form = new FormAnalysis.Result { Grid = fixtureHarmony };
+        PreparedPatternSong.MotifLayer soft; bool thrown = false;
+        try
+        {
+            MotifVerify.Mutate = code => code.Streams[0].Cells[0].Events[0].Lead.Duration += 1;
+            soft = MotifAnalysis.Build(fixture, fixtureCycles, form, new SongSettings(), null, MotifPpq, strict: false);
+            try { MotifAnalysis.Build(fixture, fixtureCycles, form, new SongSettings(), null, MotifPpq, strict: true); } catch (InvalidDataException) { thrown = true; }
+        }
+        finally { MotifVerify.Mutate = null; }
+        Check(soft.Schema == 0 && soft.Status.StartsWith("verify failed: ", StringComparison.Ordinal) && !new PreparedPatternSong { Motifs = soft }.HasMotifs() && thrown,
+            "a Verify failure disables the layer by default (Schema 0, \"verify failed: …\") and throws in strict mode: " + soft.Status);
+
+        // The export (§9 G5, §13.1): indices that hold, the stats and the caption.
+        var nodes = m.Nodes; var cells = m.Cells; var paradigms = m.Paradigms; var relations = m.Relations;
+        Check(m.Schema == 1 && m.Status == "" && m.Levels.SequenceEqual(new[] { "Piece", "Section", "Phrase", "Unit" }) && m.PrincipalStream == r.Input.Streams.Principal && m.Streams.Length == r.Input.Streams.All.Length
+            && new PreparedPatternSong { Motifs = m }.HasMotifs() && nodes[0].Kind == PieceKind && nodes.All(n => n.Prototype < nodes.Length && n.Relation < relations.Length && n.Paradigm < paradigms.Length && n.End > n.Start),
+            "export: Schema 1, the levels, the principal stream, every stream, and nodes whose prototypes, relations and paradigms exist");
+        bool grouped = true; int next = 0;
+        foreach (var s in m.Streams)
+        {
+            if (s.CellCount == 0) continue;
+            grouped &= s.FirstCell == next; next += s.CellCount;
+            for (int c = s.FirstCell; c < s.FirstCell + s.CellCount; c++) grouped &= cells[c].Stream == s.Id && (c == s.FirstCell || cells[c - 1].Start < cells[c].Start);
+        }
+        Check(grouped && next == cells.Length, "export: cells are grouped by stream (FirstCell, CellCount) and ordered by start");
+        int principalStream = m.PrincipalStream;
+        var referenced = r.Iteration.Relations.SelectMany(x => new[] { x.StreamA, x.StreamB }).Where(x => x >= 0).ToHashSet();
+        Check(cells.All(c => c.Paradigm >= 0 && c.Paradigm < paradigms.Length && paradigms[c.Paradigm].Stream == c.Stream && c.End > c.Start
+                && (c.Stream == principalStream || m.Streams[c.Stream].Kind == MotifStreams.Line || m.Streams[c.Stream].Kind == MotifStreams.Texture && referenced.Contains(c.Stream)))
+            && cells.Any(c => c.Stream == principalStream),
+            "export: every cell is a member of a paradigm of its stream, on the principal stream, a lane's line or a texture a relation names");
+        Check(paradigms.All(p => p.PrototypeCell >= 0 && cells[p.PrototypeCell].Paradigm == p.Id && p.Members == cells.Count(c => c.Paradigm == p.Id) && p.Members >= 2 && p.Notes.Length > 0 && p.Notes[0].Chord == 0 && p.Beats > 0
+                && p.Atom < m.Atoms.Length && (p.Clock == 7 || p.Clock == 12)),
+            "export: each paradigm has its prototype cell, its member count, its notes (a lead first) and its atom");
+        Check(m.Atoms.All(a => a.Paradigms == paradigms.Count(p => p.Atom == a.Id) && a.Members == a.Positive + a.Negative + a.Neutral && a.Members == paradigms.Where(p => p.Atom == a.Id).Sum(p => p.Members)),
+            "export: each atom's paradigms, members and chirality census add up");
+        bool sparksHold = true;
+        for (int c = 0; c < cells.Length; c++)
+        {
+            var x = cells[c];
+            if (x.SparkCount == 0) { sparksHold &= x.FirstSpark == -1; continue; }
+            for (int k = x.FirstSpark; k < x.FirstSpark + x.SparkCount; k++)
+                sparksHold &= m.Sparks[k].Cell == c && m.Sparks[k].Note < paradigms[x.Paradigm].Notes.Length && (m.Sparks[k].Note >= 0 || m.Sparks[k].Kind is PreparedPatternSong.MotifSparks.Inserted or PreparedPatternSong.MotifSparks.Deleted);
+        }
+        Check(sparksHold && m.Sparks.Length == cells.Sum(c => c.SparkCount), "export: sparks are grouped by cell, each naming a note of its paradigm's prototype (−1 when inserted)");
+        var levelOne = relations.Where(x => x.Kind == PreparedPatternSong.MotifRelations.Return && x.Level == 1).ToArray();
+        Check(relations.Select((x, i) => x.Id == i).All(b => b) && relations.All(x => x.FirstEdit < 0 && x.EditCount == 0 || x.FirstEdit + x.EditCount <= m.Edits.Length) && relations.All(x => x.Node < nodes.Length && x.Source < nodes.Length)
+            && levelOne.Length == 1 && nodes[levelOne[0].Node].Label == "A′" && nodes[levelOne[0].Source].Label == "A" && levelOne[0].EditCount == 4 && m.Edits[levelOne[0].FirstEdit + 1].Op == PreparedPatternSong.MotifEdits.Delete
+            && Math.Abs(m.Edits[levelOne[0].FirstEdit + 1].SourceStart - 10.5) <= 1 && levelOne[0].Text.StartsWith("A′ restates A from bar 1", StringComparison.Ordinal) && levelOne[0].SavedBits > 0,
+            "export: relations in order, their edits and nodes exist; the level-1 return A′ ← A with its four edits, its sentence, and the references it saves");
+        var stats = m.Stats;
+        Check(stats.Notes == fixtureCycles.Notes.Count && stats.Cells == cells.Length && stats.Paradigms == paradigms.Length && stats.Nodes == nodes.Length && stats.Relations == relations.Length
+            && stats.Powers == relations.Count(x => x.Kind == PreparedPatternSong.MotifRelations.Power) && stats.Returns == relations.Count(x => x.Kind == PreparedPatternSong.MotifRelations.Return)
+            && stats.MirroredCells == cells.Count(c => c.Inverted) && stats.BitsModel > 0 && stats.BitsModel < stats.BitsCells && stats.BitsCells < stats.BitsLiteral && stats.BitsResidual > 0 && stats.BitsArticulation > 0
+            && stats.Derived > 0 && stats.Derived <= 1 && Math.Abs(stats.Derived - stats.DerivedNotes / (float)stats.Notes) < 1e-6,
+            FormattableString.Invariant($"export: the stats count what is exported; the model is below the cells and the cells below the literal: literal {stats.BitsLiteral:0}, entropy {stats.BitsEntropy:0}, cells {stats.BitsCells:0}, model {stats.BitsModel:0}, derived {stats.Derived:P0}"));
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        Check(m.Caption.StartsWith(r.Tree.Line + " · ", StringComparison.Ordinal) && m.Caption.Contains($"{stats.Notes.ToString("N0", inv)} notes → {stats.Paradigms} cells in {stats.Atoms} atoms · ") && m.Caption.Contains(" sections · ")
+            && m.Caption.Contains("% derived · ") && m.Caption.EndsWith("× smaller", StringComparison.Ordinal) && m.Formula == r.Tree.Formula,
+            "export: the caption is the piece line, then notes → cells in atoms · sections · phrases · derived · smaller: " + m.Caption);
+        var report = new StringWriter(); MotifAnalysis.Report(m, report); string text = report.ToString();
+        Check(text.Contains("caption: " + m.Caption) && text.Contains("relations:") && text.Contains("A′ [82.5, 114.5) section ← A"), "--motifs-report prints the caption, the tree and the relations");
+
+        // The caps (§9 G5): more cells than MaxCells drops the other streams' cells first, the principal's stay; a cell with more
+        // sparks than MaxSparksPerCell keeps that many and is no longer exact.
+        using (var doc = JsonDocument.Parse("{\"MaxCells\":10,\"MaxSparksPerCell\":1}"))
+        {
+            var capped = Run(MotifSettings.FromSong(new SongSettings(), doc.RootElement)).Layer;
+            Check(capped.Status.Contains("left out") && capped.Cells.All(c => c.Stream == capped.PrincipalStream) && capped.Cells.Length == cells.Count(c => c.Stream == principalStream)
+                && capped.Cells.All(c => c.SparkCount <= 1) && capped.Cells.Any(c => !c.Exact && c.SparkCount == 1 && cells.Single(x => x.Stream == c.Stream && x.Start == c.Start).SparkCount > 1),
+                "caps: other streams' cells go first, the principal's stay; a cell keeps at most MaxSparksPerCell sparks and is no longer exact: " + capped.Status);
+        }
+        int full = JsonSerializer.SerializeToUtf8Bytes(m, options).Length;
+        using (var doc = JsonDocument.Parse($"{{\"MaxBytes\":{full - 1}}}"))
+        {
+            var small = Run(MotifSettings.FromSong(new SongSettings(), doc.RootElement)).Layer;
+            int size = JsonSerializer.SerializeToUtf8Bytes(small, options).Length;
+            Check(small.Status.Contains("stays under") && size < full && small.Cells.Length < cells.Length && small.Cells.Count(c => c.Stream == principalStream) == cells.Count(c => c.Stream == principalStream),
+                $"caps: a layer above MaxBytes leaves other streams' cells out until it fits ({size} of {full} bytes): " + small.Status);
+        }
+    }
+
     // F12: a head-deleted reprise in 2/4: x (8 bars, a half cadence) y (12, a full cadence) | B (32 bars of new material) |
     // y (12) coda (4). B is 32 bars, not §16's 16: the head x joins the hull only within min_lag = L/8 of the first downbeat,
     // and among 52 bars its 8 would make it an Intro (see the deviations).
@@ -1187,7 +1819,9 @@ public static partial class SelfTests
         for (int i = 0; i < data.Sections.Length; i++) { var info = form.Sections[i]; data.Sections[i].Label = info.Label; data.Sections[i].Role = info.Role; data.Sections[i].Letter = info.Letter; data.Sections[i].PhraseBars = info.PhraseBars; }
         FormAnalysis.Apply(form, data);
         MelodySelection.Build(data);
-        return (MotifInput.Read(data, cycles, form.Grid, MotifSettings.FromSong(new SongSettings { Key = 3 }), null, MotifPpq), data);
+        var settings = MotifSettings.FromSong(new SongSettings { Key = 3 });
+        Verified(data, cycles, form.Grid, settings, null, "F19 (pop)");
+        return (MotifInput.Read(data, cycles, form.Grid, settings, null, MotifPpq), data);
     }
 
     // F21's perturbation of a score (§16): each note dropped with probability 0.03, else its onset moved by a normal jitter of

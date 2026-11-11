@@ -1,0 +1,18 @@
+{
+  "title": "Ticket to Ride",
+  "spec": "Docs/MOTIF-REDUCTION.md §15.3, T1–T4. 4/4, 101 bars, reviewed SectionBoundaries: bar b starts at beat 4(b − 1).",
+  "bundle": "Ticket-to-Ride---The-Beatles*",
+  "tuning": "PeriodKappa 1.25 (§10 period DP; the spec's default is 1.0): with 1.0 the Nocturne's B takes five periods and N3 counts 10 level-2 prototypes; from 1.25 (or λ 0.75) four, while the étude's B keeps its five periods (E5) for every λ in {0.5, 0.75, 1} and κ in {0.75 … 2}. Every other parameter at its §10 default (Motifs/MotifSettings.cs); no song.json override",
+  "tolerance": 0.5,
+  "reviewedId": "T1 sections",
+  "reviewedSections": true,
+  "formGrammar": "In (V C)×2 Br (V′ C′) Br (V′ C′) Out",
+  "relations": [
+    { "id": "T2 returns", "kind": "Return", "level": 1, "minMatchedShare": 0.75, "minMatches": 3 },
+    { "id": "T2 second verse and chorus", "kind": "Return", "level": 1, "sourceStart": 16, "start": 80, "minMatchedShare": 0.75 },
+    { "id": "T2 bars 63–87 ← 38–62", "should": true, "kind": "Return", "level": 1, "sourceStart": 148, "start": 248, "end": 348 },
+    { "id": "T3 outro loop", "kind": "Power", "minStart": 348, "maxUnit": 8, "minCount": 6, "streamRoleAnyOf": ["drums", "line bass"] }
+  ],
+  "eachSectionHasPower": { "id": "T3 verse and chorus powers", "should": true, "labels": ["Verse", "Chorus"], "minCount": 2 },
+  "stats": { "id": "T4 code", "timeId": "T4 time", "maxBitsPerNote": 3.5, "maxSeconds": 3.0 }
+}

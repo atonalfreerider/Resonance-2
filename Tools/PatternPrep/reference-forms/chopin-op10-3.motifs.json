@@ -1,0 +1,83 @@
+{
+  "title": "Chopin Op. 10 No. 3",
+  "spec": "Docs/MOTIF-REDUCTION.md §15.1, E1–E19. Bundle beats: the pickup is [4.0, 4.5), printed bar b starts at 4.5 + 2(b − 1).",
+  "bundle": "Chopin---Etude-Op-10-No-3-in-E-major-*",
+  "tuning": "PeriodKappa 1.25 (§10 period DP; the spec's default is 1.0): with 1.0 the Nocturne's B takes five periods and N3 counts 10 level-2 prototypes; from 1.25 (or λ 0.75) four, while the étude's B keeps its five periods (E5) for every λ in {0.5, 0.75, 1} and κ in {0.75 … 2}. Every other parameter at its §10 default (Motifs/MotifSettings.cs); no song.json override",
+  "tolerance": 0.5,
+  "sectionsId": "E1 form",
+  "sections": [["A", 4.0, 45.5], ["B", 45.5, 126.5], ["A′", 126.5, 158.5]],
+  "return": {
+    "id": "E2 return", "node": "A′", "source": "A", "omits": "a2, a1′", "tolerance": 1.0,
+    "edits": [["match", 4.5, 14.5, 126.5, 136.5], ["delete", 14.5, 30.5], ["match", 30.5, 42.5, 136.5, 148.5], ["insert", 148.5, 158.5]]
+  },
+  "phrases": {
+    "A": { "id": "E3 phrases of A", "cuts": [4.0, 14.5, 20.5, 30.5, 45.5], "labels": ["a1", "a2", "a1′", "a3"], "tolerance": 0.5 },
+    "B": { "id": "E5 periods of B", "cuts": [45.5, 62.5, 78.5, 94.5, 110.5, 126.5], "labels": ["B1", "B2", "B3", "B4", "B5"], "tolerance": 1.0 },
+    "A′": { "id": "E4 children of A′", "cuts": [126.5, 136.5, 148.5, 158.5], "labels": ["a1", "a3′", "Coda"], "tolerance": 1.0 }
+  },
+  "paradigms": [
+    { "id": "E11 upper neighbour", "stream": "principal", "atom": "N", "sign": 1, "noInverted": true,
+      "members": [5.5, 7.5, 11.5, 21.5, 23.5, 27.5, 127.5, 129.5, 133.5],
+      "steps": { "7.5": 1, "23.5": 1, "129.5": 1 }, "memberAt": { "7.5": { "real": false }, "23.5": { "real": false }, "129.5": { "real": false } } },
+    { "id": "E11 lower neighbour", "stream": "principal", "atom": "N", "sign": -1, "noInverted": true, "members": [4.5, 126.5] },
+    { "id": "E12 exact mirror", "should": true, "membersInclude": [108.5, 109.5, 122.5, 123.5, 124.5],
+      "memberAt": { "122.5": { "inverted": true }, "123.5": { "inverted": true }, "124.5": { "inverted": true } } },
+    { "id": "E13 sigh head β′", "stream": "principal", "atom": "P", "atomName": "sigh", "membersInclude": [36.5, 142.5, 148.5, 150.5],
+      "memberAt": {
+        "36.5": { "exact": true }, "142.5": { "exact": true },
+        "148.5": { "steps": -7, "sparks": [{ "kind": "Altered", "count": 1 }, { "kind": "Altered", "pitch": 60, "tagContains": "♭6", "count": 1 }] },
+        "150.5": { "steps": -7, "sparks": [{ "kind": "Altered", "count": 1 }, { "kind": "Altered", "pitch": 60, "tagContains": "♭6", "count": 1 }] } } },
+    { "id": "E13 sigh β", "stream": "principal", "atom": "P", "atomName": "sigh", "membersInclude": [38.5, 40.5, 144.5, 146.5], "steps": { "40.5": -2, "146.5": -2 } },
+    { "id": "E13 lengthened head", "should": true, "stream": "principal", "membersInclude": [36.5, 154.5],
+      "memberAt": { "154.5": { "exact": false, "sparks": [{ "kind": "Lengthened", "tagContains": "held 13/16" }] } } }
+  ],
+  "relations": [
+    { "id": "E2 first match", "kind": "Return", "level": 1, "node": "A′", "sourceStart": 4.5, "tolerance": 0 },
+    { "id": "E3 a1′ = a1", "kind": "Return", "level": 2, "node": "a1′", "source": "a1", "substitutions": { "count": 1, "at": 20.5 } },
+    { "id": "E7 B2", "kindAnyOf": ["Power", "Return"], "start": 62.5, "end": 78.5, "count": 2, "semitones": 2, "unit": 8 },
+    { "id": "E8 B3 power", "kind": "Power", "start": 78.5, "unit": 2, "count": 3, "semitones": -1 },
+    { "id": "E8 B3 tritone run", "kind": "Run", "streamRole": "texture bass", "within": [78.5, 88.5], "semitones": -1, "period": 6, "symmetry": [0, 6], "tolerance": 0 },
+    { "id": "E8 alternation", "should": true, "kind": "Alternation", "within": [86.5, 88.5], "pattern": "RRLL", "tolerance": 0 },
+    { "id": "E8 cross-scale", "should": true, "kind": "Run", "semitones": -1, "crossScale": true, "within": [78.5, 88.5], "tolerance": 0 },
+    { "id": "E9 doubling", "kind": "Doubling", "contrary": false, "covers": [95.0, 107.5], "patternContains": "-24", "streamRole": "texture", "streamBRole": "texture bass", "tolerance": 0 },
+    { "id": "E9 contrary", "kind": "Doubling", "contrary": true, "within": [107.5, 110.5], "tolerance": 0 },
+    { "id": "E9 alternating sixths", "kind": "Run", "order": 2, "within": [107.5, 110.5], "tolerance": 0 },
+    { "id": "E9 sequence", "should": true, "kind": "Power", "start": 96.5, "unit": 4, "semitones": -1 },
+    { "id": "E10 liquidation", "kind": "Liquidation", "covers": [110.5, 126.5], "pattern": "8,4,2", "tolerance": 0 },
+    { "id": "E10 58–59", "kind": "Power", "start": 118.5, "count": 2, "steps": 0, "semitones": 0, "tolerance": 0 },
+    { "id": "E13 β power", "kind": "Power", "start": 38.5, "count": 2, "steps": -2, "tolerance": 0 },
+    { "id": "E13 β′ power", "kind": "Power", "start": 144.5, "count": 2, "steps": -2, "tolerance": 0 },
+    { "id": "E13 coda power", "kind": "Power", "start": 148.5, "count": 2, "steps": 0, "semitones": 0, "tolerance": 0 },
+    { "id": "E14 sequence", "kind": "Power", "start": 30.5, "count": 2, "steps": 2, "tolerance": 0 },
+    { "id": "E14 cross-reference", "kind": "CrossReference", "start": 34.5, "sourceStart": 14.5, "steps": 5, "textContains": "sixth", "tolerance": 0 }
+  ],
+  "checks": [
+    { "id": "E3 a1′", "what": "node", "label": "a1′", "parent": "A", "prototype": "a1" },
+    { "id": "E3 a3", "what": "node", "label": "a3", "parent": "A", "children": { "count": 2, "each": { "kind": "SubPhrase" } } },
+    { "id": "E3 a3 split", "what": "node", "kind": "SubPhrase", "parent": "a3", "start": 36.5, "tolerance": 1.0 },
+    { "id": "E4 a1", "what": "node", "label": "a1", "parent": "A′", "projected": true, "prototype": "a1", "start": 126.5, "end": 136.5 },
+    { "id": "E4 a3′", "what": "node", "label": "a3′", "parent": "A′", "projected": true, "prototype": "a3", "start": 136.5, "end": 148.5, "tolerance": 1.0 },
+    { "id": "E4 coda", "what": "node", "label": "Coda", "parent": "A′", "kind": "Coda", "start": 148.5, "end": 158.5, "tolerance": 1.0 },
+    { "id": "E6 B1", "what": "node", "kind": "Power", "parent": "B1", "start": 45.5, "tolerance": 1.0, "count": 2, "stepSteps": 1, "real": false,
+      "children": { "count": 2, "each": { "kind": "Power", "count": 2, "stepSteps": 0, "stepSemitones": 0, "unit": 4, "tolerance": 0 } } },
+    { "id": "E7 parallel minor", "what": "cellOrRelation", "startAnyOf": [64.5, 72.5], "modeChange": true, "textContains": "parallel minor", "tolerance": 0 },
+    { "id": "E10 (λ²)² ↓5c", "what": "node", "should": true, "kind": "Power", "start": 110.5, "count": 2, "stepSemitones": -5,
+      "children": { "count": 2, "each": { "kind": "Power", "count": 2 } } },
+    { "id": "E11 neighbour atom", "what": "atom", "kind": "N", "minPositive": 9, "minNegative": 2 },
+    { "id": "E13 octave lower ♭6", "what": "cellOrRelation", "start": 148.5, "textContains": ["octave lower", "♭6"], "tolerance": 0 },
+    { "id": "E14 leading tone", "what": "cellOrRelation", "should": true, "start": 32.5, "textContains": "leading tone of C♯ minor", "tolerance": 0 },
+    { "id": "E15 dyads and retransition", "what": "paradigm", "absent": true, "membersIn": [[78.5, 86.5], [118.5, 122.5]] },
+    { "id": "E15 turn and arpeggios", "what": "paradigm", "absent": true, "prototypeAt": 14.5, "membersAny": [64.5, 66.5], "tolerance": 0 },
+    { "id": "E15 sigh and neighbour", "what": "paradigm", "absent": true, "name": "sigh", "atom": "N" }
+  ],
+  "formula": { "id": "E16 formula", "startsWith": "A · B · A′", "captionContains": ["A′ = A", "6–13"] },
+  "stats": { "id": "E16–E17 code", "timeId": "E18 time", "notes": 1932, "maxModelOverLiteral": 0.3333, "maxModelOverEntropy": 0.7692, "minDerived": 0.70, "minMirroredCells": 3, "maxSeconds": 1.5 },
+  "noiseId": "E19 noise",
+  "noise": [
+    { "seed": 1, "jitter": 24, "drop": 0.0, "extra": 0.0 }, { "seed": 2, "jitter": 30, "drop": 0.03, "extra": 0.02 },
+    { "seed": 3, "jitter": 30, "drop": 0.03, "extra": 0.02 }, { "seed": 4, "jitter": 48, "drop": 0.05, "extra": 0.03 },
+    { "seed": 5, "jitter": 48, "drop": 0.05, "extra": 0.03 }, { "seed": 6, "jitter": 48, "drop": 0.05, "extra": 0.03 }
+  ],
+  "noisePass": 5,
+  "noiseTolerance": 2.0
+}

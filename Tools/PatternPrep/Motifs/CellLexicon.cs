@@ -623,7 +623,10 @@ public sealed class CellLexicon
         // The first notes matched exactly: the element moves the one onto the other; else by the transposition alone.
         bool exactFirst = best.Pair.Length > 0 && best.Pair[0] == 0 && best.Chi * b[0].Value - a[0].Value - best.Shift == 0;
         best.Semitones = x.Space == Diatonic ? (exactFirst ? b[0].Pitch - a[0].Pitch : SemitonesOf(best.Steps)) : b0 - a0;
-        best.Head = best.Pair.Length > 0 && best.Pair[0] == 0 && a[0].Tied != b[0].Tied;
+        // The head: the window's note matched to the prototype's first, tied where that one is struck or the other way round. It
+        // is the window's first note unless a held-over note the prototype lacks comes before it (an inserted tie).
+        int head = Array.IndexOf(best.Pair, 0);
+        best.Head = head >= 0 && a[0].Tied != b[head].Tied;
         var g = new Transform(best.Steps, best.Semitones, x.Space == Diatonic ? Transform.Tonal : Transform.Real, best.Inverted, head: best.Head);
         double rho = Residual(input, x, a, b, best);
         best.Bits = g.Cost() + rho;
@@ -894,10 +897,11 @@ public sealed class CellLexicon
             if (j.Deleted[i]) sparks.Add(new Spark { Kind = PreparedPatternSong.MotifSparks.Deleted, Note = i, Event = -1, Pitch = image[i].Pitch, Morph = image[i].Morph, Tick = c.Start + image[i].Onset, Tag = "" });
         if (j.Head)
         {
-            var e = input.Events[s.Lead[b[0].Event]];
+            int h = Math.Max(0, Array.IndexOf(j.Pair, 0));
+            var e = input.Events[s.Lead[b[h].Event]];
             long sixteenth = Math.Max(1, input.Ppq / 4), held = e.Duration;
             string tag = held % sixteenth == 0 ? $"held {held / sixteenth}/16" : $"held {Math.Round(held * 8.0 / input.Ppq)}/32";
-            sparks.Insert(0, new Spark { Kind = PreparedPatternSong.MotifSparks.Lengthened, Note = 0, Event = b[0].Event, Pitch = notes[0].Pitch, Morph = notes[0].Morph, Tick = c.Start, Tag = tag });
+            sparks.Insert(0, new Spark { Kind = PreparedPatternSong.MotifSparks.Lengthened, Note = 0, Event = b[h].Event, Pitch = notes[h].Pitch, Morph = notes[h].Morph, Tick = c.Start + notes[h].Onset, Tag = tag });
         }
         c.Sparks = sparks.ToArray(); c.Altered = altered.ToArray();
         // The text names the variant from its nearest earlier exact member: the two elements from the prototype, the one
@@ -906,7 +910,8 @@ public sealed class CellLexicon
         var rel = new Transform(c.G.Steps - from.G.Steps, c.G.Semitones - from.G.Semitones, diatonic && from.G.Frame != Transform.Real ? Transform.Tonal : Transform.Real, c.G.Inverted != from.G.Inverted, head: j.Head);
         c.Text = TransformGroup.Name(rel, altered, "", j.Edits);
     }
-    static string Signed(int v) => v > 0 ? "+" + v : v.ToString();
+    // The bundle is byte-identical under any culture (§9 G6): sv-SE writes a negative number with U+2212.
+    static string Signed(int v) => (v > 0 ? "+" : "") + v.ToString(System.Globalization.CultureInfo.InvariantCulture);
     static int Fifths(CellNote x)
     {
         int letter = Spelling.Mod(x.Morph, 7), accidental = x.Pitch - Spelling.NaturalPitch(x.Morph);
@@ -974,10 +979,11 @@ public sealed class CellLexicon
         }
         bool tiedHead = proto.W.Tie >= 0 ^ lengthened;
         for (int i = 0; i < img.Length; i++) if (!gone[i]) decoded.Add((Slots(onset[i], slot), pitch[i], i == 0 && tiedHead));
-        decoded.Sort((x, y) => x.onset != y.onset ? x.onset.CompareTo(y.onset) : x.pitch.CompareTo(y.pitch));
+        // The tie is part of the key: a held-over note and its struck repetition share onset and pitch (List.Sort is unstable).
+        decoded.Sort((x, y) => x.onset != y.onset ? x.onset.CompareTo(y.onset) : x.pitch != y.pitch ? x.pitch.CompareTo(y.pitch) : x.tied.CompareTo(y.tied));
         var actual = new List<(long onset, int pitch, bool tied)>();
         for (int q = 0; q < notes.Length; q++) actual.Add((Slots(notes[q].Onset, slot), notes[q].Pitch, q == 0 && c.W.Tie >= 0));
-        actual.Sort((x, y) => x.onset != y.onset ? x.onset.CompareTo(y.onset) : x.pitch.CompareTo(y.pitch));
+        actual.Sort((x, y) => x.onset != y.onset ? x.onset.CompareTo(y.onset) : x.pitch != y.pitch ? x.pitch.CompareTo(y.pitch) : x.tied.CompareTo(y.tied));
         if (decoded.Count != actual.Count) { why = $"{decoded.Count} notes decoded, {actual.Count} played"; return false; }
         for (int q = 0; q < actual.Count; q++)
             if (decoded[q] != actual[q]) { why = $"note {q} decodes to {decoded[q]}, played {actual[q]}"; return false; }

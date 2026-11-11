@@ -1,0 +1,10 @@
+{
+  "title": "Umbrella",
+  "spec": "Docs/MOTIF-REDUCTION.md §15.3, T5 (sanity): runs, strict Verify passes, level 1 is data.Sections, at least one Power with Count ≥ 4.",
+  "bundle": "Umbrella-*",
+  "tuning": "PeriodKappa 1.25 (§10 period DP; the spec's default is 1.0): with 1.0 the Nocturne's B takes five periods and N3 counts 10 level-2 prototypes; from 1.25 (or λ 0.75) four, while the étude's B keeps its five periods (E5) for every λ in {0.5, 0.75, 1} and κ in {0.75 … 2}. Every other parameter at its §10 default (Motifs/MotifSettings.cs); no song.json override",
+  "tolerance": 0.5,
+  "reviewedId": "T5 sections",
+  "reviewedSections": true,
+  "stats": { "id": "T5 powers", "minPowerCount": 4 }
+}
