@@ -29,7 +29,7 @@ public sealed class PianistHand : MonoBehaviour
     VisualElement root,card,picture,captions;Layer shade,badges;readonly Layer[] glows=new Layer[3],marks=new Layer[3],marksTop=new Layer[3];
     Label heading,ruler;readonly Label[] labels=new Label[3],numbers=new Label[6];
     Photo photo;Layout layout;Gradient vignette;
-    Figure shown;int shownCue=-2,revision=-1,turn=-2;double[] onsets=Array.Empty<double>();
+    Figure shown;int shownCue=-2,revision=-1,turn=-2;double[] onsets=Array.Empty<double>();int[] turns=Array.Empty<int>();
     float alpha,placedAlpha=-1,flare,placedPixels=-1,captionFoot=float.PositiveInfinity;Rect placed=new(0,0,-1,-1),placedRoom=new(0,0,-1,-1);
     // Each group's light (1 its turn, 0 waiting), eased; and the opacities and colours last written, so a frame writes only
     // what changed.
@@ -211,8 +211,8 @@ public sealed class PianistHand : MonoBehaviour
         placed=placedRoom=new Rect(0,0,-1,-1);
     }
 
-    // Whose turn it is: the onsets the song has passed, counted from the figure's first (the first group's); and how bright
-    // that onset still is. Each group eases to its light; all of it changes only opacities and colours.
+    // Whose turn it is: the turn of the last onset the song has passed (TurnsFor); and how bright that onset still is. Each
+    // group eases to its light; all of it changes only opacities and colours.
     void Follow()
     {
         int now=-1;float lift=0;
@@ -221,7 +221,7 @@ public sealed class PianistHand : MonoBehaviour
             double t=midi.Position;int lo=0,hi=onsets.Length;
             while(lo<hi){int mid=(lo+hi)/2;if(onsets[mid]<=t)lo=mid+1;else hi=mid;}
             int at=lo-1;while(at>0&&at+1<onsets.Length&&onsets[at+1]-onsets[at]<ShortestTurn)at--;
-            now=at<0?0:at%shown.groups.Length;
+            now=at<0?(turns.Length>0?turns[0]:0):at<turns.Length?turns[at]:at%shown.groups.Length;
             if(at>=0&&!Main.ReducedMotion)lift=Mathf.Clamp01(1-(float)(t-onsets[at])/FlareSeconds);
         }
         bool first=turn==-2;turn=now;flare=lift;
@@ -258,19 +258,22 @@ public sealed class PianistHand : MonoBehaviour
     // without such a track, the beats.
     void FindOnsets()
     {
-        onsets=Array.Empty<double>();var cues=director.Current?.cues;int index=director.CueIndex;
+        onsets=Array.Empty<double>();turns=Array.Empty<int>();var cues=director.Current?.cues;int index=director.CueIndex;
         if(!shown.alternate||cues==null||index<0||index>=cues.Length||midi==null)return;
         int first=index,last=index;
         while(first>0&&Same(cues[first-1].hand,shown)&&Math.Abs(cues[first-1].end-cues[first].start)<.002)first--;
         while(last+1<cues.Length&&Same(cues[last+1].hand,shown)&&Math.Abs(cues[last+1].start-cues[last].end)<.002)last++;
-        double from=cues[first].start-.02,to=cues[last].end;var list=new List<double>();
+        double from=cues[first].start-.02,to=cues[last].end;var list=new List<double>();var chords=new List<List<int>>();
         var score=midi.HarmonicPrepared;int track=HandTrack(score?.TrackNames,shown.side);
         if(track>=0&&score.Frames!=null)
             foreach(var frame in score.Frames)
             {
                 if(!Struck(frame.Attacks,track))continue;
                 double t=midi.AudioTime(frame.Time);
-                if(t>=from&&t<=to&&(list.Count==0||t-list[list.Count-1]>=.035))list.Add(t);
+                if(t<from||t>to)continue;
+                if(list.Count==0||t-list[list.Count-1]>=.035){list.Add(t);chords.Add(new List<int>());}
+                var chord=chords[chords.Count-1];
+                foreach(var a in frame.Attacks)if(a.Track==track&&a.Pitch>=21&&a.Pitch<117&&!chord.Contains(a.Pitch))chord.Add(a.Pitch);
             }
         var beats=midi.HarmonicCycles;
         if(list.Count==0&&beats!=null)
@@ -278,7 +281,41 @@ public sealed class PianistHand : MonoBehaviour
             double Score(double t)=>midi.Recording!=null&&midi.Recording.Ready?midi.Recording.Alignment.ToMidi(t):t;
             for(double b=Math.Ceiling(beats.BeatAt(Score(from))-1e-6),end=beats.BeatAt(Score(to));b<=end&&list.Count<20000;b++)list.Add(midi.AudioTime(beats.SecondsAt(b)));
         }
-        onsets=list.ToArray();
+        onsets=list.ToArray();turns=TurnsFor(shown,chords,onsets.Length);
+    }
+    // Whose turn each onset is. Two groups that rock between two sixths (1+4 and 2+5) take turns by register, as a hand that
+    // stays in place plays them: the higher sixth with the group of fingers nearer the little finger of a right hand (the
+    // thumb of a left one), the lower with the other; a single note, a third or a fourth between them leaves the turn where
+    // it was, and the onsets before the first sixth wait in its group. With three groups, or no sixths, the groups take
+    // turns note by note from the first.
+    static int[] TurnsFor(Figure f,List<List<int>> chords,int count)
+    {
+        var result=new int[count];for(int i=0;i<count;i++)result[i]=i%f.groups.Length;
+        if(f.groups.Length!=2||chords==null||chords.Count!=count)return result;
+        static float Mean(int[] fingers){float s=0;foreach(int k in fingers)s+=k;return s/Mathf.Max(1,fingers.Length);}
+        int upper=(Mean(f.groups[1].fingers)>Mean(f.groups[0].fingers))==(f.side!="left")?1:0,lower=1-upper;
+        var low=new int[count];var sixth=new bool[count];bool any=false;
+        for(int i=0;i<count;i++)
+        {
+            var c=chords[i];if(c.Count!=2)continue;
+            int a=Math.Min(c[0],c[1]),b=Math.Max(c[0],c[1]);
+            if(b-a==8||b-a==9){sixth[i]=true;low[i]=a;any=true;}
+        }
+        if(!any)return result;
+        int previous=-1,turn=-1;
+        for(int i=0;i<count;i++)
+        {
+            if(sixth[i])
+            {
+                if(previous>=0)turn=low[i]>low[previous]?upper:low[i]<low[previous]?lower:turn;
+                else{int next=-1;for(int j=i+1;j<count&&next<0;j++)if(sixth[j])next=j;turn=next>=0&&low[next]<low[i]?upper:lower;}
+                previous=i;
+            }
+            result[i]=turn;
+        }
+        int opening=-1;for(int i=0;i<count&&opening<0;i++)if(sixth[i])opening=result[i];
+        for(int i=0;i<count&&result[i]<0;i++)result[i]=opening;
+        return result;
     }
     static bool Struck(PreparedPatternSong.Voice[] attacks,int track)
     {
