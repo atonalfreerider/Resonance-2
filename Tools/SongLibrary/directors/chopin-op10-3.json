@@ -71,18 +71,18 @@
  },
  "cues": [
   {
-   "start": 0,
-   "to": "3",
+   "start": 3.3,
+   "to": "4",
    "view": "Torus",
    "picture": "delacroix",
    "text": "“Never another such beautiful melody”: Chopin to his pupil Adolph Gutmann",
-   "speech": "Chopin told his pupil Adolph Gutmann that he had never in his life written another such beautiful melody. This is that melody: the Étude in E major, Opus 10, Number 3.",
+   "speech": "Chopin told his pupil Adolph Gutmann that he had never in his life written another such beautiful melody. This is it: Opus 10, Number 3, in E major.",
    "sourceIds": [
     "niecks"
    ]
   },
   {
-   "from": "3",
+   "from": "4",
    "to": "6",
    "view": "Torus",
    "narrate": false,
@@ -106,17 +106,49 @@
   },
   {
    "from": "9",
-   "to": "14",
+   "to": "11",
    "view": "Torus",
    "stem": "right-hand",
-   "soloUntil": "13",
    "picture": "clean-copy",
-   "text": "An étude is a study. The right hand alone: melody in the weaker outer fingers, a soft pulse from thumb and index finger",
-   "speech": "An étude is a study, written to perfect one skill. Listen to the right hand alone. It plays two parts at once: the weaker outer fingers sing the melody, while the thumb and index finger keep a soft pulse beneath it.",
+   "text": "An étude is a study: the right hand alone",
+   "speech": "An étude is a study, written to perfect one skill. Listen to the right hand alone.",
    "sourceIds": [
     "henle",
     "wikipedia"
    ]
+  },
+  {
+   "from": "11",
+   "to": "14",
+   "view": "Torus",
+   "stem": "right-hand",
+   "soloUntil": "13",
+   "text": "Two parts in one hand: the melody in the weaker outer fingers (4 and 5), a soft pulse from thumb and index (1 and 2)",
+   "speech": "It plays two parts at once: the weaker outer fingers sing the melody, while the thumb and index finger keep a soft pulse beneath it.",
+   "sourceIds": [
+    "henle",
+    "wikipedia"
+   ],
+   "hand": {
+    "side": "right",
+    "groups": [
+     {
+      "fingers": [
+       4,
+       5
+      ],
+      "label": "melody"
+     },
+     {
+      "fingers": [
+       1,
+       2
+      ],
+      "label": "pulse"
+     }
+    ],
+    "alternate": false
+   }
   },
   {
    "from": "14",
@@ -182,23 +214,55 @@
   },
   {
    "from": "21:2",
-   "to": "29",
+   "to": "24",
    "view": "Torus",
    "stem": "right-hand",
-   "soloUntil": "26",
-   "text": "The bridge, poco più animato: sixths in the right hand, rocking between two hand shapes",
-   "speech": "The bridge begins, a little more animated, and the étude's other skill appears: sixths. The right hand rocks between two shapes, typically thumb with ring finger, then index with little finger.",
+   "text": "The bridge, poco più animato: sixths in the right hand",
+   "speech": "The bridge begins, a little more animated, and the étude's other skill appears: sixths.",
    "sourceIds": [
     "henle",
     "score"
    ]
   },
   {
+   "from": "24",
+   "to": "29",
+   "view": "Torus",
+   "stem": "right-hand",
+   "soloUntil": "26",
+   "text": "The right hand rocks between two shapes: thumb with ring finger (1 and 4), then index with little finger (2 and 5)",
+   "speech": "The right hand rocks between two shapes, typically thumb with ring finger, then index with little finger.",
+   "sourceIds": [
+    "henle",
+    "score"
+   ],
+   "hand": {
+    "side": "right",
+    "groups": [
+     {
+      "fingers": [
+       1,
+       4
+      ],
+      "label": "thumb and ring"
+     },
+     {
+      "fingers": [
+       2,
+       5
+      ],
+      "label": "index and little"
+     }
+    ],
+    "alternate": true
+   }
+  },
+  {
    "from": "29",
    "to": "34",
    "view": "Torus",
    "text": "The first swell: forte in A major, answered softly in A minor",
-   "speech": "Then two swells. The first rises forte in A major, and answers itself softly in A minor.",
+   "speech": "Two swells follow: the first rises forte in A major, and answers itself softly in A minor.",
    "sourceIds": [
     "score"
    ]
@@ -228,10 +292,40 @@
   },
   {
    "from": "52",
+   "to": "55",
+   "view": "Torus",
+   "text": "Repeating, alternating sixths: the rocking the étude trains",
+   "speech": "Out of the spin, the hands lock into repeating, alternating sixths, the same rocking the étude trains.",
+   "sourceIds": [
+    "score"
+   ],
+   "hand": {
+    "side": "right",
+    "groups": [
+     {
+      "fingers": [
+       1,
+       4
+      ],
+      "label": "thumb and ring"
+     },
+     {
+      "fingers": [
+       2,
+       5
+      ],
+      "label": "index and little"
+     }
+    ],
+    "alternate": true
+   }
+  },
+  {
+   "from": "55",
    "to": "58",
    "view": "Torus",
-   "text": "Repeating, alternating sixths steady the storm; the music settles onto the dominant",
-   "speech": "Out of the spin, the hands lock into repeating, alternating sixths, the same rocking the étude trains. It steadies the storm, and the music settles onto the dominant, waiting.",
+   "text": "They steady the storm; the music settles onto the dominant",
+   "speech": "It steadies the storm, and the music settles onto the dominant, waiting.",
    "sourceIds": [
     "score"
    ]
@@ -240,11 +334,13 @@
    "from": "58",
    "to": "62",
    "view": "Torus",
-   "narrate": false,
-   "text": "Smorzando e rallentando: it steadies on the dominant, waiting to come home",
+   "text": "Smorzando, waiting to come home. Its nickname, not Chopin’s own: Tristesse, sadness",
    "sourceIds": [
+    "wikipedia",
     "score"
-   ]
+   ],
+   "picture": "wodzinska",
+   "speech": "Its nickname is Tristesse: sadness."
   },
   {
    "from": "62",
@@ -254,11 +350,12 @@
    "speech": "The melody returns, but Chopin shortens the way home.",
    "sourceIds": [
     "score"
-   ]
+   ],
+   "duckFloor": 0.5
   },
   {
    "from": "64",
-   "to": "67",
+   "to": "66:2",
    "view": "Torus",
    "compare": {
     "first": [
@@ -304,10 +401,11 @@
    "speech": "In gold, bars 6 to 13 of the first time through: a second phrase, then the opening again. Watch the return reach the cut.",
    "sourceIds": [
     "score"
-   ]
+   ],
+   "duckFloor": 0.5
   },
   {
-   "from": "67",
+   "from": "66:2",
    "to": "68:2",
    "view": "Torus",
    "compare": {
@@ -351,22 +449,22 @@
     ]
    },
    "text": "Bar 67: the return skips bars 6–13 and goes straight to the climb",
-   "speech": "This time Chopin skips them, straight to the climb.",
+   "speech": "This time he skips them, straight to the climb.",
    "sourceIds": [
     "score"
-   ]
+   ],
+   "duckFloor": 0.5
   },
   {
    "from": "68:2",
    "to": "70",
    "view": "Torus",
-   "picture": "wodzinska",
    "text": "The single voice again: the same falling fifths, each phrase lower than the last",
-   "speech": "Its nickname is Tristesse: sadness. Listen again to the falling fifths.",
    "sourceIds": [
     "wikipedia",
     "score"
-   ]
+   ],
+   "narrate": false
   },
   {
    "from": "70",
@@ -379,7 +477,8 @@
    "annotationLabel": "The sigh returns",
    "sourceIds": [
     "score"
-   ]
+   ],
+   "duckFloor": 0.5
   },
   {
    "from": "73",
@@ -392,7 +491,9 @@
    "annotationLabel": "C natural, borrowed from E minor",
    "sourceIds": [
     "score"
-   ]
+   ],
+   "duckFloor": 0.5,
+   "annotationUntil": "75"
   },
   {
    "from": "77",
