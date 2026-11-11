@@ -114,6 +114,38 @@ class BarTimes(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_director_tour.timed_cues(dict(cues=[dict(director['cues'][0], annotationUntil='2:3')]), self.clock)  # 2/4 has two beats
 
+    def test_hand(self):
+        # A pianist's hand (Unity's PianistHand) is copied through from the director like any cue field, and checked as
+        # SongDirector.Read checks it: right or left, one to three groups of fingers 1-5 with no finger in two groups,
+        # labels of up to 40 characters, alternate with two groups or more, and no picture or comparison beside it.
+        hand = dict(side='right', alternate=True, groups=[dict(fingers=[1, 4], label='thumb + ring'), dict(fingers=[2, 5], label='index + little')])
+        director = dict(cues=[dict({'from': '1', 'to': '3'}, text='sixths', hand=hand)])
+        cue = build_director_tour.timed_cues(director, self.clock)[0]
+        self.assertEqual(cue['hand'], hand)
+        cue = dict(cue, view='Torus', stem='', uncoil=False)
+        for good in (hand, dict(side='left', groups=[dict(fingers=[5])]),
+                     dict(side='right', alternate=False, groups=[dict(fingers=[4, 5], label='melody'), dict(fingers=[1, 2], label='pulse')]),
+                     dict(side='right', groups=[dict(fingers=[1]), dict(fingers=[2, 3], label=''), dict(fingers=[4, 5], label='x'*40)])):
+            with self.subTest(hand=good):
+                story.validate_cues([dict(cue, hand=good)], 11.0, [])
+        group = dict(fingers=[1], label='thumb')
+        for bad in (None, 'right', dict(side='Right', groups=[group]), dict(side='both', groups=[group]), dict(groups=[group]),
+                    dict(side='right', groups=[]), dict(side='right', groups=[dict(fingers=[k]) for k in (1, 2, 3, 4)]),
+                    dict(side='right', groups=[dict(fingers=[])]), dict(side='right', groups=[dict(fingers=[0])]),
+                    dict(side='right', groups=[dict(fingers=[6])]), dict(side='right', groups=[dict(fingers=[2, 2])]),
+                    dict(side='right', groups=[dict(fingers=[1, 2]), dict(fingers=[2, 3])]), dict(side='right', groups=[dict(fingers=[1.0])]),
+                    dict(side='right', groups=[dict(fingers=[True])]), dict(side='right', groups=[dict(fingers='12')]),
+                    dict(side='right', groups=[dict(fingers=[1], label='x'*41)]), dict(side='right', groups=[dict(fingers=[1], label=3)]),
+                    dict(side='right', groups=[dict(fingers=[1], name='thumb')]), dict(side='right', groups=[group], alternate=True),
+                    dict(side='right', groups=[group, dict(fingers=[2])], alternate='yes'), dict(side='right', groups=[group], colour='gold')):
+            with self.subTest(hand=bad), self.assertRaises(ValueError):
+                story.validate_cues([dict(cue, hand=bad)], 11.0, [])
+        # One graphic per cue: a picture or a comparison wants the same part of the screen.
+        for other in (dict(image='story/pictures/a.jpg', imageCredit='Public domain'), dict(compareFirst=[2.5, 4.5], compareSecond=[4.5, 8.5])):
+            with self.subTest(other=other), self.assertRaises(ValueError):
+                story.validate_cues([dict(cue, **other)], 11.0, [])
+            story.validate_cues([dict({k: v for k, v in cue.items() if k != 'hand'}, **other)], 11.0, [])
+
 
 class Checks(unittest.TestCase):
     def test_claims_and_beats_decisions(self):

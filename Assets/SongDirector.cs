@@ -26,7 +26,10 @@ public sealed class SongDirector : MonoBehaviour
         // second, lit span, cut, title, note, added). compareFollow: where the second passage is in the first, as
         // knots (second time, first time, ...) in runs of compareFollowRuns knots; a ghost playhead on the first wheel
         // follows it, and leaps across what the second leaves out.
-        public double[] compareFirst,compareSecond,compareHighlight,compareAdded,compareFollow;public double compareMissingAt=-1;public string[] compareLabels;public int[] compareFollowRuns; }
+        public double[] compareFirst,compareSecond,compareHighlight,compareAdded,compareFollow;public double compareMissingAt=-1;public string[] compareLabels;public int[] compareFollowRuns;
+        // A pianist's hand seen from above, with arrows to the fingers a fingering line is about (PianistHand): which hand,
+        // groups of fingers with their labels, and whether the groups take turns with the music. One graphic per cue.
+        public PianistHand.Figure hand; }
     [Serializable] public sealed class Narrator { public string name,voice,language; }
     [Serializable] public sealed class Story {
         public int version;public string title,midiSha256,audioSha256,patternsSha256,model;public double duration;public Cue[] cues;public Narrator narrator;
@@ -72,6 +75,7 @@ public sealed class SongDirector : MonoBehaviour
         gameObject.AddComponent<StoryAnnotations>().Bind(root,panel,wheels,box);
         gameObject.AddComponent<StoryPictures>().Bind(root,panel);
         gameObject.AddComponent<PassageComparison>().Bind(root);
+        gameObject.AddComponent<PianistHand>().Bind(root);
         footer=new VisualElement{name="song-story-footer",pickingMode=PickingMode.Ignore};root.Add(footer);
         caption=new Label{name="song-story-caption",pickingMode=PickingMode.Ignore,enableRichText=false};footer.Add(caption);
         gameObject.AddComponent<SongRecordingCaptions>().Bind(root);
@@ -104,7 +108,8 @@ public sealed class SongDirector : MonoBehaviour
                 (cue.annotationTarget=="note"&&(cue.annotationMidiPitch<21||cue.annotationMidiPitch>116))||
                 (cue.annotationTarget=="chord"&&(cue.annotationPitchClass<0||cue.annotationPitchClass>11))||
                 (!string.IsNullOrEmpty(cue.annotationAnchor)&&!AnchorGrammar.IsMatch(cue.annotationAnchor))||
-                !Placements.Contains(cue.imagePlacement??"")||(!string.IsNullOrEmpty(cue.image)&&(StoryPictures.Resolve(directory,cue.image)==null||string.IsNullOrWhiteSpace(cue.imageCredit))))
+                !Placements.Contains(cue.imagePlacement??"")||(!string.IsNullOrEmpty(cue.image)&&(StoryPictures.Resolve(directory,cue.image)==null||string.IsNullOrWhiteSpace(cue.imageCredit)))||
+                !PianistHand.Valid(cue))
                 throw new InvalidDataException("Invalid story cue; no controls applied.");
             end=cue.end;
         }

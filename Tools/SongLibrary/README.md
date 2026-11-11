@@ -297,6 +297,25 @@ span while the cut flashes. Keep the card up across the skip itself (two cues wi
 card). In the Torus view the card, like a history picture, takes its own part of the screen (the top in a
 portrait layout, the left in a landscape one) and the torus moves into the rest.
 
+**A pianist's hand.** A cue that talks about fingering can show the hand (`PianistHand`): a hand seen from above,
+palm down as it lies on the keys (a right hand has its thumb at the left), with the finger numbers 1 (thumb) to
+5 (little finger) on it, and an arrow from each group's label to each of its fingertips, which glow in the group's
+colour (gold, sea green, violet, in the order the groups are written):
+
+```json
+"hand": {"side": "right", "groups": [{"fingers": [4, 5], "label": "melody"}, {"fingers": [1, 2], "label": "soft pulse"}]}
+"hand": {"side": "right", "alternate": true, "groups": [{"fingers": [1, 4], "label": "thumb + ring"}, {"fingers": [2, 5], "label": "index + little"}]}
+```
+
+`side` is `right` or `left`; one to three groups, each of fingers 1–5 (a finger in one group only) and a label of
+up to 40 characters (the finger numbers when it is empty or absent). With `alternate` (two groups or more) the
+groups take turns with the music: at each onset of that hand's notes (the score track named for it, "Right hand"),
+counted from the cue's start, so the first group has the first note; without such a track, at each beat. The
+song clock decides, so seeks and recordings agree. The card shows for the whole cue; two cues in a row with the
+same `hand` keep one card and count on through both. One graphic per cue: a cue with a `hand` cannot also have a
+picture or a `compare` (publishing refuses it, as Director mode does). In the Torus view the card takes its own
+part of the screen as a picture does.
+
 **Checking a tour with TypeSafe (Jev).** `tour_check.py` asks TypeSafe's System One model two kinds of question,
 with the decisions kept in code and the answers cached by request in `SongLibraryData/typesafe-cache.json`:
 

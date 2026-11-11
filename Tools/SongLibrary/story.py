@@ -16,6 +16,7 @@ from common import atomic_json, read_json, sha, validate_bundle
 
 VIEWS = ('Overview', 'Torus', 'TorusLyrics', 'Timeline', 'Drums', 'Lyrics')
 PLACEMENTS = ('right', 'left', 'center')
+HAND_SIDES = ('right', 'left')
 IMAGE_TYPES = ('.jpg', '.jpeg', '.png')
 # Where on the structure wheel a patterns arrow points (Docs/MOTIF-REDUCTION.md §14.8); SongDirector.Read accepts the
 # same grammar. Matched with fullmatch, never ^...$: $ also matches before a trailing newline.
@@ -166,6 +167,7 @@ def validate_cues(cues, duration, stems, source_ids=(), bundle=None):
         if 'speech' in cue and (not isinstance(cue['speech'],str) or not 1 <= len(cue['speech']) <= 500):
             raise ValueError('Invalid spoken text')
         validate_picture(cue, bundle)
+        validate_hand(cue)
         if 'soloGain' in cue and not (isinstance(cue['soloGain'], (int, float)) and 0 < cue['soloGain'] <= 4 and cue['stem']):
             raise ValueError('soloGain needs a soloed stem and a value up to 4')
         # A new take renders this line again while every other line is reused (narration.py); ElevenLabs gets it as the
@@ -201,6 +203,36 @@ def validate_picture(cue, bundle):
         raise ValueError('Story pictures need a licence credit')
     if cue.get('imagePlacement', 'right') not in PLACEMENTS:
         raise ValueError('Invalid picture placement')
+
+
+def validate_hand(cue):
+    """A pianist's hand seen from above, with arrows to the fingers a fingering line is about (Unity's PianistHand;
+    SongDirector.Read checks the same): side "right" or "left"; one to three groups, each of fingers 1 (thumb) to
+    5 (little finger) with an optional label of up to 40 characters, no finger in two groups; alternate makes the groups
+    take turns with that hand's notes, so it needs two groups or more. One graphic per cue: never with a picture or a
+    comparison, which would want the same part of the screen."""
+    if 'hand' not in cue:
+        return
+    hand = cue['hand']
+    if not isinstance(hand, dict) or not set(hand) <= {'side', 'groups', 'alternate'} or hand.get('side') not in HAND_SIDES:
+        raise ValueError('hand needs side "right" or "left" and its groups (and may set alternate)')
+    groups, seen = hand.get('groups'), set()
+    if not isinstance(groups, list) or not 1 <= len(groups) <= 3:
+        raise ValueError('hand needs one to three groups of fingers')
+    for group in groups:
+        fingers = group.get('fingers') if isinstance(group, dict) and set(group) <= {'fingers', 'label'} else None
+        if not isinstance(fingers, list) or not fingers:
+            raise ValueError('a hand group is {"fingers": [...], "label": "..."}')
+        for finger in fingers:
+            if type(finger) is not int or not 1 <= finger <= 5 or finger in seen:
+                raise ValueError('hand fingers are 1 (thumb) to 5 (little finger), each in one group only')
+            seen.add(finger)
+        if not isinstance(group.get('label', ''), str) or len(group.get('label', '')) > 40:
+            raise ValueError('a hand group label is text of up to 40 characters')
+    if type(hand.get('alternate', False)) is not bool or (hand.get('alternate') and len(groups) < 2):
+        raise ValueError('hand alternate is true or false, and alternates two groups or more')
+    if cue.get('image') or cue.get('picture') or 'compareFirst' in cue or 'compare' in cue:
+        raise ValueError('One graphic per cue: a hand cannot share its cue with a picture or a comparison')
 
 
 def settle_transitions(cues):
