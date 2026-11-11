@@ -167,6 +167,9 @@ public static class TransformGroup
         {
             bool plain = semitones == 0 && steps == 0 || semitones != 0 && semitones % 12 == 0 && steps == semitones / 12 * 7;
             var g = new Transform(steps, semitones, plain ? Transform.Tonal : Transform.Real, inverted);
+            // A plain copy (a repeat, whole octaves) reads tonally only when its tonal image is the member note for note:
+            // the two places can lie in different keys, and a mirror on the scale is not a mirror in semitones.
+            if (plain && !Same(Apply(g, a, bStart, frames), b)) g = new Transform(steps, semitones, Transform.Real, inverted);
             best = new Placement { G = g, Bits = g.Cost() };
         }
         if (!chromatic && (best == null || best.G.Frame == Transform.Real))
@@ -226,6 +229,7 @@ public static class TransformGroup
         return new Placement { G = g, Altered = altered.ToArray(), Mode = mode, Bits = bits };
     }
     static int Count(CellNote[] image, CellNote[] b) { int c = 0; for (int j = 0; j < b.Length; j++) if (image[j].Pitch != b[j].Pitch) c++; return c; }
+    static bool Same(CellNote[] image, CellNote[] b) => Count(image, b) == 0;
     static long Extent(CellNote[] c) { long e = 1; foreach (var x in c) e = Math.Max(e, x.Onset + x.Length); return e; }
     // The spelling a note's morph and pitch imply (its letter is the morph's; the accidental is the remainder).
     static int FifthsOf(CellNote x)

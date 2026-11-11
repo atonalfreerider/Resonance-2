@@ -1651,3 +1651,55 @@ Generator order signs on the wheel:
   chords move with them so stay "tonal sequence" and "real sequence" (t^H's 2 bits would otherwise undercut T_k's 2.5).
   "Lowered" and "raised" are measured against the local key's signature (natural minor in minor keys). On the étude this
   names 15 = 14, 16 = 6, 19 = 18, 31 = 30 and 73/74 = 17 as §5 C6 measures them.
+- §4 B1 (step 3): an appoggiatura and its resolution each span at most a tactus (the limits of the design prototype that
+  measured §4 B1), and a note that also closes a neighbour or passing figure with the note before it is that figure. With
+  `data.Chords` as the chord frame (E major at the étude's 1.1) the bare rule read D♯4 at 1.1 as an appoggiatura into the
+  second E4, and the held F♯4 at 1.2 (5/16) as one into G♯4; §4 B1 measures `E4[N− Rep] F♯4[N+ Rep Rep]`, which this
+  gives. A turn's second middle note is absorbed with the first and adds nothing to signatures.
+- §4 B2 (step 3): the span's start bounds the first phrase like an arrival, so no arrival lies within two bars of it. The
+  étude's pickup B3 (0.1) over the dominant passes rules 1–4 (its tactus is the pickup's eighth) but would end a phrase
+  of no length; without it the étude's arrivals are exactly §4 B2's (5.2 full, 8.2 half, 13.2, 21.1, 66.2, 77.1). A half
+  arrival needs the chord on τ to be the dominant's, major or dominant seventh; with no chords at all the bass decides.
+- §5 C1, C2 (step 3): a texture stream also gets a ½-tactus window, without which no tiling reaches its half-tactus
+  starts. The one-position window always exists, so every position is reachable (above 24 events it is a literal only).
+  The slot's size is part of the orbit key: under the Rach2 Allegro's meter changes, equal slot counts under another
+  tactus put different rhythms in one orbit (44 of the Allegro's members failed to decode). A drum key holds each onset's notes. A note the
+  sounding chord explains, or a minor key's raised sixth or seventh, is not "off the local scale": F5's E♭5 over C minor
+  in a C major region made its window chromatic (2 notes of 4), so it could never share an orbit with its major
+  statement.
+- §5 C3 (step 3): Lit codes each note with §9 G1's event literal (log2 of the window's slots, γ of the step from the note
+  before, the first note's from the note before the window, 3 bits if altered, γ(m − m_lead) per further note struck
+  with it) instead of the stream's empirical entropies. Those cost 2–5 bits a note on the fixtures, so a phrase stated
+  twice came out in 2-bar windows over its motifs: F1, F2, F3, F6 and F27 failed, and the étude was cut into 2-bar
+  windows throughout.
+- §5 C3 (step 3): L(g_w) is 1 + the bits of the element placing the window from its orbit's prototype, priced by the §5 C6
+  table (a repeat 0, t_k 1.5 + log2(1 + |k|), the mirror 2, a held head 2: what §9 G1 charges a member), not 1 + γ of the
+  anchor's move from the previous cell's last note. That γ charged about 5 bits a cell even for a repeat, and the étude's
+  a1, a1′ and A′ came out cheaper as 2-bar windows than as the motifs inside them. With the element's bits the étude shows
+  §5 C3's phase and E11's paradigms exactly (the upper neighbour at 5.5, 7.5, 11.5, 21.5, 23.5, 27.5, 127.5, 129.5,
+  133.5, Steps +1 at 7.5, 23.5 and 129.5; the lower at 4.5 and 126.5), E12's oscillation with mirrored members at
+  122.5–124.5, and E13's sigh head (C4 named ♭6 at 148.5 and 150.5, the held 13/16 variant at 154.5). A variant's cost
+  adds only its edits: its element, the head included, is in L(g).
+- §5 C3 (step 3): round 0 counts each key's windows that do not overlap one another, since a key can fill a tiling no
+  more often: with overlaps F3's phase-shifted 2-note pairs counted 8 where a tiling holds 5, and beat the bar cells.
+  Each round counts, lets singletons join (§5 C4), then runs the Viterbi, so round 0's joins already price a variant
+  pair. Hard EM keeps the first tiling it favours, so EM also starts from a round 0 counting only windows up to a bar, and
+  grows that tiling by a round counting the longer windows too; of the three final tilings the one that costs least under
+  its own counts stays (the spec's start on a tie). F27 fails with the spec's start alone, and across six library pieces
+  the other two win about half the streams.
+- §5 C4, C5 (step 3): a variant may join an exact orbit of one statement, which with its variants is then a paradigm:
+  F14 and F27 state their cell once before the variant, so "an exact orbit with ≥ 2 members" would leave them literal.
+  Each window tries the 32 nearest prototypes in each event-count bucket within the edit cap; §11 also buckets by the
+  first three contour signs, which an insertion near the start changes (F14's added 32nd). A shift and a substitution of
+  one note count as two edits. A window the round did not count may join too, so a variant of a current paradigm is
+  priced as a member in the next round.
+- §5 C6 (step 3): a plain copy (a repeat or whole octaves, mirrored or not) is placed tonally only when its tonal image is
+  the member note for note, otherwise really (`TransformGroup.Relate`): the two places can lie in different keys, and a
+  mirror on the scale is not a mirror in semitones. Decoding
+  a member compares pitches, onsets in slots and the tied flag: onsets within a slot are articulation, which §9 G4 codes
+  apart (the key rounds them too), so a variant's Shifted spark marks a change of slot. These two took the Rach2 Allegro's
+  undecodable members from 163 to 46; an inserted note held over the cell's start now decodes as tied.
+- §5 C7 (step 3): a paradigm without diminution tokens takes its family from its contour (Hold, Osc for an alternation,
+  Arp when half its steps leap, otherwise a plain line P); a texture's is Shape; drums form no atom (their paradigms are
+  grooves). A run of neighbours only (N N …) is the Osc family. A P family that holds a falling line opened by a held head
+  is named "sigh", whichever of its paradigms comes first.
