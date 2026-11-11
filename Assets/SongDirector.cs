@@ -125,12 +125,31 @@ public sealed class SongDirector : MonoBehaviour
         Directing=enabled;toggle.SetValueWithoutNotify(enabled);
     }
     public void Reload(){if(Directing)SetDirecting(false);source=null;}
+    // Whether the loaded song's tour changed on disk since it was read, so that a tour about to start (the song list's
+    // Tour button, a recorded take) reads it again and plays what is there: story.json rebuilt, the voice narration.json
+    // names re-rendered, or a story that could not be read when the song loaded (missing, stale or invalid) whose file
+    // is there now. A file that cannot be read as it is checked (being rewritten) counts as changed. Another song's tour
+    // is read fresh as that song loads, and a read under way is reading the disk now.
+    public bool NeedsReload(SongLibraryPanel.Song song)
+    {
+        if(pending!=null||string.IsNullOrEmpty(source)||!string.Equals(Path.GetFullPath(source),Path.GetFullPath(song.Score),StringComparison.OrdinalIgnoreCase))return false;
+        string path=Path.Combine(Folder,"story.json"),voice=Path.Combine(Folder,"narration.json");var narration=GetComponent<SongNarration>();
+        try
+        {
+            if(story==null)return File.Exists(path);
+            if(!File.Exists(path)||Hash(path)!=story.sha256)return true;
+            if(narration==null||narration.Pending||!File.Exists(voice))return false;
+            return !narration.Ready||JsonUtility.FromJson<SongNarration.Manifest>(File.ReadAllText(voice))?.sha256!=narration.Sha256;
+        }
+        catch(Exception){return true;}
+    }
     // The song list's guided tour: load the song, wait for its story, stems and narration, then
-    // play the story from its first cue.
+    // play the story from its first cue. A tour rebuilt on disk since its song loaded is read again first.
     public void Tour(SongLibraryPanel.Song song){StopAllCoroutines();StartCoroutine(RunTour(song));}
     System.Collections.IEnumerator RunTour(SongLibraryPanel.Song song)
     {
         if(Directing)SetDirecting(false);
+        if(NeedsReload(song))Reload();
         if(!string.Equals(midi.midiPath,song.Score,StringComparison.OrdinalIgnoreCase)||!audio.Ready)GetComponent<SongLibraryPanel>().Choose(song);
         yield return null;
         var narration=GetComponent<SongNarration>();

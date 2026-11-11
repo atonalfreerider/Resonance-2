@@ -16,8 +16,9 @@ public sealed class RecordingSession : MonoBehaviour
 {
     [Serializable] public sealed class Marker {public string id="",title="";public double start,end;}
     // bundle: the song's folder (tours).
-    // songStart: the song seconds at the take's first played frame, where the tour starts (its first cue); -1 when no
-    // song played (a tutorial, or a tour whose song never started).
+    // songStart: the song seconds where the take's music starts, where the tour starts (its first cue): the song clock's
+    // origin at its first audible frame; -1 when no song sounded (a tutorial, or a tour whose song never started or never
+    // sounded, which the error then says).
     // audioStart: the video seconds at which song time 0 sounds, so song time t is heard at audioStart+t (tours; the
     // median of video time minus song time over the first seconds of play). Negative when the take starts mid-song;
     // -1 when songStart is -1 (older reports have no songStart, and there -1 alone means unknown).
@@ -35,6 +36,9 @@ public sealed class RecordingSession : MonoBehaviour
     public string Error {get;private set;}="";
     public string ReportPath {get;private set;}="";
     public static string Folder=>Path.GetFullPath(Path.Combine(Application.dataPath,"../Recordings/Videos"));
+    // Seconds of video a tour's song clock may stand still before the take ends as frozen. A playing song's clock moves
+    // every frame the Recorder renders (and every DSP block live), so this is never reached while the music sounds.
+    const double StandStill=5;
     Report report;float startTime;bool go;bool verticalBefore;RecordingStemTap tap;
 
     // Make the tutorial (song null) or a song's tour ready to record.
@@ -58,12 +62,17 @@ public sealed class RecordingSession : MonoBehaviour
             var song=library.Songs.FirstOrDefault(s=>string.Equals(s.Title,songTitle,StringComparison.OrdinalIgnoreCase))??library.Songs.FirstOrDefault(s=>s.Title.StartsWith(songTitle,StringComparison.OrdinalIgnoreCase));
             if(song==null||!song.Tour){Fail("No tour for "+songTitle,views);yield break;}
             report.bundle=Path.GetFullPath(song.Folder);
-            // A tour rebuilt since its song loaded (new cues, or a new voice) is read again: the take plays what is on disk.
-            if(Rebuilt(director,narration,report.bundle))director.Reload();
+            // A tour rebuilt on disk since its song loaded (new cues, or a new voice) is read again first, by the same check
+            // the song list's Tour button runs (SongDirector.NeedsReload): the take plays what is on disk.
             director.Tour(song);
             float waited=0;while(!director.Directing&&waited<150){waited+=Time.unscaledDeltaTime;yield return null;}
             if(!director.Directing){Fail("The tour did not start",views);yield break;}
             midi.Pause();
+            // A voice that is stale (narration.json rendered for an earlier story.json) or still being rendered would leave
+            // the take without its narration, and nothing would say so until the editor's package: the take is refused,
+            // unless the narration was switched off on purpose.
+            if(narration!=null&&narration.Enabled&&!narration.Ready&&File.Exists(Path.Combine(report.bundle,"narration.json")))
+            {Fail("The narration is stale or still rendering: run narration.py for this song, then record again",views);yield break;}
             // MidiPlayer.Play does nothing while the recording's audio or a stem is still loading: be sure both are
             // idle before the Recorder starts, or the take films a song that never plays.
             var audio=GetComponent<SongAudio>();var stems=GetComponent<StemPlayback>();waited=0;
@@ -89,23 +98,35 @@ public sealed class RecordingSession : MonoBehaviour
             // Play, and keep asking until the song really plays (a late stem load can refuse the first request).
             midi.Play();float asked=0;
             while(!midi.IsPlaying&&director.Directing&&asked<30){asked+=Time.unscaledDeltaTime;yield return null;midi.Play();}
-            if(!midi.IsPlaying){report.error="The song did not start playing";Debug.LogError("Recording: "+report.error);director.SetDirecting(false);}
-            else report.songStart=midi.ClockPosition;
-            int cue=-2;var offsets=new List<double>();double furthest=0,first=double.NaN;
+            bool started=midi.IsPlaying,stood=false;
+            if(!started){report.error="The song did not start playing";Debug.LogError("Recording: "+report.error);director.SetDirecting(false);}
+            int cue=-2;var offsets=new List<double>();double furthest=0,first=double.NaN,still=midi.Position,stillSince=Now;
             // The take ends with the tour, and in any case once the song has played to its end and stopped.
             while(director.Directing&&!(furthest>=midi.Duration-1&&!midi.IsPlaying))
             {
                 if(midi.IsPlaying)furthest=Math.Max(furthest,midi.Position);
                 if(director.CueIndex>=0&&director.CueIndex!=cue){cue=director.CueIndex;Mark("cue-"+cue,director.CurrentCue?.text??"");}
                 report.narrationPlayed|=narration!=null&&narration.Speaking;
-                // Where the song's audio clock sits in the video: video time minus song time, while it plays (from a
-                // quarter second in; the first audible frame stands in should the song stop sooner).
-                if(midi.IsAudible&&double.IsNaN(first))first=Now-midi.Position;
-                if(midi.IsPlaying&&midi.Position>report.songStart+.25&&offsets.Count<150)offsets.Add(Now-midi.Position);
+                // Where the song's audio clock sits in the video: video time minus song time. Its first audible frame says
+                // where the take's music starts (the clock's origin, where its sound begins: Play only schedules it) and
+                // stands in should the song stop sooner; then the median over the first seconds, from a quarter second in.
+                if(midi.IsAudible)
+                {
+                    if(double.IsNaN(first)){first=Now-midi.Position;report.songStart=midi.ClockPosition;}
+                    else if(midi.Position>report.songStart+.25&&offsets.Count<150)offsets.Add(Now-midi.Position);
+                }
+                // A song clock standing still means a frozen take: with the editor in the background the Recorder renders
+                // about a frame a second and no sound (the DSP clock stops), or the app pauses. Such a take would film the
+                // stopped song for as long as it is left, so it ends.
+                if(midi.Position!=still){still=midi.Position;stillSince=Now;}
+                else if(Now-stillSince>StandStill){stood=true;director.SetDirecting(false);midi.Pause();break;}
                 yield return null;
             }
             if(offsets.Count>0){offsets.Sort();report.audioStart=offsets[offsets.Count/2];}
             else if(!double.IsNaN(first))report.audioStart=first;
+            // Nothing was heard: where the music starts in the video is unknown (songStart and audioStart stay -1).
+            if(started&&double.IsNaN(first))Problem("the song never sounded");
+            else if(stood)Problem($"the song stopped sounding at {still:0.0} s");
         }
         if(marker!=null)marker.end=Now;
         yield return new WaitForSeconds(.4f);
@@ -127,16 +148,4 @@ public sealed class RecordingSession : MonoBehaviour
     }
     void Problem(string message){report.error=report.error.Length>0?report.error+"; "+message:message;Error=report.error;Debug.LogError("Recording: "+message);}
     void Fail(string message,VisualizationViews views){Error=message;RecordingMode.Set(false);views.SetVertical(verticalBefore);Current=State.Done;}
-    // Whether the loaded song's tour was rebuilt on disk since it was read: its story.json, or the voice its
-    // narration.json names. (Another song's tour is read fresh as that song loads.)
-    static bool Rebuilt(SongDirector director,SongNarration narration,string bundle)
-    {
-        if(!director.Available||!string.Equals(director.Folder,bundle,StringComparison.OrdinalIgnoreCase))return false;
-        string story=Path.Combine(bundle,"story.json"),voice=Path.Combine(bundle,"narration.json");
-        if(!File.Exists(story)||Sha256(story)!=director.StorySha256)return true;
-        if(narration==null||narration.Pending||!File.Exists(voice))return false;
-        try{return !narration.Ready||JsonUtility.FromJson<SongNarration.Manifest>(File.ReadAllText(voice))?.sha256!=narration.Sha256;}
-        catch(Exception){return true;}
-    }
-    static string Sha256(string path){using var h=System.Security.Cryptography.SHA256.Create();using var s=File.OpenRead(path);return BitConverter.ToString(h.ComputeHash(s)).Replace("-","").ToLowerInvariant();}
 }

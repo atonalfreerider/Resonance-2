@@ -21,22 +21,29 @@ The menu enters Play mode, waits for the app, and then:
    one) and the torus glides into the rest, so the two never cover each other
    (`VisualizationViews.ShareScreen`).
 2. `RecordingSession` switches to the stacked layout for a vertical video (side by side for a
-   horizontal one) and makes the tutorial or tour ready.
+   horizontal one) and makes the tutorial or tour ready. A tour whose story or voice was rebuilt
+   since its song loaded is read again first, as the song list's Tour button does
+   (`SongDirector.NeedsReload`). A tour take whose `narration.json` is stale or still rendering
+   is refused before the Recorder starts (run `narration.py`, then record), unless the AI voice
+   narration is switched off.
 3. The Recorder starts (Game View input at the video's size, 30 fps, constant frame rate, H.264
    MP4 with audio) and the session plays it: the tutorial from the top, a tour from its first cue
    (so a silent head before the music is never filmed). The Recorder renders every frame and
    the audio in step with it (AudioRenderer), and the app's visuals follow the audio clock, so the
    video never drops frames or drifts from the sound, however heavy a frame is.
-4. When the tutorial or tour ends the Recorder stops.
+4. When the tutorial or tour ends the Recorder stops. It also stops when a tour's song clock
+   stands still for 5 s of video, and the report's `error` and the console then say "the song
+   never sounded" or where it stopped. With the editor in the background the Recorder renders
+   about a frame a second and no sound, so keep the editor in front while it records.
 
 Output, in `Recordings/Videos/`:
 
 - `<name>-<orientation>-<time>.mp4`, the whole take;
 - `<name>-<orientation>-<time>.json`, every tutorial step (or tour cue) with its start and end
-  in the video; for tours also the song's bundle, where in the song the take starts (`songStart`),
-  when song time 0 sounds in the video (`audioStart`, negative when the take starts mid-song), and
-  what the take played (`storySha256`, `narrationSha256`, `narrationPlayed`), as documented on
-  `RecordingSession.Report`;
+  in the video; for tours also the song's bundle, where in the song the take starts (`songStart`,
+  −1 when the song never sounded), when song time 0 sounds in the video (`audioStart`, negative
+  when the take starts mid-song, −1 with `songStart`), and what the take played (`storySha256`,
+  `narrationSha256`, `narrationPlayed`), as documented on `RecordingSession.Report`;
 - `<name>-<orientation>-<time>-edit/`, the editor's package (below), built when the take ends.
 
 ## The editor's package: re-edit the mix outside Resonance
