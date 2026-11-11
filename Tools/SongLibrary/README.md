@@ -363,8 +363,9 @@ Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/story_timing.py Pre
   becomes the larger of the measured duck and the floor, even where the voice then stands less than 10 dB clear.
   narration.json keeps `duckMeasured` and `duckFloor` beside `duck` on such a line, and `speechOverMusicDb`, how far
   the voice then stands above the music; under 6 dB the render warns, naming the floor that keeps 6 dB (or saying that
-  none does). SongNarration, `preview.mp3` and the editor's package all play `duck`; changing a floor renders no speech
-  again.
+  none does). The warnings are also in the render's result (`warnings`), which a Song Workshop job keeps and its page
+  lists under the job, and the narration check lists such lines. SongNarration, `preview.mp3` and the editor's package
+  all play `duck`; changing a floor renders no speech again.
 - **Word timing.** After every render, `narration.py` runs `story_timing.py` in the model environment: each spoken
   line's words (its `speech`, or its caption when it has none) are force-aligned in the voice track by the MMS aligner
   (on the GPU when there is one, and again on the CPU when that fails; about ten seconds for a tour), and its segment
@@ -381,17 +382,22 @@ Tools/SongLibrary/.venv/Scripts/python.exe Tools/SongLibrary/story_timing.py Pre
   (`openai/whisper-small.en` from the local Hugging Face cache) and compares it with the script: a phrase said twice
   (up to a whole sentence), words missing, added or changed, and, critical, a changed note name, major/minor or
   number. What Whisper changes on its own is tolerated: punctuation, case ("A major" as "a major"), hyphens,
-  Op./Opus, No./Number, St./Saint, digits (decades such as "90s", leading zeros, "0-3" for "03"), chord symbols (B7,
-  Bb7, Am7, Cmaj7, Dsus4), letters run into digits (PS1), dates and $, small words it drops or swaps (an/in),
-  homophones (sighs/size), the project's words it hears as everyday ones (torus as Taurus, chorus or tourist) and its
-  spelling of names and foreign words when it sounds alike (Gorlatch/Gorlach, étude/etude, Chopin/Sopa; Chopin heard
-  as Liszt is flagged). A name is a word capitalised inside a sentence and never written in lower case in the story.
-  A repeated single word is flagged, not critical. Transcriptions are cached by each clip's samples in
-  `SongLibraryData/narration-check-cache`, so after a new take only that line is heard again. The report
+  Op./Opus, No./Number, St./Saint, digits (decades such as "90s", leading zeros, "0-3" for "03", "2 million", "2.5
+  million"), chord symbols (B7, Bb7, Am7, Cmaj7, Dsus4; "G seventh" as G7 and "the flat sixth" as b6th), letters run
+  into digits (PS1), the article run into a note ("AC natural", "Abm7b5" for "a B minor seven flat five"), a note's
+  letter as a word ("See now" for "C now"), dates ("3 April" for "the third of April") and $, small words it drops or
+  swaps (an/in), homophones (sighs/size), the project's words it hears as everyday ones (torus as Taurus, chorus or
+  tourist) and its spelling of names and foreign words when it sounds alike (Gorlatch/Gorlach, étude/etude,
+  Chopin/Sopa; Chopin heard as Liszt is flagged). A name is a word capitalised inside a sentence and never written in
+  lower case in the story. Flagged, not critical: a repeated single word, a number written as a word that sounds like
+  it ("Fifths" as "Fists": no other number was said, and a take cannot change Whisper's spelling; "fifth" as "forth"
+  stays critical) and an interval without its plural ("Sevenths" as "7th"). Transcriptions are cached by each clip's
+  samples in `SongLibraryData/narration-check-cache`, so after a new take only that line is heard again. The report
   (`narration-check.txt`, and `.json`) goes to `Reports/SongProcessing/<bundle>/`, with each issue's time in the
-  recording (a repeated phrase's from a phrase's length before the aligned words, so both copies are heard); the exit
-  status is 1 on a critical issue and 2 when the narration cannot be checked (a narration older than its story, or a
-  fault in the check).
+  recording (a repeat's from the start of the script word before it, or the line's start, so both copies are heard
+  whichever one the aligner chose) and the lines whose duck floor leaves the voice under 6 dB above the music; the
+  exit status is 1 on a critical issue and 2 when the narration cannot be checked (a narration older than its story,
+  or a fault in the check).
 
 ### Piano concerto tours
 

@@ -99,6 +99,36 @@ OTHERS = [
     ('Underneath runs a restrained dembow, the reggaeton pulse. On the drum wheel, the groove keeps changing its details: sixty-four drum families in one song.',
      'Underneath runs a restrained Dembo, the reggaeton pulse. On the drum wheel, the groove keeps changing its details, 64 drum families in one song.', 'flagged'),
 ]
+# Lines read by two offline voices (Windows' David and Zira: the library's scripts, and number- and chord-heavy lines no
+# tour has) and heard by the check's Whisper, where the check alarmed on Whisper's writing of what was said: dates, a
+# note's letter as a word, the article run into a note or chord, a flat scale degree, chord numbers, scale words after
+# digits, decimals and "5th's". The voices said every one as written.
+OFFLINE = [
+    ("Martin Luther King Jr. closed his final speech, in Memphis on the third of April 1968, with this hymn's opening line.",
+     "Martin Luther King Jr. closed his final speech, in Memphis on 3 April 1968, with this hymn's opening line.", 'ok'),
+    ('the height scale beside it counts the two semitones. C now glows blue.',
+     'the height scale beside it counts the two semitones. See now glows blue.', 'ok'),
+    ('In the outro the sigh returns an octave lower, darkened by a C natural borrowed from E minor.',
+     'In the outro the sigh returns an octave lower, darkened by AC natural borrowed from E minor.', 'ok'),
+    ('The loop is D minor, B-flat and A: home, the flat sixth and the dominant.',
+     'The loop is D minor, Bb, and A, home, the b6th and the dominant.', 'ok'),
+    ('Underneath, the G seventh chord resolves to C major.', 'Underneath, the G7 chord resolves to C major.', 'ok'),
+    ('Underneath, the G seventh chord resolves to C major.', 'Underneath, the G7th chord resolves to C major.', 'ok'),
+    ('A B minor seven flat five chord leans toward E.', 'Abm7b5 chord leans toward E.', 'ok'),
+    ('Fifths travel around the torus while major thirds cross it.', "5th's travel around the torus while major 3rd's cross it.", 'ok'),
+    ('Her second album sold two million copies.', 'Her second album sold 2 million copies.', 'ok'),
+    ('The song sold three million copies in its first year.', 'The song sold 3 million copies in its first year.', 'ok'),
+    ('It streamed two point five million times in a week.', 'It streamed 2.5 million times in a week.', 'ok'),
+    # Whisper wrote a word that sounds like the number, or dropped an interval's plural, where the aligner's acoustic
+    # model (no language model) hears "fifths", "four cord" and "sevenths": a listen, not a take. The first is the live
+    # Fireflies voice; three voices have its "Fifths" misheard.
+    ('Fifths travel around the umbilic torus, while major thirds cross the band',
+     'Fists travel around the umbilic torus, while major thirds cross the band', 'flagged'),
+    ('Fifths travel around the umbilic torus', 'Fifts travel around the umbilic torus', 'flagged'),
+    ('Fifths travel around the torus while major thirds cross it.', 'Fifthes travel around the Taurus while major thirds cross it.', 'flagged'),
+    ('The four chord arrives on the second line.', 'The forecourt arrives on the second line.', 'flagged'),
+    ('Sevenths pile up, then resolve.', '7th pile up, then resolve', 'flagged'),
+]
 
 
 def check_line(script, heard):
@@ -263,6 +293,60 @@ class Compare(unittest.TestCase):
                 line = check_line(script, heard)
                 self.assertEqual((line['status'], line['issues'][0]['why']), ('critical', why))
 
+    def test_offline_voices_alarm_only_on_the_voice(self):
+        names = {'jr', 'martin', 'luther', 'king', 'memphis', 'umbilic'}
+        for script, heard, status in OFFLINE:
+            with self.subTest(heard=heard):
+                line = nc.compare(script.split(), heard, names)
+                self.assertEqual(line['status'], status)
+                self.assertFalse([i for i in line['issues'] if i['critical']])
+        why = lambda script, heard: [(i['why'], i['script'], i['heard']) for i in nc.compare(script.split(), heard, names)['issues']]
+        self.assertEqual(why('Fifths travel around', 'Fists travel around'), [('number heard as a word', 'Fifths', 'Fists')])
+        self.assertEqual(why('Sevenths pile up', '7th pile up'), [('plural', 'Sevenths', '7th')])
+        tolerated = lambda script, heard: [t['why'] for t in nc.compare(script.split(), heard, names)['tolerated']]
+        self.assertEqual(tolerated('a B minor seven chord', 'Abm7 chord'), ['article run in'])
+        self.assertEqual(tolerated('the G seventh chord', 'the G7 chord'), ['chord symbol'])
+        self.assertEqual(tolerated('C now glows', 'See now glows'), ['sounds the same'])
+
+    def test_what_stays_critical_beside_those(self):
+        for script, heard, why in [
+                ('On the pattern wheels, this verse plays its loop', 'On the pattern wheels, this first plays its loop', 'number'),
+                ('the fifth bar', 'the forth bar', 'number'),                 # sounds like another number
+                ('then two swells', 'then three swells', 'number'),
+                ('then three swells', 'then the swells', 'number'),           # a small word: the number is gone
+                ('the twelfth bar', 'the twelve bar', 'number'),              # an ordinal is its number only in a chord
+                ('alternating sixths', 'alternating six', 'number'),
+                ('the G seventh chord', 'the G9 chord', 'number'),
+                ('the flat sixth', 'the b5', 'number'),
+                ('in A major', 'in Ab major', 'note name'),                   # A flat: no article in the script
+                ('a B minor chord', 'an A-flat minor chord', 'note name'),
+                ('a C natural', 'AC sharp', 'note name'),
+                ('C now glows', 'Dee now glows', 'note name'),
+                ('sold two million copies', 'sold 3 million copies', 'number'),
+                ('two point five million times', '2.6 million times', 'number'),
+                ('on the third of April', 'on 4 April', 'number')]:
+            with self.subTest(heard=heard):
+                line = check_line(script, heard)
+                self.assertEqual((line['status'], line['issues'][0]['why']), ('critical', why))
+
+    def test_written_forms_of_numbers_chords_and_dates(self):
+        keys = lambda text: [t.key for t in nc.tokens(text.split())]
+        self.assertEqual(keys('two point five million, 2.5 million, 2 million, two million, a billion, 1 billion, one point oh five'),
+                         ['#2500000', '#2500000', '#2000000', '#2000000', 'a', '#1000000000', '#1000000000', '#1.05'])
+        self.assertEqual(keys("5th's and 3rd's, 6ths"), ['#5ths', 'and', '#3ths', '#6ths'])
+        self.assertEqual(keys('Abm7b5, Bb7, AC natural, AE minor, the b6th, E7#9, #1 hit'),
+                         ['note:ab', 'minor', '#7', 'flat', '#5', 'note:bb', '#7', 'a', 'note:cn', 'a', 'note:e', 'minor',
+                          'the', 'flat', '#6th', 'note:e', '#7', 'sharp', '#9', 'number', '#1', 'hit'])
+        self.assertEqual([t.text for t in nc.tokens(['Abm7b5'])][:1], ['Ab'])          # the root as written
+        self.assertEqual(keys('on the third of April, on 3 April, on 3rd April, April the third, April 3'),
+                         ['on', '#3', 'april', 'on', '#3', 'april', 'on', '#3', 'april', 'april', '#3', 'april', '#3'])
+        self.assertEqual(keys('the AC current'), ['the', 'ac', 'current'])            # no note after it: a word
+        for script, heard in [('The C major seventh chord', 'The Cmaj7 chord'), ('the E seven sharp nine chord', 'the E7#9 chord'),
+                              ('C diminished seventh', 'Cdim7'), ('the flat sixth', 'the b6'), ('over a billion views', 'over 1 billion views'),
+                              ('nineteen sixty-eight', '1968'), ('a hundred times', 'a 100 times')]:
+            with self.subTest(heard=heard):
+                self.assertEqual(check_line(script, heard)['issues'], [])
+
     def test_a_sentence_said_twice_is_critical_however_long(self):
         sentence = "Beneath the sigh, the chords walk the path of the old canon each time, slowly."
         line = check_line(sentence, sentence + ' ' + sentence)
@@ -386,15 +470,46 @@ class Check(unittest.TestCase):
         self.assertIn('KeyError', said.getvalue())
 
     def test_a_repeat_is_timed_from_before_its_first_copy(self):
-        # The aligner put "Then two swells." on one copy (here the second, 2.0-3.0 s into the line): from a phrase's
-        # length before it both copies are heard; never before the line starts.
-        for starts, ends, at in (([2.0, 2.3, 2.6], [2.3, 2.6, 3.0], 4.2+1.0), ([.3, .6, .8], [.6, .8, 1.0], 4.2)):
+        # The aligner puts a repeated phrase's script words on one copy or the other, with a pause between the copies or
+        # not (Nocturne cue 11: "Now," aligned on the second copy, half a second after the first ended). Both copies
+        # come after the script word before the phrase: the repeat is heard from that word's start, or from the line's
+        # start when the phrase opens the line.
+        for starts, ends in (([2.0, 2.3, 2.6], [2.3, 2.6, 3.0]), ([.3, .6, .8], [.6, .8, 1.0])):
             manifest = json.loads((self.bundle/'narration.json').read_text(encoding='utf-8'))
             manifest['segments'][1].update(spokenStarts=starts, spokenEnds=ends)
             (self.bundle/'narration.json').write_text(json.dumps(manifest), encoding='utf-8')
             with patch.object(nc, 'whisper', side_effect=self.fake_whisper):
                 issue = nc.check(self.bundle, self.out, self.cache)['lines'][1]['issues'][0]
-            self.assertEqual((issue['why'], issue['at']), ('repeated phrase', round(at, 2)))
+            self.assertEqual((issue['why'], issue['at']), ('repeated phrase', 4.2))
+        # Inside a line: "It rises, then two swells. Then two swells follow." The copies are at 0.9-1.6 s and 1.9-2.7 s
+        # with a pause between them; a phrase's length before the aligned words (1.1 s) would start inside the first.
+        middle = bundle(Path(self.tmp.name)/'middle', [self.speech[0], 'It rises, then two swells follow.', self.speech[2]])
+        self.heard[4.2] = 'It rises, then two swells. Then two swells follow.'
+        for starts, ends in (([.1, .3, 1.9, 2.1, 2.3, 2.8], [.3, .7, 2.1, 2.3, 2.7, 3.0]),      # on the second copy
+                             ([.1, .3, .9, 1.1, 1.3, 2.8], [.3, .7, 1.1, 1.3, 1.6, 3.0])):     # on the first
+            manifest = json.loads((middle/'narration.json').read_text(encoding='utf-8'))
+            manifest['segments'][1].update(spokenStarts=starts, spokenEnds=ends)
+            (middle/'narration.json').write_text(json.dumps(manifest), encoding='utf-8')
+            with patch.object(nc, 'whisper', side_effect=self.fake_whisper):                  # its own cache: same samples
+                issue = nc.check(middle, self.out, Path(self.tmp.name)/'middle-cache')['lines'][1]['issues'][0]
+            self.assertEqual((issue['why'], issue['heard'], issue['at']), ('repeated phrase', 'Then two swells', round(4.2+.3, 2)))
+
+    def test_a_floor_that_buries_the_voice_is_listed(self):
+        # narration.py keeps speechOverMusicDb on a floored line; under 6 dB the report says so, beside the voice's own
+        # issues and without changing the exit status (the voice itself may be fine).
+        manifest = json.loads((self.bundle/'narration.json').read_text(encoding='utf-8'))
+        manifest['segments'][1].update(duckMeasured=.14, duck=.35, duckFloor=.35, speechOverMusicDb=2.1)
+        manifest['segments'][2].update(duckMeasured=.3, duck=.35, duckFloor=.35, speechOverMusicDb=8.7)
+        (self.bundle/'narration.json').write_text(json.dumps(manifest), encoding='utf-8')
+        self.heard[4.2] = 'Then two swells.'
+        with patch.object(nc, 'whisper', side_effect=self.fake_whisper), redirect_stdout(io.StringIO()):
+            self.assertEqual(nc.main([str(self.bundle), '--out', str(self.out), '--cache', str(self.cache)]), 1)   # cue 0's E
+        report = json.loads((self.out/'narration-check.json').read_text(encoding='utf-8'))
+        self.assertEqual((report['buried'], report['lines'][1]['status'], report['lines'][1]['speechOverMusicDb']), ([1], 'ok', 2.1))
+        self.assertNotIn('speechOverMusicDb', report['lines'][2])
+        text = (self.out/'narration-check.txt').read_text(encoding='utf-8')
+        self.assertIn('Under 6 dB above the music, where a duckFloor keeps it up: 1 line (cue 1).', text)
+        self.assertIn('cue 1, 0:04.2-0:07.1, voice 2.1 dB above the music', text)
 
 
 if __name__ == '__main__':

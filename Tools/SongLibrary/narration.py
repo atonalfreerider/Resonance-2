@@ -225,6 +225,8 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
         clips=list(pool.map(render,enumerate(cues)))
     key=None
     timeline=np.zeros(math.ceil(story['duration']*RATE),dtype='float32');segments=[]
+    # Kept in the result as well as said: a Song Workshop job shows only its latest message, which moves on.
+    warnings=[]
     # Measure what actually plays under each line: the recording, or the soloed stem.
     music={'':mono(bundle/manifest.get('audioPath','recording.wav'))}
     for stem in manifest.get('stems',[]):
@@ -247,9 +249,9 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
             clear=speech_over_music(speech,level,segment['duck']);segment['speechOverMusicDb']=None if clear is None else round(clear,1)
             if clear is not None and clear<FLOOR_WARNING_DB:
                 keeps=.95*speech/(level*10**(FLOOR_WARNING_DB/20))
-                notify(f"Warning: cue {i}'s duckFloor {lowest:g} leaves its voice {clear:.1f} dB above the music (under {FLOOR_WARNING_DB} dB, words get lost): "
+                warnings.append(f"Warning: cue {i}'s duckFloor {lowest:g} leaves its voice {clear:.1f} dB above the music (under {FLOOR_WARNING_DB} dB, words get lost): "
                        +(f'a floor of {math.floor(keeps*100)/100:.2f} keeps {FLOOR_WARNING_DB} dB' if keeps>segment['duckMeasured'] else f'even its measured duck leaves under {FLOOR_WARNING_DB} dB')
-                       +', or move or shorten the line to a quieter spot')
+                       +', or move or shorten the line to a quieter spot');notify(warnings[-1])
         segments.append(segment)
     spoken=sum(s['end']-s['start'] for s in segments)
     fraction=spoken/story['duration']
@@ -270,8 +272,9 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
     metadata['previewPath']=(directory/'preview.mp3').relative_to(bundle).as_posix()
     atomic_json(bundle/'narration.json',metadata)
     notify('Aligning the spoken words')
-    aligned=align_words(bundle)
-    return dict(wav=str(wav),mp3=str(mp3),scenes=len(segments),duration=len(timeline)/RATE,narratedSeconds=spoken,musicOnlySeconds=story['duration']-spoken,alignedLines=aligned)
+    try:aligned=align_words(bundle)
+    except RuntimeError as error:raise RuntimeError(' '.join([str(error),*warnings])) from None   # a failed job shows only its error
+    return dict(wav=str(wav),mp3=str(mp3),scenes=len(segments),duration=len(timeline)/RATE,narratedSeconds=spoken,musicOnlySeconds=story['duration']-spoken,alignedLines=aligned,warnings=warnings)
 
 
 if __name__=='__main__':

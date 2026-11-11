@@ -76,7 +76,9 @@ class Rendering(unittest.TestCase):
                   narrationTargetFraction=1,narrator=dict(name='Test',provider='elevenlabs',voice='voice-id',language='en-US'),
                   cues=[line(0,speech='The first line.'),line(4),line(8,speech='The third line.')])
  def tearDown(self):self.tmp.cleanup()
- def render(self,run=None):
+ def render(self,run=None,job=False):
+  """generate() with the speech API and the aligner mocked; with `job`, as the Song Workshop runs it (/api/narrate), and
+  the job's record comes back in place of the result."""
   (self.bundle/'story.json').write_text(json.dumps(self.story),encoding='utf-8')
   sent=[];self.notes=[]
   def speak(request,timeout):
@@ -88,7 +90,13 @@ class Rendering(unittest.TestCase):
    for s in manifest['segments']:s.update(spokenWords=['w'],spokenStarts=[.1],spokenEnds=[.5])
    path.write_text(json.dumps(manifest),encoding='utf-8')
   with patch('narration.validate_bundle'),patch('narration.DATA',self.data),patch('narration.urllib.request.urlopen',side_effect=speak),patch('narration.run',side_effect=run or align):
-   result=generate(self.bundle,self.key,provider='elevenlabs',notify=self.notes.append)
+   if job:
+    import server
+    with patch.object(server,'DATA',self.data):
+     key=server.enqueue(lambda notify:generate(self.bundle,self.key,provider='elevenlabs',notify=notify))
+     server.POOL.submit(lambda:None).result()                           # one worker: the job has finished
+    result=server.JOBS[key]
+   else:result=generate(self.bundle,self.key,provider='elevenlabs',notify=self.notes.append)
   return result,sent,json.loads((self.bundle/'narration.json').read_text(encoding='utf-8'))
  def test_a_new_take_renders_only_its_line(self):
   result,sent,manifest=self.render()
@@ -114,17 +122,31 @@ class Rendering(unittest.TestCase):
  def test_a_floor_says_what_it_leaves_of_the_voice(self):
   # Voice and music measured alike: every line ducks to 0.3004 for its 10 dB. The story's floor of 0.3 lifts nothing;
   # the last line's 0.5 lifts its music until the voice stands 5.6 dB clear, which is said, with the floor keeping 6 dB.
-  _,_,plain=self.render();self.assertFalse(any('speechOverMusicDb' in s for s in plain['segments']))
+  plain_result,_,plain=self.render();self.assertFalse(any('speechOverMusicDb' in s for s in plain['segments']));self.assertEqual(plain_result['warnings'],[])
   self.story['duckFloor']=.3;self.story['cues'][2]['duckFloor']=.5
-  with patch('narration.band_rms',return_value=.1):_,_,floored=self.render()
+  with patch('narration.band_rms',return_value=.1):result,_,floored=self.render()
   self.assertEqual([(s['duckMeasured'],s['duck'],s['speechOverMusicDb']) for s in floored['segments']],[(.3004,.3004,10.),(.3004,.3004,10.),(.3004,.5,5.6)])
   warnings=[n for n in self.notes if n.startswith('Warning')]
   self.assertEqual(len(warnings),1);self.assertIn("cue 2's duckFloor 0.5 leaves its voice 5.6 dB above the music",warnings[0]);self.assertIn('a floor of 0.47 keeps 6 dB',warnings[0])
+  self.assertEqual(result['warnings'],warnings)                         # the result keeps what was said
   # Music far louder than the voice: the line's own duck is already the deepest, and no floor keeps 6 dB.
   del self.story['duckFloor']
   with patch('narration.band_rms',side_effect=[.01,1.]*3):_,_,loud=self.render()
   self.assertEqual([(s['duckMeasured'],s['duck'],s['speechOverMusicDb']) for s in loud['segments'] if 'duckFloor' in s],[(DUCK_RANGE[0],.5,-34.4)])
   self.assertIn('even its measured duck leaves under 6 dB',[n for n in self.notes if n.startswith('Warning')][0])
+ def test_a_workshop_job_keeps_the_floor_warning(self):
+  # The page shows a job's latest message, which moves on from the warning to "Complete": the job's result keeps it
+  # (index.html lists result.warnings under the job), and so does the job's file.
+  self.story['cues'][2]['duckFloor']=.5
+  with patch('narration.band_rms',return_value=.1):job,_,_=self.render(job=True)
+  self.assertEqual((job['state'],job['message']),('complete','Complete — ready for review'))
+  self.assertEqual(len(job['result']['warnings']),1);self.assertIn("cue 2's duckFloor 0.5 leaves its voice 5.6 dB above the music",job['result']['warnings'][0])
+  saved=json.loads((self.data/'ui-jobs'/(job['id']+'.json')).read_text(encoding='utf-8'))
+  self.assertEqual(saved['result']['warnings'],job['result']['warnings'])
+  # A render whose words then fail to align ends the job with that error: the warning goes with it.
+  def fail(command,timeout):raise subprocess.CalledProcessError(1,command,stderr='OSError: no aligner weights')
+  with patch('narration.band_rms',return_value=.1):job,_,_=self.render(fail,job=True)
+  self.assertEqual(job['state'],'failed');self.assertRegex(job['error'],"no aligner weights.*cue 2's duckFloor 0.5")
  def test_a_failed_alignment_says_so(self):
   def fail(command,timeout):raise subprocess.CalledProcessError(1,command,stderr='Traceback (most recent call last):\nOSError: no aligner weights')
   with self.assertRaisesRegex(RuntimeError,'published.*no aligner weights'):self.render(fail)
