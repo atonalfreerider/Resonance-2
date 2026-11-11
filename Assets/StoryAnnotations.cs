@@ -15,6 +15,8 @@ public sealed class StoryAnnotations : MonoBehaviour
     public string TargetName=>director?.CurrentCue?.annotationTarget??"none";
     // The arrows' and label's opacity this frame; 0 while they are hidden.
     public float Opacity {get;private set;}
+    // Where the first arrow points (panel space), NaN when none: the validations check that an anchored arrow reaches its anchor.
+    public Vector2 FirstTarget=>canvas!=null&&canvas.Targets.Count>0?canvas.LocalToWorld(canvas.Targets[0]):new Vector2(float.NaN,float.NaN);
     public void Bind(VisualElement ui,VisualElement panel,PatternWheelDeck patterns,VisualElement settings)
     {
         director=GetComponent<SongDirector>();main=GetComponent<Main>();featured=GetComponent<FeaturedInstrument>();midi=GetComponent<MidiPlayer>();
@@ -46,7 +48,13 @@ public sealed class StoryAnnotations : MonoBehaviour
         if(!float.IsFinite(width)||width<1||height<1)return;
         float left=GetComponent<VisualizationViews>().PanelHidden?20:controls.resolvedStyle.width+20;
         if(cue.annotationTarget=="patterns"){
-            if(wheels.Overlay.resolvedStyle.opacity>.3f)canvas.Targets.Add(canvas.WorldToLocal(wheels.Overlay.LocalToWorld(wheels.FeaturedCenter+Vector2.up*wheels.FeaturedRadius*.65f)));
+            // An anchor (Docs/MOTIF-REDUCTION.md §14.8) points at a part of the structure wheel, through its current turn: the
+            // omission's slit, an arc, the glyph. Unresolved (no motif layer, the classic wheel, a part not shown now), the arrow
+            // keeps pointing into the centre.
+            if(wheels.Overlay.resolvedStyle.opacity>.3f){
+                if(string.IsNullOrEmpty(cue.annotationAnchor)||!wheels.TryGetAnchor(cue.annotationAnchor,out var anchored))anchored=wheels.FeaturedCenter+Vector2.up*wheels.FeaturedRadius*.65f;
+                canvas.Targets.Add(canvas.WorldToLocal(wheels.Overlay.LocalToWorld(anchored)));
+            }
         }else{
             worldPoints.Clear();
             if(cue.annotationTarget=="melody"){

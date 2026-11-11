@@ -68,3 +68,24 @@ Tonal context: reviewed song keys remain locked; several authored MIDI key signa
 `Lyrics` is present when a `lyrics.txt` sits beside the MIDI (or `Lyrics` is set in `song.json`). It is synced by MIDI lyric events, then `lyrics.timing.json` from `Tools/SongLibrary/lyric_sync.py`, then the vocal lane's notes. Every syllable carries stress, metrical position, held teeth, emphasis and vibrato. Every line carries its meter, end rhyme and front rhyme. Stanzas sung to one pattern are matched line by line. `PitchBendRange` in `song.json` sets the vocal's bend range (default 2) for reading vibrato. See [Docs/LYRIC-MODE.md](../../Docs/LYRIC-MODE.md) for the sheet format.
 
 `--write-fixture lyrics out.mid` writes a generated song on public-domain words and tunes (Twinkle, Hiawatha, Sonnet 18) with its `lyrics.txt` and `song.json`. `--syllables word…` prints how words are split, stressed and rhymed.
+
+## Motif reduction (bundle version 6)
+
+`Motifs` describes the piece by its motifs: cells, the paradigms that restate them (transposed, mirrored, in the parallel mode, or with named edits), powers (`(U²)² ↑1`), runs and doublings, returns with edit scripts (`A′ = A − (a2 a1′) + Coda`), and the hierarchy of sections, phrases or periods and units, with a formula and a caption. Every note is checked to decode from it. Unity draws it as the structure wheel. See [Docs/MOTIF-REDUCTION.md](../../Docs/MOTIF-REDUCTION.md) and the structure wheel in [Docs/PATTERN-WHEELS.md](../../Docs/PATTERN-WHEELS.md).
+
+Every bundle PatternPrep writes is version 6 and carries the layer. If its lossless check fails, the bundle is still written, with an empty layer (`Schema 0`) and the reason in `Status`, and the run prints `MOTIFS DISABLED: …`; Unity then draws the classic wheels. Version-5 bundles keep loading.
+
+```powershell
+# Fixtures F1–F28 only (--self-test runs them too, after the existing fixtures); --verbose adds tree dumps and stage timings
+dotnet run --project Tools/PatternPrep -- --self-test-motifs --verbose
+# A dry run: the tree, formula, relations, paradigms, atoms and bits of a song, nothing written
+dotnet run --project Tools/PatternPrep -- --motifs-report "PreparedSongs/Library/<song>/aligned.mid"
+# Regenerate a bundle, failing on a lossless-check mismatch instead of writing an empty layer (the flag may go anywhere)
+dotnet run --project Tools/PatternPrep -- --strict-motifs "PreparedSongs/Library/<song>/aligned.mid"
+# Library pieces against their golden files (a missing bundle skips; a failed assertion exits 1)
+dotnet run --project Tools/PatternPrep -- --sweep-motifs Tools/PatternPrep/reference-forms/chopin-op10-3.motifs.json Tools/PatternPrep/reference-forms/chopin-nocturne-op9-1.motifs.json Tools/PatternPrep/reference-forms/ticket-to-ride.motifs.json Tools/PatternPrep/reference-forms/umbrella.motifs.json
+# The structure wheel's fixture: the étude's principal line and bass for A and A′ (public domain) around a synthetic B
+dotnet run --project Tools/PatternPrep -- --write-fixture motif-ternary Temp/MotifWheel/ternary.mid
+```
+
+The analysis's parameters (`Tools/PatternPrep/Motifs/MotifSettings.cs`) can be overridden under a `Motifs` object in `song.json`, for experiments only; an unknown name is an error. Regenerating a bundle changes its SHA-256, so its story must be restamped (`build_director_tour.py` or `publish_story.py`), and a Quest needs a build that reads version 6 before regenerated bundles are deployed to it.

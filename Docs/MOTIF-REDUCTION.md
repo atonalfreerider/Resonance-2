@@ -1850,3 +1850,32 @@ Generator order signs on the wheel:
   - E19's jitter is σ in ticks at 480 a quarter (§0.4), and no note moves before the score's start (F21's "never before 0"),
     so a jittered pickup cannot fall into the silent lead-in.
   - A failed assertion makes `--sweep-motifs` exit with 1.
+- §14.1 (step 8), ring 3: the phrase's units are drawn where it has them, and the glyph's stream's cells wherever no unit
+  covers the phrase, not only when it has no units at all (the fixture's a2 holds one two-beat power in its three bars), so an arc always passes the
+  gate. Those cells follow the glyph's stream (the featured lane's line, the principal stream by default), so the lit cell and
+  the glyph agree.
+- §14.1, §14.5 (step 8), what stays retained: the mini glyphs are drawn into ring 3 and turn with it, oriented as the centre
+  glyph shows them when their arc reaches the gate. Keeping every one upright would cost a style write per arc per frame. Ring
+  labels (ring 2's phrases, ring 3's brackets) are retained labels riding their ring, turned back upright to within a degree.
+  They show only when the ring can hold them: ring 2's at R ≥ 90 px and ring 3's at R ≥ 120 px, besides the 24 px arc rule (a
+  short panel's wheel of R 60 had them overlapping). The glyph's clock face is a retained element of its own that does not turn,
+  so the tonic tick stays at twelve o'clock while the figure turns and mirrors. The caption's cell line is two labels (the atom
+  and paradigm, then the cell's relation text), so no string is built after load. Runs of spaces in the formula become
+  non-breaking gaps, since a label collapses them.
+- §14.1 (step 8), period signs: they are read from the section node's `Text` (its `    → → ⬡ ⇄ ·` tail), since the export
+  leaves `MotifNode.Order` 0 for periods.
+- §14.1, §14.6 (step 8), the omission: the slit is lit from the reprise's start until the end of the first span it restates
+  after the jump. At the ghost's leap the bridge flashes and "skipped" shows beside it, so the left-out bars are on screen
+  before, during and after the skip, not only before it. A click on the slit seeks to the bars left out, in addition to the
+  spec's arc, ghost and glyph clicks.
+- §14.5, §15.4 U9 (step 8), what the marker measures: `Resonance.PatternWheels.Structure` covers `TickStructure`, the retained
+  rings' and glyph's redraws and the live layer. The rack and ring 1 (slit and ghost included) stay in
+  `Resonance.PatternWheels.Draw`, which skips the orbits and planet in structure mode. The form title is drawn there too, outside
+  the marker, because `DrawText` allocates 80 bytes a call, as the classic caption's does. "No per-frame GC allocation" is
+  read from the profiler's GC column under the marker (`PerformanceValidation.MarkerAllocations`).
+- §15.4 U6 (step 8): `StoryAnnotations` drops arrow targets inside its screen margins (65 px at the top, 110 px at the bottom),
+  so the check looks for a beat inside A′ where the slit lies within them before it asserts the arrow.
+- §14.8 (step 8): the étude tour's anchor (`"annotationAnchor": "omission:A′"` on the 62–67 cue of
+  `Tools/SongLibrary/directors/chopin-op10-3.json`) is left to step 11. The étude's bundle has no motif layer until that step
+  regenerates it, and its tour has to be republished in the same step anyway. The anchor is checked on the fixture through an
+  injected cue (U6).

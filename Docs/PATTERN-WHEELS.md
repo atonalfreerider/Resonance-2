@@ -138,6 +138,95 @@ The changers take a bay along the bottom of the panel. The ring shrinks to make 
 [Lyric mode](LYRIC-MODE.md) turns the vocal changer to face the viewer and lays the sung
 syllables on its melody.
 
+## Motif reduction and the structure wheel
+
+The section families above describe a song by its chord loops. The motif reduction describes a
+piece by its melody and texture: a small set of motifs (cell shapes stored once), each use of one
+placed by a transposition, a mirror or the parallel mode, and the larger units built from them.
+The full specification is [MOTIF-REDUCTION.md](MOTIF-REDUCTION.md).
+
+**Offline (PatternPrep, bundle version 6 `Motifs`)**
+
+1. **Ingest.** Notes in ticks, the bar and tactus grid, spelling on the line of fifths, and
+   streams: score voices (from a MuseScore import), each lane's outer line and rest, hand
+   textures and drum groups. The melody's stream is the principal stream.
+2. **Reduction and cells.** Each line is reduced Schenker-fashion (neighbours, passing notes,
+   turns, appoggiaturas, repeats), which finds its arrivals (cadences). A lexicon segments every
+   stream into cells; a cell that restates another under a transposition or a mirror joins its
+   paradigm, and a near copy joins it with named edits (the white sparks). Paradigms with one
+   diminution signature form an atom (N neighbour, T turn, P passing or sigh, …), whose upper
+   and lower forms are its chirality.
+3. **Iteration.** Units repeated in a row are powers (`X² ↑1`, nestable: `(U²)² ↑1`); texture
+   runs, cycles, doubling, hand alternation and liquidation are relations of their own.
+4. **Returns and sections.** A self-similarity matrix finds what returns; a return is an edit
+   script (match, delete, insert, substitute), so an abridged reprise is one relation:
+   `A′ = A − (a2 a1′) + Coda`.
+5. **Hierarchy.** Sections, then phrases (cut at arrivals) or periods, then sub-phrases and
+   units. A copy inherits its source's children; what the reprise leaves out is its `Omits`.
+6. **Code.** The whole description is priced in bits against literal and entropy baselines,
+   checked to decode back to every note (Verify), and written as a formula and a caption:
+   `A · B · A′ (A′ = A − bars 6–13 + coda) · 707 notes → 57 cells in 14 atoms · … · 4.8× smaller`.
+
+A Verify failure leaves the bundle a valid version-6 bundle with an empty layer (`Schema 0`,
+the reason in `Status`), so the wheel stays classic; `--strict-motifs` makes it an error.
+Version-5 bundles still load and keep the classic wheels.
+
+**Display: the structure wheel**
+
+For a bundle with motifs, and with **Structure wheel (motifs)** on in the deck's panel (the
+default, kept per viewer), the wheel draws the reduction instead of orbits, planet and moon.
+The rack, the ring and the instrument changers keep their places, so the layout around the
+torus does not change.
+
+| Part | Turns | Shows |
+|---|---|---|
+| Rack | with the song | level-1 strips (a reprise in its source's hatch), a tick where each phrase begins, return brackets on its left edge |
+| Ring 1 | once per song | the sections; `A′ ← A` names a reprise; the bars it leaves out are a **slit** in A's arc, bridged by a chord, and A′'s arc is notched where it jumps them; return brackets inside the rim |
+| Ring 2 | once per section | the phrases or periods of the section playing, hatched by identity (a1′ and a projected a1 in a1's hatch); a period's generator sign at its middle: → translation, ⇄ involution, · identity, a polygon for a cycle |
+| Ring 3 | once per phrase | the units of the phrase playing: powers as staircases (each iteration stepped out by its cumulative step, 3 px a step, in when it falls), brackets over powers and sub-phrases (`×2 ↑2`, `a3b`), the stream's cells where no unit is, a small motif on each arc, the phrase's chords along the inner edge |
+| Centre | per cell | the playing cell's paradigm on a **pitch clock** |
+| Caption | when the path changes | the piece's formula, the phrase's line (`a1 = ⌐ · γ⁻ · γ⁺² ↑1 · …`), the playing cell (`N⁺ upper neighbour γ⁺`, then how it relates to its last statement), the compression |
+
+- **The gate.** As on the classic ring, now is at nine o'clock: on each ring the arc under it
+  is the one playing, lit with the bloom, and a thin radial line joins the lit arcs to the
+  glyph. The gate never moves; the rings turn.
+- **The pitch clock.** Angle is the scale step (seven positions, or twelve semitones for a real
+  or chromatic figure), time spirals outward from a quarter of the radius, a step moves along
+  the clock and a leap is a chord. The tonic is at twelve o'clock. Each statement is the
+  prototype turned so its first note sits on its scale degree, so a sequence up a step turns
+  the glyph by a seventh of a turn: rotation is transposition. An inversion is the same glyph
+  mirrored, never a rotation. A playhead bead travels the spiral; white sparks sit at the notes
+  a statement changes, an altered note a quarter tone off its degree (the coda's ♭6 below the
+  sixth). A cycling run turns its hand shape by its step at each event (a tritone's diameter
+  closes after six). `8va` and `8vb` mark a statement an octave away.
+- **The skip.** While a reprise plays, a ghost cursor runs on its source's arc where the music
+  is in the source. When the reprise jumps the bars it leaves out, the ghost leaps across the
+  slit's bridge, the slit flashes and "skipped" appears. The slit is lit from the reprise's
+  start until the music it rejoins has been heard, so it is there before, during and after the
+  jump.
+- **Clicks.** The radius picks the ring and the angle the arc. A click seeks to an arc's start;
+  on the slit, to the bars left out; on the ghost, to where it is in the source ("hear the
+  original"); on the glyph, to the playing motif's next statement. Hovering names the arc
+  (`phrase a1′, a1 again · 9.1 · γ⁺² ↑1 · …`) or the slit (`bars 6–13 (a2, a1′) are left out
+  in A′`).
+- **Chapters.** The side panel lists the sections and their phrases or periods, hatched as on
+  the rings.
+- **Director anchors.** A tour cue with `annotationTarget: "patterns"` can set
+  `annotationAnchor`: `section:A′`, `phrase:a3`, `node:A′/a1`, `omission:A′`, `run:B1`,
+  `atom:N`, `relation:3`, `ghost` or `glyph`. The story arrow follows that part of the wheel as
+  it turns. An anchor that does not resolve (a classic wheel, a part not shown now) points into
+  the centre as before.
+- **Cost.** Rings 2 and 3 and the glyph are retained elements: they are redrawn only when the
+  section, phrase or paradigm changes, and otherwise only turn (`style.rotate`). Their labels
+  ride them and are turned back upright. A small live layer draws the lit edges, the playhead,
+  the sparks and the gear each frame. The rack and ring 1 stay in the immediate draw; orbits and
+  planet are skipped. Strings and geometry are made when the bundle loads, so the structure code
+  allocates nothing per frame. Its profiler marker is `Resonance.PatternWheels.Structure`
+  (budget 0.3 ms a frame). Arcs under 3 px collapse to a tick, and labels need 24 px.
+
+`MotifWheelModel` (the layer indexed for drawing: the path at a beat, the ghost, the glyph
+geometry, ring 3's items, the anchors) is shared with the Quest wheel.
+
 ## Keys: changes and tensions
 
 The pipeline (`KeyAnalysis`) detects key changes from the chord timeline:
@@ -281,12 +370,34 @@ the text.
   - instrument patterns and lyrics on the public-domain lyric fixture: each lane's grammar,
     runs and changed spans, and the lyric sync, meter and rhyme (see
     [LYRIC-MODE.md](LYRIC-MODE.md)).
+  - the motif reduction's fixtures (F1–F28 of [MOTIF-REDUCTION.md](MOTIF-REDUCTION.md) §16), each
+    decoded back to every note and run twice for a byte-identical layer; `--self-test-motifs`
+    runs only these.
 - `dotnet run --project Tools/PatternPrep -- --sweep "<midi>|Tools/PatternPrep/reference-forms/maple-leaf-rag.json"`
   compares boundaries with reviewed forms. The Maple Leaf Rag MIDI is exported from the
   music21 corpus, public domain.
+- `dotnet run --project Tools/PatternPrep -- --sweep-motifs Tools/PatternPrep/reference-forms/*.motifs.json`
+  checks the motif reduction of library pieces (the étude, the Nocturne, Ticket to Ride,
+  Umbrella) against their golden files.
 - **Tools → Resonance → Check pattern wheels (generated song)**, in Play Mode:
   1. writes and prepares an original generated song;
   2. visits every section, checking the planet, the group and rack/ring coupling;
   3. checks the C → D key change, and the V/V lean and relaxation of the torus;
   4. checks the drum discs' section and beat lines;
   5. checks that the wheels and the 3D viewport do not overlap.
+- **Tools → Resonance → Check motif wheel (generated ternary fixture)**, in Play Mode, writes and
+  prepares PatternPrep's `motif-ternary` fixture (the étude's principal line and bass for A and
+  A′, public domain, around a synthetic B) and checks:
+  1. that the library's version-5 bundles are still listed, and that one draws the classic wheel
+     with the toggle on;
+  2. that the fixture is version 6 with motifs, and that at 12 beats the lit arcs of rings 1–3
+     are the model's path, with the rings only advancing while it plays;
+  3. that a statement a scale step above its prototype is drawn turned 360/7°, an inversion
+     mirrored, and the coda's altered note as a spark;
+  4. that the ghost maps A′ into A and leaps the omitted bars once, the slit lit before and
+     after the jump;
+  5. that `omission:A′` resolves into the slit and a cue with it points the story arrow there;
+  6. that a click on a ring's arc seeks to its start;
+  7. that the structure wheel's marker allocates nothing while it plays.
+- **Tools → Resonance → Measure frame time** includes the structure wheel across the fixture's
+  A′ return and reports its marker against the 0.3 ms budget, and its GC allocation.
