@@ -53,11 +53,11 @@ do not clip).
 | `narration.wav` | the voice alone (a tour's narration; the tutorial's step clips) |
 | `music.wav` | the original music, never ducked: what the take played of the song's recording (tours); the app's own synth sound, captured live during the take (tutorial); the take's own sound, after the performance recorder's loudness pass (Quest performances) |
 | `music-as-played.wav` | tours whose cues solo a stem: the music as Director mode played it, never ducked (each solo at its `soloGain`, clamped to 0.25–4 as `StemPlayback` does, and dropped to 1 as the solo fades out; the crossfades) |
-| `ducking.csv` | one row per spoken line the take played, read off the take: when the music starts to dip (`duck_starts_s`), reaches the line's level (`duck_reached_s`), starts back up (`release_starts_s`: 0.15 s after the line, or at its end once a `releaseSoloAfterNarration` cue's lines are over) and is back (`release_done_s`; blank when the next line dips first). Times are seconds from the video's first frame, `music_gain` is linear amplitude (1 = unducked) and also in dB, `cue` is the story's 0-based cue index and `line` counts from 1; the 95% points are where the music has made 95% of the move |
+| `ducking.csv` | one row per spoken line the take played, read off the take: when the music starts to dip (`duck_starts_s`), reaches the line's level (`duck_reached_s`), starts back up (`release_starts_s`: 0.15 s after the line, or at its end once a `releaseSoloAfterNarration` cue's lines are over) and is back (`release_done_s`); a time is blank where the take never gets there (the next line dips first, or the take ends during the line). Times are seconds from the video's first frame, `music_gain` is linear amplitude (1 = unducked) and also in dB, `cue` is the story's 0-based cue index and `line` counts from 1; the 95% points are where the music has made 95% of the move |
 | `ducking-envelope.csv` | the music gain at every video frame, as the take applied it |
-| `captions.srt` | the spoken words, at most two 42-character lines a caption, UTF-8 with a BOM and CRLF line ends (how Premiere reads accented text); timed by the narration's aligned word times when `narration.json` has them (`spokenStarts`, from `story_timing.py`), else spread over each line by characters; a `[direction]` inside a line is left out; no file when nothing is spoken |
+| `captions.srt` | the spoken words, at most two 42-character lines a caption, UTF-8 with a BOM and CRLF line ends (how Premiere reads accented text); the narration's own words and their aligned times when `narration.json` has them (`spokenWords` and `spokenStarts`, from `story_timing.py`: the speech the voice was rendered from, so a story edited since does not change them), else the story's speech spread over each line by characters; a `[direction]` inside a line is left out; a take that starts mid-line captions from the first word it played; no file when nothing is spoken |
 | `timeline.xml` | an FCP7 XML sequence: the video on V1 linked to the MP4's own sound (muted on the clip and its tracks, for reference), then the music with the ducking as Audio Levels keyframes, the narration, and for a soloing tour the original recording (muted), each stereo file as a linked pair of tracks (left, right) that Premiere joins into one stereo clip, at the take's own levels so the timeline plays as loud as the MP4; a marker at each cue. Paths are absolute: a moved folder asks to be relinked |
-| `check.json` | how the parts were lined up with the video, the levels the take used, how closely they rebuild its sound (reproduction SNR in dB), per spoken line the music level heard under the voice against the cue sheet, and whether the parts match the take at all (`matchesTake`, `problems`) |
+| `check.json` | how the parts were lined up with the video, the levels the take used, how closely they rebuild its sound (reproduction SNR in dB), per spoken line the music level heard under the voice against the cue sheet (`offDb`; a line over a rest in the music, with no level to hear, is not measured: `musicShareDb` under −30), and whether the parts match the take at all (`matchesTake`, `problems`) |
 
 The package models the take from the runtime's own rules. The music and the voice are found in the
 MP4's sound on their own, each to a fraction of a sample (cross-correlation at 8 kHz, refined at
@@ -79,15 +79,19 @@ a narration the bundle no longer has (`storySha256`, `narrationSha256`) gets no 
 prints why and exits 2. A take that played no narration gets a package without narration, captions or
 ducking. Every other package is measured against the MP4: when the parts rebuild its sound to less
 than 15 dB SNR, the narration fits at less than 0.3 or more than 1.5 of the music, narration.wav's
-voice is not where the take has it, a line's measured duck is more than 0.05 off the cue sheet, or a
-cue marker is not where the story puts it (how older reports, without the hashes, catch a bundle
-rebuilt since), `check.json` and `README.txt` say so and the tool exits 2, which Unity logs as an
-error. Such a package never replaces an earlier one that matched its take: it goes beside it as
+voice is not where the take has it, a line's measured duck is more than 0.5 dB off the cue sheet, or a
+cue marker is not where the story puts it, `check.json` and `README.txt` say so and the tool exits 2,
+which Unity logs as an error. So does a bundle whose `narration.json` was rendered for an earlier
+`story.json` than it has now (its `storySha256`): the app refuses such a narration as stale, so a
+narrated take played the story the voice was rendered for, and a story edited since (the speech fixed,
+say, before the voice is rendered again) is not the take's. This check and the voice, duck and marker
+checks are how older reports, without the hashes, catch a bundle changed since the take. Such a
+package never replaces an earlier one that matched its take: it goes beside it as
 `<take>-edit-failed`. A package is built in a temporary folder beside the take and moved into place
 only when complete. The Chopin tour takes of 10 November rebuild to 26.6 dB SNR, vertical and
 horizontal alike, and the Rachmaninoff tour of 3 October (an MP3 bundle) to 23.2 dB; every line's
-measured duck matches the cue sheet within 0.005. Building one needs about 1.3 MB of memory per second
-of take (1.6 with a soloed stem; it needed 4.6). Build or rebuild a package by hand:
+measured duck matches the cue sheet within 0.08 dB. Building one needs about 1.3 MB of memory per
+second of take (1.6 with a soloed stem; it needed 4.6). Build or rebuild a package by hand:
 
 ```powershell
 Tools/SongLibrary/.venv/Scripts/python.exe Tools/Video/edit_package.py Recordings/Videos/<take>.json

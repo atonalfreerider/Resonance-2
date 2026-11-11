@@ -34,13 +34,15 @@ over; StemPlayback crossfades the recording and a soloed stem linearly over 0.45
 dropped at the release); SongAudio and StemPlayback apply both report.duckLagFrames frames later (1 for takes recorded
 before that field existed), from the 1024-sample DSP block where that frame's Update stood. Unity plays a mono voice
 centre-panned at -3 dB, so a tour's narration sits near 0.95 x 0.71 = 0.67 of the music. A take that starts mid-song
-(report.songStart) played nothing of the song before it: everything on the song clock sits at report.audioStart + t.
+(report.songStart) played nothing of the song before it: everything on the song clock sits at report.audioStart + t,
+and its captions start at the first word it played. The captions say the narration's own words (narration.json's
+spokenWords, the speech the voice was rendered from) at their aligned times when it has them.
 
 When the parts do not rebuild the take (reproduction SNR under 15 dB, an implausible narration level, a voice not
-where narration.wav has it, ducks off the cue sheet, cue markers off the story) check.json and README.txt say so and
-the exit code is 2; such a package never replaces an earlier one that matched its take (it goes to <take>-edit-failed).
-A take whose story.json or narration changed since it was recorded (report.storySha256 / narrationSha256) gets no
-package at all, also exit 2.
+where narration.wav has it, a line's duck more than 0.5 dB off the cue sheet, cue markers off the story, a narration
+rendered for an earlier story.json) check.json and README.txt say so and the exit code is 2; such a package never
+replaces an earlier one that matched its take (it goes to <take>-edit-failed). A take whose story.json or narration
+changed since it was recorded (report.storySha256 / narrationSha256) gets no package at all, also exit 2.
 """
 import argparse
 import csv
@@ -77,7 +79,8 @@ DSP_BLOCK = 1024                 # ProjectSettings/AudioManager m_DSPBufferSize
 CAPTION_CHARS, CAPTION_LINES, CAPTION_SECONDS = 42, 2, 6.
 MIN_SNR_DB = 15.                 # tour takes rebuild to 23-26 dB; a voice 39 ms off or a changed bundle to 2-9 dB
 NARRATION_RANGE = (.3, 1.5)      # the narration's level against the music (tours) or absolute (the tutorial): ~0.67
-DUCK_TOLERANCE = .05             # the music level measured under a line against the modelled one (linear gain)
+DUCK_DB = .5                     # the music level measured under a line against the modelled one (takes: within 0.08 dB)
+MUSIC_FLOOR_DB = -30.            # the music's share of the sound under a line below which its level cannot be measured
 MARKER_TOLERANCE = .1            # seconds between a report's cue marker and the frame the story puts that cue on
 VOICE_FOUND = .5                 # normalised correlation of a narrated line with what the music leaves of the mix
 CHUNK = 10*RATE                  # long takes are fitted and written ten seconds at a time
@@ -222,16 +225,19 @@ def xcorr(ref, can, lo, hi, block=1 << 15):
 
 def best_lag(reference, candidate, estimate, search, work=8000):
     """Seconds to delay `candidate` (its sample 0 at the video's time 0) so it lines up best with `reference`,
-    searched within `search` seconds of `estimate`, and the normalised correlation there: a coarse search at 8 kHz
-    (refine() takes it below a sample)."""
+    searched within `search` seconds of `estimate`, and the normalised correlation there over the span the two share
+    (a take of a minute of a song is not scored against the rest of it): a coarse search at 8 kHz (refine() takes it
+    below a sample)."""
     ref, can = decimate(reference), decimate(candidate)
     if not len(can) or not np.any(can):
         return estimate, 0.
     lo, hi = int(math.floor((estimate-search)*work)), int(math.ceil((estimate+search)*work))
     corr = xcorr(ref, can, lo, hi)
     k = int(np.argmax(corr))
-    norm = math.sqrt(float(np.dot(ref, ref))*float(np.dot(can, can))) or 1.
-    return (lo+k)/work, float(corr[k]/norm)
+    lag = lo+k
+    t0, t1 = max(0, -lag), min(len(can), len(ref)-lag)
+    norm = math.sqrt(float(np.dot(ref[t0+lag:t1+lag], ref[t0+lag:t1+lag]))*float(np.dot(can[t0:t1], can[t0:t1]))) if t1 > t0 else 0.
+    return lag/work, float(corr[k]/norm) if norm > 0 else 0.
 
 
 def vertex(c, i):
@@ -349,37 +355,43 @@ def last_ends(segments):
 
 
 def heard(sim, song_time):
-    """The first video frame whose Update saw the song clock reach `song_time`, and the frame that applied it."""
+    """The first video frame whose Update saw the song clock reach `song_time`, and the frame that applied it (None
+    when the take ended first)."""
     k = int(np.searchsorted(sim['position'], song_time-1e-9))
-    return k, min(len(sim['env'])-1, k+sim['lag'])
+    return k, k+sim['lag'] if k+sim['lag'] < len(sim['env']) else None
 
 
 # --------------------------------------------------------------------------------------------- ducking (tours)
 
-def duck_rows(segments, cues, sim, clock, song_start, first_play, end):
+def played_line(s, clock, first_play, end):
+    """Whether the take played any of a spoken line (video seconds [first_play, end))."""
+    return clock+s['end'] > first_play and clock+s['start'] < end
+
+
+def duck_rows(segments, cues, sim, clock, song_start, first_play, end, texts):
     """One row per spoken line the take played, read off the modelled take: when its music starts to dip, reaches
     95% of the way to the line's level, starts back up (at the line's end once a releaseSoloAfterNarration cue's
-    lines are over, else 0.15 s after it) and is 95% of the way back (blank when the next line dips first)."""
+    lines are over, else 0.15 s after it) and is 95% of the way back; blank where the take never gets there (the next
+    line dips first, or the take ends)."""
     bounds, env, last = sim['bounds'], sim['env'], last_ends(segments)
     order = sorted(range(len(segments)), key=lambda i: segments[i]['start'])
-    lines = [i for i in order if clock+segments[i]['end'] > first_play and clock+segments[i]['start'] < end]
-    seconds = lambda j: round(bounds[j]/RATE, 3)
+    lines = [i for i in order if played_line(segments[i], clock, first_play, end)]
+    seconds = lambda j: '' if j is None else round(bounds[j]/RATE, 3)
     rows = []
     for n, i in enumerate(lines):
         s = segments[i]
         duck = s.get('duck') or DEFAULT_DUCK
         cue = cues[s['cue']] if 0 <= s['cue'] < len(cues) else {}
         fast = cue.get('releaseSoloAfterNarration') is True and s['end'] >= last[s['cue']]
-        _, d0 = heard(sim, max(s['start']-LEAD, song_start))
-        _, r0 = heard(sim, s['end']+(0. if fast else TAIL))
-        upto = heard(sim, segments[lines[n+1]]['start']-LEAD)[1] if n+1 < len(lines) else len(env)
-        reached = next((j for j in range(d0, r0+1) if env[j] <= duck+.05*(1-duck)), None)
-        back = next((j for j in range(r0, upto) if env[j] >= 1-.05*(1-duck)), None)
+        d0 = heard(sim, max(s['start']-LEAD, song_start))[1]
+        r0 = heard(sim, s['end']+(0. if fast else TAIL))[1]
+        upto = heard(sim, segments[lines[n+1]]['start']-LEAD)[1] if n+1 < len(lines) else None
+        reached = None if d0 is None else next((j for j in range(d0, len(env) if r0 is None else r0+1) if env[j] <= duck+.05*(1-duck)), None)
+        back = None if r0 is None else next((j for j in range(r0, len(env) if upto is None else upto) if env[j] >= 1-.05*(1-duck)), None)
         rows.append({'line': i+1, 'cue': s['cue'], 'voice_start_s': round(max(clock+s['start'], first_play), 3),
                      'voice_end_s': round(min(clock+s['end'], end), 3), 'duck_starts_s': seconds(d0),
-                     'duck_reached_s': '' if reached is None else seconds(reached), 'release_starts_s': seconds(r0),
-                     'release_done_s': '' if back is None else seconds(back), 'music_gain': round(duck, 4),
-                     'music_gain_db': round(20*math.log10(duck), 2), 'text': spoken_text(cue)})
+                     'duck_reached_s': seconds(reached), 'release_starts_s': seconds(r0), 'release_done_s': seconds(back),
+                     'music_gain': round(duck, 4), 'music_gain_db': round(20*math.log10(duck), 2), 'text': texts[i]})
     return rows
 
 
@@ -472,6 +484,40 @@ def unspoken(words):
         out.append(tag)
         tag = tag and not w.endswith(']')
     return out
+
+
+def said(words):
+    return ' '.join(w for w, tag in zip(words, unspoken(words)) if not tag)
+
+
+def line_words(segment, cue):
+    """A spoken line's words, and their aligned starts when narration.json has them: the narration's own spokenWords
+    (the speech it was rendered from, still what the voice says after the story is edited), else the cue's speech as
+    the story has it now."""
+    words = segment.get('spokenWords')
+    if isinstance(words, list) and words and all(isinstance(w, str) for w in words):
+        words = ' '.join(words).split()
+    else:
+        words = spoken_text(cue).split()
+    return words, aligned_starts(segment, words)[0]
+
+
+def tour_captions(segments, spoken, clock, song_start, first_play, end):
+    """The captions of the lines the take played, on the video's clock, from the first word it heard (a take that
+    starts mid-line never played the words before), and how they are timed."""
+    captions, lines, aligned = [], 0, 0
+    for s, (words, starts) in zip(segments, spoken):
+        if not played_line(s, clock, first_play, end):
+            continue
+        lines += 1
+        aligned += starts is not None
+        words, times = word_times(' '.join(words), s['start'], s['end'], starts)
+        heard_words = [(w, t) for w, t, tag in zip(words, times, unspoken(words)) if not tag and t >= song_start-1e-6]
+        if heard_words:
+            captions += [(a+clock, b+clock, x) for a, b, x in caption_blocks(*map(list, zip(*heard_words)), s['end'])]
+    timing = None if not lines else ("every line on the narration's aligned word times" if aligned == lines else
+                                     f'{lines-aligned} of {lines} lines spread over the line by characters (no aligned word times)')
+    return clip_captions(captions, first_play, end), timing
 
 
 def clip_captions(captions, first, end):
@@ -801,6 +847,16 @@ def tour(report, take, out, sound, info, length, frames):
     estimate = audio_start_estimate(report, song_start)
     check = dict(kind='tour', bundle=bundle.name, narration=how, songStart=song_start, estimate=round(estimate, 4), duckLagFrames=lag)
     notes, problems = [], []
+    spoken = [line_words(s, cues[s['cue']]) for s in segments]
+    texts = [said(words) for words, _ in spoken]
+    # SongNarration plays only a narration rendered for the story as it is, so a narrated take played the story this
+    # narration was rendered for: a story.json edited since (the speech, say, before the voice is rendered again) is
+    # not the take's. Reports with storySha256 are refused for it in identity(); this catches the older ones.
+    if narrated and narration.get('storySha256') and str(narration['storySha256']).lower() != sha256(bundle/'story.json'):
+        own = all(isinstance(s.get('spokenWords'), list) for s in segments)
+        problems.append("narration.json was rendered for an earlier story.json (the app would refuse it as stale now): the story "
+                        "was edited after this take, so its cue times, solos and markers may not be what the take played"
+                        +("; the captions keep the narration's own words" if own else "; the captions and ducking.csv read the edited story"))
     stems = {s['id']: s for s in manifest.get('stems', [])}
     solo_stems, sources = set(), {}
     for i, c in enumerate(cues):
@@ -917,8 +973,11 @@ def tour(report, take, out, sound, info, length, frames):
                          narrationRelativeDb=round(20*math.log10(max(relative, 1e-6)), 2))
             if not NARRATION_RANGE[0] <= relative <= NARRATION_RANGE[1]:
                 problems.append(f'the narration fits the take at {relative:.3f} of the music (a take has it near {VOICE_GAIN*PAN:.2f})')
-        # Each spoken line: the music level heard under the voice, against the modelled one (the cue sheet's duck,
-        # or less where a neighbouring line's window still holds the music down).
+        # Each spoken line: the music heard under the voice against the modelled ducking (the cue sheet's duck, or less
+        # where a neighbouring line's window still holds the music down), fitted as one factor on the music as the
+        # model ducks it, so a gain that moves within the window is weighed as the take heard it; in dB, as a duck of
+        # 0.14 played where the cue sheet now says 0.18 is 2.2 dB, where 0.04 at 0.8 would be 0.4. Over a rest the music
+        # has no level to hear or measure, and the fit there is noise.
         last, lines = last_ends(segments), []
         for i, s in enumerate(segments):
             fast = cues[s['cue']].get('releaseSoloAfterNarration') is True and s['end'] >= last[s['cue']]
@@ -926,15 +985,20 @@ def tour(report, take, out, sound, info, length, frames):
             b = min(int((clock+s['end']+(0. if fast else TAIL-.1))*RATE), length)
             if b-a < RATE//2 or music_level <= 1e-6:
                 continue
-            m, v = played(sim, a, b, ducked=False), voice_placed.chunk(a, b)
-            sol, *_ = np.linalg.lstsq(np.c_[m.ravel(), np.repeat(v, 2, axis=1).ravel()], mix[a:b].ravel(), rcond=None)
-            model = float(np.mean(per_sample(sim['env'], sim['bounds'], a, b)))
-            lines.append(dict(line=i+1, cueSheet=round(s.get('duck') or DEFAULT_DUCK, 4), model=round(model, 4),
-                              measured=round(float(sol[0])/music_level, 4)))
+            m, v, y = played(sim, a, b), voice_placed.chunk(a, b), mix[a:b].ravel()
+            sol, *_ = np.linalg.lstsq(np.c_[m.ravel(), np.repeat(v, 2, axis=1).ravel()], y, rcond=None)
+            model, ratio = float(np.mean(per_sample(sim['env'], sim['bounds'], a, b))), float(sol[0])/music_level
+            share = 10*math.log10(max(music_level**2*float(np.sum(m*m)), 1e-30)/max(float(np.dot(y, y)), 1e-30))
+            line = dict(line=i+1, cueSheet=round(s.get('duck') or DEFAULT_DUCK, 4), model=round(model, 4), musicShareDb=round(share, 1))
+            if share >= MUSIC_FLOOR_DB:
+                line.update(measured=round(model*ratio, 4), offDb=round(20*math.log10(max(ratio, 1e-6)), 2))
+            lines.append(line)
         check['duckingMeasured'] = lines
-        off = [l['line'] for l in lines if abs(l['measured']-l['model']) > DUCK_TOLERANCE]
+        off = [l for l in lines if 'offDb' in l and abs(l['offDb']) > DUCK_DB]
         if off:
-            problems.append(f"spoken lines {', '.join(map(str, off))}: the music under them is not at the cue sheet's level")
+            worst = max((l['offDb'] for l in off), key=abs)
+            problems.append(f"spoken lines {', '.join(str(l['line']) for l in off)}: the music under them is not at the cue sheet's "
+                            f"level (up to {worst:+.1f} dB from it: ducks changed since the take?)")
         markers = marker_problems(report, cues, sim, fps, first_play)
         if markers:
             problems.append('cue markers off the story (edited since the take?): '+'; '.join(markers[:4])+(' ...' if len(markers) > 4 else ''))
@@ -949,28 +1013,18 @@ def tour(report, take, out, sound, info, length, frames):
     if soloed:
         write_wav(out/'music-as-played.wav', length, 2, 'FLOAT', lambda a, b: played(sim, a, b, ducked=False))
         files['musicAsPlayed'] = 'music-as-played.wav'
-    rows = duck_rows(segments, cues, sim, clock, song_start, first_play, end) if narrated else []
+    rows = duck_rows(segments, cues, sim, clock, song_start, first_play, end, texts) if narrated else []
     if rows:
         write_csv(out/'ducking.csv', list(rows[0].keys()), [list(r.values()) for r in rows])
         files['ducking'] = 'ducking.csv'
         write_csv(out/'ducking-envelope.csv', ['frame', 'time_s', 'music_gain', 'music_gain_db'],
                   [[k, f'{k/fps:.4f}', f'{g:.5f}', f'{20*math.log10(max(g, 1e-6)):.2f}'] for k, g in enumerate(sim['env'])])
         files['envelope'] = 'ducking-envelope.csv'
-    captions, aligned = [], 0
-    for s in segments:
-        text = spoken_text(cues[s['cue']])
-        starts, _ = aligned_starts(s, text.split())
-        aligned += starts is not None
-        words, starts = word_times(text, s['start'], s['end'], starts)
-        said = [(w, t) for w, t, tag in zip(words, starts, unspoken(words)) if not tag]
-        if said:
-            captions += [(a+clock, b+clock, x) for a, b, x in caption_blocks(*map(list, zip(*said)), s['end'])]
-    captions = clip_captions(captions, first_play, end)
+    captions, timing = tour_captions(segments, spoken, clock, song_start, first_play, end)
     if write_srt(out/'captions.srt', captions):
         files['captions'] = 'captions.srt'
-    if segments:
-        check['captionTiming'] = ('every line on the narration\'s aligned word times' if aligned == len(segments) else
-                                  f'{len(segments)-aligned} of {len(segments)} lines spread over the line by characters (no aligned word times)')
+    if timing:
+        check['captionTiming'] = timing
     trusted = mix is not None and not problems
     music_keys = keyframes(sim['env']*(music_level if trusted else 1.))
     music_file = out/(files.get('musicAsPlayed') or files['music'])
@@ -982,12 +1036,17 @@ def tour(report, take, out, sound, info, length, frames):
         tracks.append(('Narration', out/'narration.wav', voice_level if trusted else VOICE_GAIN*PAN, [], True))
     if soloed:
         tracks.append(('Original recording (muted)', out/'music.wav', music_level if trusted else None, music_keys, False))
+    lines_of = {}
+    for s, text in zip(segments, texts):
+        lines_of.setdefault(s['cue'], []).append(text)
     markers = []
     for m in report.get('markers', []):
         match = re.fullmatch(r'cue-(\d+)', str(m.get('id', '')))
         i = int(match.group(1)) if match else -1
-        title = str(cues[i].get('text') or '') if 0 <= i < len(cues) and not problems else str(m.get('title') or m.get('id'))
-        markers.append((round(float(m['start'])*fps), title or str(m.get('id')), spoken_text(cues[i]) if 0 <= i < len(cues) and not problems else ''))
+        known = 0 <= i < len(cues) and not problems
+        title = str(cues[i].get('text') or '') if known else str(m.get('title') or m.get('id'))
+        comment = ' '.join(lines_of.get(i) or [said(spoken_text(cues[i]).split())]) if known else ''
+        markers.append((round(float(m['start'])*fps), title or str(m.get('id')), comment))
     files['timeline'] = 'timeline.xml'
     check.update(files=files, lines=len(rows), captions=len(captions), lowestGain=round(float(sim['env'].min()), 4),
                  timelineLevels='the take\'s own' if trusted else 'nominal (the fit is not trusted)', notes=notes, problems=problems)
@@ -1014,7 +1073,7 @@ def tutorial(report, take, out, sound, info, length, frames):
             if score > .2:
                 at = refine(mix, clip, a/RATE+lag)
         voices.append(Placed(clip, at))
-        placed.append(dict(step=m['id'], voiceStart=round(at, 5), correlation=None if score is None else round(score, 4)))
+        placed.append(dict(step=m['id'], voiceStart=round(at, 6), correlation=None if score is None else round(score, 4)))
         words, starts = word_times(texts.get(m['id'], ''), 0., len(clip)/RATE, c.get('starts'))
         if words:
             captions += [(a+at, b+at, x) for a, b, x in caption_blocks(words, starts, len(clip)/RATE)]
@@ -1138,7 +1197,8 @@ def readme(check, video, seconds, frames, fps, names):
                 'in dB; cue is the story\'s 0-based cue index, line counts the narration\'s lines from 1. The music starts to dip',
                 '0.12 s before a line and comes back 0.15 s after it (at the line\'s end once a cue that releases its solo after',
                 'the narration is over), a frame or two later in the take than that, as the app applied it; duck_reached and',
-                'release_done are where the music has made 95% of the move (blank when the next line dips first).', '']
+                'release_done are where the music has made 95% of the move. A time is blank where the take never gets there',
+                '(the next line dips first, or the take ends).', '']
     if kind == 'tour' and 'reproductionSnrDb' in check:
         if 'narrationLevel' in check:
             out.append(f"In this take the music played at {check['musicLevel']:.3f} ({20*math.log10(max(check['musicLevel'], 1e-6)):+.1f} dB) "
