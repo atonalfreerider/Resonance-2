@@ -3,6 +3,7 @@
     Tools/SongPrep/.venv/Scripts/python.exe Tools/SongLibrary/test_director.py
 """
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -145,6 +146,56 @@ class BarTimes(unittest.TestCase):
             with self.subTest(other=other), self.assertRaises(ValueError):
                 story.validate_cues([dict(cue, **other)], 11.0, [])
             story.validate_cues([dict({k: v for k, v in cue.items() if k != 'hand'}, **other)], 11.0, [])
+
+
+class HandPhoto(unittest.TestCase):
+    """The hand's photograph and its anchors (Assets/Resources/PianistHand), as PianistHand.ReadPhoto reads and checks
+    them when the app starts; the README tells how to replace them."""
+    folder = Path(__file__).resolve().parents[2]/'Assets'/'Resources'/'PianistHand'
+    # PianistHand's patterns: JsonUtility reads no dictionaries, so Unity finds the tips with these.
+    tips_object = re.compile(r'"tips"\s*:\s*\{(?P<body>[^{}]*)\}')
+    tip_entry = re.compile(r'"(?P<k>[1-5])"\s*:\s*\[\s*(?P<x>[-+0-9.eE]+)\s*,\s*(?P<y>[-+0-9.eE]+)\s*\]')
+
+    def test_anchors(self):
+        text = (self.folder/'right-hand.json').read_text(encoding='utf-8')
+        notes = json.loads(text)
+        self.assertIn(notes['side'], ('right', 'left'))
+        tips = {int(k): v for k, v in notes['tips'].items()}
+        self.assertEqual(sorted(tips), [1, 2, 3, 4, 5])
+        for k, (x, y) in tips.items():
+            with self.subTest(finger=k):
+                self.assertTrue(0 < x < 1 and 0 < y < 1)
+                self.assertLess(notes['keyboardTop'], y)   # the labels' dark ground lies above every fingertip
+        self.assertGreater(notes['keyboardTop'], 0)
+        # Across the hand from the thumb: left to right for a right hand seen from above.
+        across = [tips[k][0] for k in range(1, 6)]
+        self.assertEqual(across, sorted(across, reverse=notes['side'] == 'left'))
+        self.assertEqual(len(set(across)), 5)
+        # Unity reads the same five points.
+        body = self.tips_object.search(text)['body']
+        found = {int(m['k']): [float(m['x']), float(m['y'])] for m in self.tip_entry.finditer(body)}
+        self.assertEqual(found, {k: [float(x), float(y)] for k, (x, y) in tips.items()})
+        # Where it came from.
+        self.assertIn('chatgpt-image-latest', notes['source']['generator'])
+        self.assertTrue(notes['source']['prompt'].strip())
+
+    def test_picture(self):
+        from PIL import Image, ImageStat
+        notes = json.loads((self.folder/'right-hand.json').read_text(encoding='utf-8'))
+        with Image.open(self.folder/notes['image']) as picture:
+            self.assertLessEqual(max(picture.size), 1024)
+            grey = picture.convert('L')
+            width, height = grey.size
+            above = grey.crop((0, 0, width, int(notes['keyboardTop']*height)))
+            # Dark above the keys, where the labels go.
+            self.assertLess(ImageStat.Stat(above).mean[0]/255, .1)
+        # Imported as the card expects: sRGB, clamped, no mipmaps, at most 1024, high-quality compression.
+        meta = (self.folder/(notes['image']+'.meta')).read_text(encoding='utf-8')
+        for setting in ('sRGBTexture: 1', 'enableMipMap: 0', 'wrapU: 1', 'wrapV: 1'):
+            self.assertIn(setting, meta)
+        default = meta.split('buildTarget: DefaultTexturePlatform')[1].split('- serializedVersion')[0]
+        self.assertIn('maxTextureSize: 1024', default)
+        self.assertIn('textureCompression: 2', default)
 
 
 class Checks(unittest.TestCase):

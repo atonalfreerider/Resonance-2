@@ -297,10 +297,11 @@ span while the cut flashes. Keep the card up across the skip itself (two cues wi
 card). In the Torus view the card, like a history picture, takes its own part of the screen (the top in a
 portrait layout, the left in a landscape one) and the torus moves into the rest.
 
-**A pianist's hand.** A cue that talks about fingering can show the hand (`PianistHand`): a hand seen from above,
-palm down as it lies on the keys (a right hand has its thumb at the left), with the finger numbers 1 (thumb) to
-5 (little finger) on it, and an arrow from each group's label to each of its fingertips, which glow in the group's
-colour (gold, sea green, violet, in the order the groups are written):
+**A pianist's hand.** A cue that talks about fingering can show the hand (`PianistHand`): a photograph of a
+pianist's hand seen from above on the keys (a right hand, its thumb at the left; a left hand is the photograph
+mirrored), a small number beside each fingertip, 1 (thumb) to 5 (little finger), and an arrow from each group's
+label, in a dark pill on the dark ground above the keys, to each of its fingertips, which glow in the group's colour
+(gold, sea green, violet, in the order the groups are written):
 
 ```json
 "hand": {"side": "right", "groups": [{"fingers": [4, 5], "label": "melody"}, {"fingers": [1, 2], "label": "soft pulse"}]}
@@ -314,7 +315,19 @@ counted from the cue's start, so the first group has the first note; without suc
 song clock decides, so seeks and recordings agree. The card shows for the whole cue; two cues in a row with the
 same `hand` keep one card and count on through both. One graphic per cue: a cue with a `hand` cannot also have a
 picture or a `compare` (publishing refuses it, as Director mode does). In the Torus view the card takes its own
-part of the screen as a picture does.
+part of the screen as a picture does: wide and short above the torus in a portrait layout, tall at the left in a
+landscape one. The card is cut from the photograph to fill that part of the screen without enlarging it past
+sharpness: the fingertips with room round them, the knuckles, and the dark ground above the keys that the labels need.
+
+The photograph, `Assets/Resources/PianistHand/right-hand.jpg`, was generated with OpenAI's `chatgpt-image-latest`;
+its prompt, date and settings are under `source` in `right-hand.json` beside it. That file also says where the
+fingertips are: `tips`, the centre of each nail as `[x, y]`, fractions of the picture's width and height from its
+top-left corner, for fingers `"1"` to `"5"`; `side`, the hand it shows; and `keyboardTop`, the fraction of the height
+above which the picture is dark enough for the labels. To replace the photograph, overwrite the JPEG in place (so its
+import settings stay: sRGB, clamped, at most 1024 pixels, no mipmaps) and write the new picture's anchors into the
+JSON. The app checks them as it starts (five fingertips inside the picture, in order across the hand from the thumb,
+all below `keyboardTop`) and, when they are wrong, shows no hand and says why in the console; `test_director.py`
+checks the same.
 
 **Checking a tour with TypeSafe (Jev).** `tour_check.py` asks TypeSafe's System One model two kinds of question,
 with the decisions kept in code and the answers cached by request in `SongLibraryData/typesafe-cache.json`:

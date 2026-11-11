@@ -1,17 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Text.RegularExpressions;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-// A pianist's hand for a Director cue that talks about fingering (the cue's hand): the hand seen from above, palm down, as
-// it lies on the keys (a right hand has its thumb at the left), the finger numbers 1 (thumb) to 5 (little finger) on the
-// fingers, and arrows from each group's label to its fingertips, which glow in the group's colour. With alternate the
-// groups take turns at the hand's own notes (the onsets on the score track named for that hand, or the beats without
-// one), so a rocking figure such as sixths on 1+4 then 2+5 is seen as it is heard; the song clock decides, so seeks and
-// recordings agree. In the Torus view the card takes its own part of the screen (VisualizationViews.ShareScreen) and the
-// torus moves aside. The hand is drawn once per figure (and when the card is resized); only the highlight layer repaints,
-// when the turn passes and while an onset's flare fades.
+// A pianist's hand for a Director cue that talks about fingering (the cue's hand): a photograph of a pianist's hand seen
+// from above on the keys (Resources/PianistHand: a right hand, its thumb at the left; mirrored for a left hand), a small
+// number beside each fingertip, 1 (thumb) to 5 (little finger), and arrows from each group's label, in a dark pill on the
+// dark ground above the keys, to its fingertips, which glow in the group's colour. With alternate the groups take turns at
+// the hand's own notes (the onsets on the score track named for that hand, or the beats without one), so a rocking figure
+// such as sixths on 1+4 then 2+5 is seen as it is heard; the song clock decides, so seeks and recordings agree. In the
+// Torus view the card takes its own part of the screen (VisualizationViews.ShareScreen) and the torus moves aside. The
+// photograph and the overlay are laid out and drawn once per figure (and when the card moves or is resized), each group's
+// glow and marks in layers of their own: the turn and an onset's flare change only those layers' opacity, so nothing is
+// drawn again while the hand plays.
 [DefaultExecutionOrder(1117)]
 public sealed class PianistHand : MonoBehaviour
 {
@@ -21,17 +26,21 @@ public sealed class PianistHand : MonoBehaviour
     [Serializable] public sealed class Figure { public string side;public Group[] groups;public bool alternate; }
 
     SongDirector director;MidiPlayer midi;VisualizationViews views;TutorialDirector tutorial;
-    VisualElement root,card;Drawing drawing;Highlight highlight;Label heading;readonly Label[] labels=new Label[3];
-    Figure shown;int shownCue=-2,revision=-1,turn=-2;int[] slots=Array.Empty<int>();double[] onsets=Array.Empty<double>();
+    VisualElement root,card,picture;Layer shade,badges;readonly Layer[] glows=new Layer[3],marks=new Layer[3];Label heading;readonly Label[] labels=new Label[3],numbers=new Label[6];
+    Photo photo;Layout layout;
+    Figure shown;int shownCue=-2,revision=-1,turn=-2;double[] onsets=Array.Empty<double>();
     float alpha,placedAlpha=-1,flare;Rect placed=new(0,0,-1,-1),placedRoom=new(0,0,-1,-1);
     const float FadeSeconds=.45f,FlareSeconds=.32f;
     // Gold, sea green and violet, as PassageComparison's.
     static readonly Color[] Inks={new(1f,.78f,.36f),new(.42f,.86f,.8f),new(.8f,.56f,.98f)};
+    static readonly ProfilerMarker Cost=new("Resonance.PianistHand"),Painting=new("Resonance.PianistHand.Paint");
 
     public Figure Shown=>alpha>.5f?shown:null;
     // The group whose turn it is (-1: every group is lit), and how many turns the figure has.
     public int Turn=>turn;
     public int Turns=>onsets.Length;
+    // Where the photograph and its overlay are in the card (null until a figure is placed), for checks.
+    public Layout Placed=>shown!=null?layout:null;
 
     // JsonUtility gives a cue without a hand an empty figure.
     public static bool Present(Figure f)=>f!=null&&(!string.IsNullOrEmpty(f.side)||(f.groups?.Length??0)>0||f.alternate);
@@ -61,37 +70,100 @@ public sealed class PianistHand : MonoBehaviour
         }
         return true;
     }
+    static int GroupOf(Figure f,int finger)
+    {
+        for(int i=0;i<f.groups.Length;i++)foreach(int k in f.groups[i].fingers)if(k==finger)return i;
+        return -1;
+    }
+    bool Lit(int group)=>turn<0||turn==group;
+
+    // ---- The photograph: Resources/PianistHand/right-hand.jpg, and right-hand.json beside it with where each fingertip is
+    // (the centre of its nail, as fractions of the picture's width and height from its top-left corner), which hand it
+    // shows, and keyboardTop, above which the picture is dark enough for the labels. ----
+    public const string PhotoPath="PianistHand/right-hand";
+    public sealed class Photo { public Texture2D texture;public bool left;public float keyboardTop;public readonly Vector2[] tips=new Vector2[6]; }
+    [Serializable] sealed class PhotoNotes { public string side;public float keyboardTop=-1; }
+    // JsonUtility reads no dictionaries, so the tips ({"1": [x, y], ...}) are read with a pattern.
+    static readonly Regex TipsObject=new(@"""tips""\s*:\s*\{(?<body>[^{}]*)\}"),TipEntry=new(@"""(?<k>[1-5])""\s*:\s*\[\s*(?<x>[-+0-9.eE]+)\s*,\s*(?<y>[-+0-9.eE]+)\s*\]");
+    // The picture and its anchors, checked: right or left; all five fingertips inside the picture, in order across the hand
+    // (from the thumb at the left for a right hand); the keys' top edge above every fingertip.
+    public static Photo ReadPhoto(Texture2D texture,string json)
+    {
+        if(texture==null||string.IsNullOrWhiteSpace(json))throw new InvalidDataException($"Resources/{PhotoPath} (.jpg and .json) is missing");
+        var notes=JsonUtility.FromJson<PhotoNotes>(json);var tips=TipsObject.Match(json);
+        if(notes==null||(notes.side!="right"&&notes.side!="left")||!tips.Success)throw new InvalidDataException("the hand's anchors need side (right or left) and tips");
+        var photo=new Photo{texture=texture,left=notes.side=="left",keyboardTop=notes.keyboardTop};int found=0;
+        foreach(Match m in TipEntry.Matches(tips.Groups["body"].Value))
+        {
+            int k=m.Groups["k"].Value[0]-'0';
+            if(!float.TryParse(m.Groups["x"].Value,NumberStyles.Float,CultureInfo.InvariantCulture,out float x)||!float.TryParse(m.Groups["y"].Value,NumberStyles.Float,CultureInfo.InvariantCulture,out float y)||
+                !(x>0&&x<1&&y>0&&y<1)||(found&(1<<k))!=0)throw new InvalidDataException($"fingertip {k} is not a point inside the picture");
+            photo.tips[k]=new Vector2(x,y);found|=1<<k;
+        }
+        if(found!=0b111110)throw new InvalidDataException("the hand's anchors need all five fingertips, 1 to 5");
+        float across=photo.left?-1:1;
+        for(int k=1;k<=5;k++)
+        {
+            if(k<5&&(photo.tips[k+1].x-photo.tips[k].x)*across<=0)throw new InvalidDataException($"fingertips 1 to 5 must run across a {notes.side} hand from its thumb");
+            if(!(photo.keyboardTop>0&&photo.keyboardTop<photo.tips[k].y))throw new InvalidDataException("keyboardTop must lie above every fingertip");
+        }
+        return photo;
+    }
 
     public void Bind(VisualElement ui)
     {
         root=ui;director=GetComponent<SongDirector>();midi=GetComponent<MidiPlayer>();views=GetComponent<VisualizationViews>();
+        // Loaded with the app, so the first hand shows without a hitch; without it no hand shows.
+        try{photo=ReadPhoto(Resources.Load<Texture2D>(PhotoPath),Resources.Load<TextAsset>(PhotoPath)?.text);}
+        catch(Exception e){Debug.LogError("Pianist's hand unavailable: "+e.Message);}
         card=new VisualElement{name="pianist-hand",pickingMode=PickingMode.Ignore,usageHints=UsageHints.DynamicTransform};
-        card.style.position=Position.Absolute;card.style.backgroundColor=new Color(.025f,.05f,.085f,.97f);
+        // The photograph fills the card and is cut to its rounded corners.
+        card.style.position=Position.Absolute;card.style.overflow=Overflow.Hidden;card.style.backgroundColor=new Color(.006f,.009f,.014f,.97f);
         card.style.borderTopLeftRadius=card.style.borderTopRightRadius=card.style.borderBottomLeftRadius=card.style.borderBottomRightRadius=14;
         card.style.borderLeftWidth=card.style.borderRightWidth=card.style.borderTopWidth=card.style.borderBottomWidth=1;
         card.style.borderLeftColor=card.style.borderRightColor=card.style.borderBottomColor=new Color(.5f,.72f,.92f,.2f);card.style.borderTopColor=new Color(.55f,.78f,.96f,.4f);
-        drawing=new Drawing{pickingMode=PickingMode.Ignore};drawing.StretchToParentSize();
-        highlight=new Highlight{pickingMode=PickingMode.Ignore,owner=this};highlight.StretchToParentSize();
-        heading=new Label{pickingMode=PickingMode.Ignore,enableRichText=false};heading.style.position=Position.Absolute;heading.style.left=16;heading.style.top=12;
-        heading.style.fontSize=11;heading.style.letterSpacing=2.5f;heading.style.color=new Color(.5f,.68f,.84f);
-        card.Add(drawing);card.Add(highlight);card.Add(heading);
+        picture=new VisualElement{pickingMode=PickingMode.Ignore};picture.style.position=Position.Absolute;
+        picture.style.backgroundSize=new BackgroundSize(Length.Percent(100),Length.Percent(100));
+        if(photo!=null)picture.style.backgroundImage=new StyleBackground(photo.texture);
+        card.Add(picture);card.Add(shade=new Layer(this,Part.Shade));
+        // Each group's glow and marks in layers of their own, whose opacity alone shows whose turn it is (DynamicColor: an
+        // opacity change is not drawn again); the badges' discs between them, under the rings the marks draw round them.
+        for(int i=0;i<glows.Length;i++)card.Add(glows[i]=new Layer(this,Part.Glow,i));
+        card.Add(badges=new Layer(this,Part.Badges));
+        for(int i=0;i<marks.Length;i++)card.Add(marks[i]=new Layer(this,Part.Marks,i));
+        heading=new Label{pickingMode=PickingMode.Ignore,enableRichText=false};heading.style.position=Position.Absolute;heading.style.left=HeadingLeft;heading.style.top=HeadingTop;
+        heading.style.marginLeft=heading.style.marginRight=heading.style.marginTop=heading.style.marginBottom=0;heading.style.paddingLeft=heading.style.paddingRight=heading.style.paddingTop=heading.style.paddingBottom=0;
+        heading.style.fontSize=HeadingSize;heading.style.letterSpacing=2.5f;heading.style.color=new Color(.5f,.68f,.84f);heading.style.unityFontStyleAndWeight=FontStyle.Bold;
+        card.Add(heading);
+        // A finger's number in its badge.
+        for(int k=1;k<=5;k++)
+        {
+            var n=new Label(k.ToString()){pickingMode=PickingMode.Ignore,enableRichText=false,usageHints=UsageHints.DynamicColor};n.style.position=Position.Absolute;
+            n.style.marginLeft=n.style.marginRight=n.style.marginTop=n.style.marginBottom=0;n.style.paddingLeft=n.style.paddingRight=n.style.paddingTop=n.style.paddingBottom=0;
+            n.style.width=n.style.height=2*BadgeRadius;n.style.fontSize=BadgeSize;n.style.unityFontStyleAndWeight=FontStyle.Bold;n.style.unityTextAlign=TextAnchor.MiddleCenter;
+            card.Add(n);numbers[k]=n;
+        }
+        // The groups' labels, each in a dark pill edged in its colour.
         for(int i=0;i<labels.Length;i++)
         {
-            var l=new Label{pickingMode=PickingMode.Ignore,enableRichText=false};l.style.position=Position.Absolute;l.style.whiteSpace=WhiteSpace.Normal;
-            l.style.unityFontStyleAndWeight=FontStyle.Bold;l.style.marginLeft=l.style.marginRight=l.style.marginTop=l.style.marginBottom=0;
-            l.style.paddingLeft=l.style.paddingRight=l.style.paddingTop=l.style.paddingBottom=0;l.style.display=DisplayStyle.None;card.Add(l);labels[i]=l;
+            var l=new Label{pickingMode=PickingMode.Ignore,enableRichText=false,usageHints=UsageHints.DynamicColor};l.style.position=Position.Absolute;l.style.whiteSpace=WhiteSpace.Normal;
+            l.style.unityFontStyleAndWeight=FontStyle.Bold;l.style.fontSize=LabelSize;l.style.unityTextAlign=TextAnchor.MiddleCenter;
+            l.style.marginLeft=l.style.marginRight=l.style.marginTop=l.style.marginBottom=0;
+            l.style.paddingLeft=l.style.paddingRight=PillX;l.style.paddingTop=l.style.paddingBottom=PillY;l.style.backgroundColor=new Color(.012f,.02f,.034f,.74f);
+            l.style.borderLeftWidth=l.style.borderRightWidth=l.style.borderTopWidth=l.style.borderBottomWidth=1;l.style.display=DisplayStyle.None;card.Add(l);labels[i]=l;
         }
         card.style.opacity=0;card.style.display=DisplayStyle.None;root.Add(card);
     }
 
     void LateUpdate()
     {
+        using var cost=Cost.Auto();
         if(card==null||director==null||root.panel==null)return;
         tutorial??=GetComponent<TutorialDirector>();
         if(revision!=director.Revision){revision=director.Revision;shownCue=-2;}
         var cue=director.CurrentCue;
-        // Only while the story directs and no tutorial runs.
-        var wanted=cue!=null&&Present(cue.hand)&&!(tutorial!=null&&tutorial.Playing)?cue.hand:null;
+        // Only while the story directs and no tutorial runs (and only with the photograph).
+        var wanted=cue!=null&&photo!=null&&Present(cue.hand)&&!(tutorial!=null&&tutorial.Playing)?cue.hand:null;
         float step=Main.ReducedMotion?1:RecordingMode.Step/FadeSeconds;
         // The same figure carries on into the next cue; a different one waits for the card to fade out.
         if(shown!=null&&Same(wanted,shown)){if(director.CueIndex!=shownCue){shownCue=director.CueIndex;FindOnsets();}alpha=Mathf.MoveTowards(alpha,1,step);}
@@ -114,19 +186,19 @@ public sealed class PianistHand : MonoBehaviour
 
     void Prepare()
     {
-        FindOnsets();turn=-2;flare=0;slots=Slots(shown);
+        FindOnsets();turn=-2;flare=0;layout=null;
         heading.text=shown.side=="left"?"LEFT HAND":"RIGHT HAND";
         for(int i=0;i<labels.Length;i++)
         {
             var l=labels[i];bool used=i<shown.groups.Length;l.style.display=used?DisplayStyle.Flex:DisplayStyle.None;if(!used)continue;
-            l.text=LabelText(shown.groups[i]);l.style.color=Inks[i];l.style.opacity=1;
-            l.style.unityTextAlign=slots[i]==0?TextAnchor.MiddleRight:slots[i]==1?TextAnchor.MiddleLeft:TextAnchor.LowerCenter;
+            var ink=Inks[i];l.text=LabelText(shown.groups[i]);l.style.color=ink;l.style.opacity=1;
+            l.style.borderLeftColor=l.style.borderRightColor=l.style.borderTopColor=l.style.borderBottomColor=new Color(ink.r,ink.g,ink.b,.42f);
         }
-        drawing.figure=shown;drawing.MarkDirtyRepaint();highlight.MarkDirtyRepaint();placed=placedRoom=new Rect(0,0,-1,-1);
+        placed=placedRoom=new Rect(0,0,-1,-1);
     }
 
     // Whose turn it is: the onsets the song has passed, counted from the figure's first (the first group's); and how bright
-    // that onset still is. Repaints only when either changes.
+    // that onset still is. Both change only opacities and colours.
     void Follow()
     {
         int now=-1;float lift=0;
@@ -137,9 +209,20 @@ public sealed class PianistHand : MonoBehaviour
             now=lo==0?0:(lo-1)%shown.groups.Length;
             if(lo>0&&!Main.ReducedMotion)lift=Mathf.Clamp01(1-(float)(t-onsets[lo-1])/FlareSeconds);
         }
-        if(now!=turn){turn=now;for(int i=0;i<shown.groups.Length&&i<labels.Length;i++)labels[i].style.opacity=turn<0||turn==i?1:.4f;highlight.MarkDirtyRepaint();}
-        if(lift!=flare){flare=lift;highlight.MarkDirtyRepaint();}
+        if(now!=turn){turn=now;flare=lift;Restyle();}
+        else if(lift!=flare){flare=lift;if(turn>=0&&turn<glows.Length)glows[turn].style.opacity=GlowOpacity();}
     }
+    // The lit group's glow, marks and label at full strength (the glow brighter just after an onset), a group waiting for
+    // its turn dimmed but readable and without its glow; the numbers of the lit fingers brightest.
+    void Restyle()
+    {
+        for(int i=0;i<glows.Length;i++){bool used=i<shown.groups.Length,lit=used&&Lit(i);glows[i].style.opacity=lit?GlowOpacity():0;marks[i].style.opacity=!used?0:lit?1:Waiting;}
+        for(int i=0;i<shown.groups.Length&&i<labels.Length;i++)labels[i].style.opacity=Lit(i)?1:.45f;
+        for(int k=1;k<=5;k++){int g=GroupOf(shown,k);numbers[k].style.color=g<0?new Color(.8f,.86f,.92f,.5f):Lit(g)?new Color(1,1,1,.97f):new Color(.86f,.9f,.95f,.6f);}
+    }
+    // The glow is drawn at its brightest (an onset's); it rests at a little over half of that.
+    float GlowOpacity()=>.56f+.44f*(turn>=0?flare:0);
+    const float Waiting=.36f;
 
     // The song times at which the turn passes, over this cue and the cues beside it that show the same figure: the hand's
     // own onsets, on the score track named for it ("Right hand"), a chord's notes a few milliseconds apart counted once;
@@ -181,107 +264,122 @@ public sealed class PianistHand : MonoBehaviour
         return -1;
     }
 
-    // The card's size when it shares the screen: across the top above the torus in a portrait layout, at the left beside it
-    // in a landscape one.
+    // The card's size when it shares the screen: wide and short across the top above the torus in a portrait layout, tall
+    // at the left beside it in a landscape one (down to where a horizontal recording's captions begin).
     Vector2 SharedSize()
     {
         float w=root.resolvedStyle.width,h=root.resolvedStyle.height;if(!float.IsFinite(w)||w<10)return Vector2.zero;
-        if(views.Portrait){float width=Mathf.Min(w-32,820);return new Vector2(width,Mathf.Clamp(width*.62f,280,h*.32f));}
-        float side=Mathf.Min(w*.4f,760);return new Vector2(side,Mathf.Min(side*.95f,h*.78f));
+        if(views.Portrait)return new Vector2(w-32,h*.3f);
+        float tall=h*CaptionFoot-16;return new Vector2(Mathf.Min(w*.38f,tall*.88f),tall);
     }
+    // Where a horizontal recording's captions begin, as a fraction of the height (SongRecordingCaptions).
+    const float CaptionFoot=.76f;
 
-    // In its slot when sharing the screen; otherwise near the top of the screen, over the scene. The card fits the hand and
-    // its labels (no empty margins), and the labels follow the hand.
+    // In its slot when sharing the screen; otherwise near the top of the screen, over the scene. The card is the
+    // photograph framed for that room, and the overlay follows it.
     void Place(Rect slot)
     {
         float w=root.resolvedStyle.width,h=root.resolvedStyle.height;if(!float.IsFinite(w)||w<10)return;
-        Rect room;bool portrait=views!=null?views.Portrait:h>w;
-        if(slot.width>10&&slot.height>10){var size=SharedSize();room=new Rect(slot.x,slot.y,slot.width,Mathf.Min(slot.height,size.y));}
-        else if(h>w){float width=Mathf.Min(w*.9f,820);room=new Rect((w-width)/2,h*.06f,width,Mathf.Min(width*.62f,h*.34f));}
-        else{float width=Mathf.Min(w*.34f,640);room=new Rect((w-width)/2,h*.08f,width,Mathf.Min(width*.95f,h*.66f));}
+        bool portrait=views!=null?views.Portrait:h>w;Rect room;
+        if(slot.width>10&&slot.height>10){room=slot;if(!portrait)room.height=Mathf.Max(120,Mathf.Min(slot.height,h*CaptionFoot-slot.y));}
+        else if(h>w){float width=Mathf.Min(w*.9f,820);room=new Rect((w-width)/2,h*.06f,width,Mathf.Min(width*.6f,h*.34f));}
+        else{float width=Mathf.Min(w*.34f,640);room=new Rect((w-width)/2,h*.08f,width,Mathf.Min(width*1.15f,h*.66f));}
         if(room==placedRoom)return;
         placedRoom=room;
-        // The layers fill the card inside its 1-pixel border; the labels are laid out in the same frame.
-        var fit=Layout(new Vector2(room.width-2,room.height-2),shown,slots);
-        float cw=Mathf.Min(room.width,Mathf.Max(260,fit.w+2*Pad+2)),ch=Mathf.Min(room.height,fit.h+Heading+10);
-        // Beside the torus in a landscape layout the card is centred on the slot, but its foot stays clear of the captions
-        // a horizontal recording shows along the bottom.
-        float top=portrait?room.y:room.y+Mathf.Max(0,Mathf.Min((slot.height-ch)/2,h*.76f-room.y-ch));
-        var at=new Rect(room.x+(room.width-cw)/2,top,cw,ch);placed=at;
+        // The photograph fills the card inside its 1-pixel border; the overlay is laid out in the same frame. Screen pixels
+        // to a panel unit bound how far the photograph may be enlarged.
+        var l=Lay(photo,shown,new Vector2(room.width-2,room.height-2),Screen.height/Mathf.Max(1,h),Measure);layout=l;
+        float cw=l.size.x+2,ch=l.size.y+2;
+        // Beside the torus in a landscape layout the card is centred on the room; above it in a portrait one, at its top.
+        var at=new Rect(room.x+(room.width-cw)/2,portrait?room.y:room.y+Mathf.Max(0,(room.height-ch)/2),cw,ch);placed=at;
         card.style.left=at.x;card.style.top=at.y;card.style.width=at.width;card.style.height=at.height;
-        fit=Layout(new Vector2(at.width-2,at.height-2),shown,slots);
+        picture.style.left=-l.crop.x*l.whole.x;picture.style.top=-l.crop.y*l.whole.y;picture.style.width=l.whole.x;picture.style.height=l.whole.y;
+        picture.style.scale=new Scale(new Vector3(l.mirror?-1:1,1,1));
         for(int i=0;i<shown.groups.Length&&i<labels.Length;i++)
         {
-            var l=labels[i];Vector2 a=Anchor(fit,slots[i]);float lw=LabelWidth(shown.groups[i],fit.labelRoom),lh=LabelSize*LabelLines;
-            l.style.fontSize=LabelSize;l.style.width=lw;l.style.height=lh;
-            l.style.left=slots[i]==0?a.x-8-lw:slots[i]==1?a.x+8:a.x-lw/2;l.style.top=slots[i]==2?a.y-4-lh:a.y-lh/2;
+            var label=labels[i];var pill=l.pills[i];label.style.left=pill.x;label.style.top=pill.y;label.style.width=pill.width;label.style.height=pill.height;label.style.whiteSpace=l.lines[i]>1?WhiteSpace.Normal:WhiteSpace.NoWrap;
+            float r=Mathf.Min(pill.height*.5f,15);label.style.borderTopLeftRadius=label.style.borderTopRightRadius=label.style.borderBottomLeftRadius=label.style.borderBottomRightRadius=r;
         }
+        for(int k=1;k<=5;k++){numbers[k].style.left=l.badges[k].x-BadgeRadius;numbers[k].style.top=l.badges[k].y-BadgeRadius;}
+        if(turn!=-2)Restyle();
+        shade.MarkDirtyRepaint();badges.MarkDirtyRepaint();foreach(var layer in glows)layer.MarkDirtyRepaint();foreach(var layer in marks)layer.MarkDirtyRepaint();
     }
 
-    // ---- The hand, in hand units: the palm's width at the knuckles is 1, y runs down and the fingers point up; a right hand
-    // (a left hand is its mirror image). Proportions of a hand curved on the keys, seen from above: the middle finger the
-    // longest, the ring finger a little longer than the index, the little finger short and set lower, the thumb lower still
-    // and angled out, its tip about level with the other fingers' middle joints. ----
-    static readonly Vector2[] Knuckle={default,default,new(-.352f,.04f),new(-.105f,0),new(.142f,.028f),new(.368f,.105f)};
-    static readonly float[] Lean={0,0,-3,0,3.5f,8},Reach={0,0,.8f,.9f,.84f,.66f},Breadth={0,0,.236f,.246f,.228f,.196f};
-    // Where the joints fall along a finger's visible length: a long first phalanx, the middle and end ones foreshortened.
-    const float Pip=.56f,Dip=.8f,Cap=1.12f;
-    static readonly Vector2[] Thumb={new(-.3f,.74f),new(-.44f,.56f),new(-.575f,.37f),new(-.655f,.215f),new(-.705f,.06f),new(-.73f,-.075f)};
-    static readonly float[] ThumbHalf={.18f,.165f,.142f,.134f,.127f,.112f};
-    // The back of the hand, from the forearm (which fades out) up to the webs between the fingers and round the thumb's root.
-    static readonly Vector2[] Palm={new(.36f,1.36f),new(.375f,1.16f),new(.39f,1f),new(.445f,.78f),new(.5f,.42f),new(.475f,.06f),new(.265f,-.13f),new(.025f,-.21f),
-        new(-.225f,-.2f),new(-.46f,-.05f),new(-.5f,.12f),new(-.565f,.25f),new(-.6f,.46f),new(-.525f,.78f),new(-.4f,1f),new(-.385f,1.16f),new(-.37f,1.36f)};
-    const float Wrist=.92f;
-    static readonly Vector2[] Webs={new(.265f,-.13f),new(.025f,-.21f),new(-.225f,-.2f)};
-    static Vector2 Dir(int k){if(k==1)return (Thumb[5]-Thumb[4]).normalized;float a=Lean[k]*Mathf.Deg2Rad;return new Vector2(Mathf.Sin(a),-Mathf.Cos(a));}
-    static Vector2 Tip(int k)=>k==1?Thumb[5]+Dir(1)*ThumbHalf[5]*Cap:Knuckle[k]+Dir(k)*Reach[k];
-    static float TipHalf(int k)=>k==1?ThumbHalf[5]:Breadth[k]*.5f*.82f;
-    // A finger's stations from inside the palm to the shoulder of its tip, with their half widths.
-    static void Stations(int k,List<Vector2> chain,List<float> half)
-    {
-        chain.Clear();half.Clear();if(k==1){chain.AddRange(Thumb);half.AddRange(ThumbHalf);return;}
-        var d=Dir(k);float w=Breadth[k]*.5f,L=Reach[k],hs=w*.82f;
-        void At(float s,float h){chain.Add(Knuckle[k]+d*s);half.Add(h);}
-        At(-.3f,w);At(0,w);At(.25f*L,w*.95f);At(Pip*L,w*.955f);At(.68f*L,w*.9f);At(Dip*L,w*.88f);At(L-hs*Cap,hs);
-    }
+    // A label's text width as the panel lays it out (the labels' font and size are set once, in Bind).
+    float Measure(string text)=>labels[0].MeasureTextSize(text,0,VisualElement.MeasureMode.Undefined,0,VisualElement.MeasureMode.Undefined).x;
 
-    // Label anchors (a right hand): beside the index fingertip (the label ends there), above the little finger (it starts
-    // there), and above the middle finger for a third group. The extent of the hand, and room for the card's heading.
-    static readonly Vector2 ThumbSide=new(-.66f,-.96f),LittleSide=new(.46f,-1f),Above=new(-.12f,-1.2f);
-    const float HandLeft=-.88f,HandRight=.58f,HandTop=-.94f,HandBottom=1.22f,Heading=28,Pad=14;
-    // Where the hand sits in a card: hand units to pixels (s pixels to the unit, mirrored for a left hand).
-    struct Fit
+    // ---- The layout: the photograph framed, and the overlay placed on it, in the photo's panel space (0,0 at the card's
+    // inner top-left corner). ----
+    public sealed class Layout
     {
-        public float s,mirror,labelRoom,w,h;public Vector2 o;
-        public Vector2 At(Vector2 u)=>o+new Vector2(u.x*mirror,u.y)*s;
-        public Vector2 Toward(Vector2 u)=>new(u.x*mirror,u.y);
+        // The part of the picture shown (fractions of the picture as shown, which is mirrored for the other hand), its size
+        // on screen, and the whole picture's size at that scale.
+        public Rect crop;public Vector2 size,whole;public bool mirror;
+        // Fingertips (1-5), the radius of the ring round a nail, the badges beside the fingertips, and the keys' top edge.
+        public readonly Vector2[] tips=new Vector2[6],badges=new Vector2[6];public float ring,keys;
+        public readonly Rect[] pills=new Rect[3];public readonly int[] lines=new int[3];
+        public readonly List<Arrow> arrows=new();
+        // A point of the picture (its own fractions) in the photo's panel space.
+        public Vector2 At(Vector2 uv)=>new(((mirror?1-uv.x:uv.x)-crop.x)*whole.x,(uv.y-crop.y)*whole.y);
     }
-    // The largest hand that fits the card with its labels beside it (and above, for a third group), centred.
-    static Fit Layout(Vector2 size,Figure f,int[] slots)
+    public struct Arrow { public int group,finger;public Vector2 from,c1,c2,to,dir; }
+    // Slack: room beyond the measured text, which the layout rounds to whole pixels (a label as wide as its text can break
+    // inside a word).
+    const float LabelSize=16,LineHeight=1.3f,PillX=11,PillY=4,Slack=4,HeadingLeft=14,HeadingTop=11,HeadingSize=11,HeadingFoot=27,KeysGap=12,Margin=12,Gap=14;
+    const float BadgeRadius=9.5f,BadgeSize=11.5f;
+    // The most screen pixels to a pixel of the picture: more and it looks soft.
+    const float MostEnlarged=1.1f;
+
+    // measure: a label's text width in panel units (the estimate when null).
+    public static Layout Lay(Photo photo,Figure f,Vector2 room,float pixels,Func<string,float> measure=null)
     {
-        var fit=new Fit{mirror=f.side=="left"?-1:1,labelRoom=Mathf.Clamp(size.x*.3f,120,260)};
-        bool left=false,right=false,above=false;float lw=0,rw=0;
-        for(int i=0;i<slots.Length&&i<f.groups.Length;i++){int k=slots[i];left|=k==0;right|=k==1;above|=k==2;if(k==0)lw=LabelWidth(f.groups[i],fit.labelRoom);if(k==1)rw=LabelWidth(f.groups[i],fit.labelRoom);}
-        Vector2 la=fit.mirror>0?ThumbSide:new Vector2(-LittleSide.x,LittleSide.y),ra=fit.mirror>0?LittleSide:new Vector2(-ThumbSide.x,ThumbSide.y);
-        float hl=fit.mirror>0?HandLeft:-HandRight,hr=fit.mirror>0?HandRight:-HandLeft,width=size.x-2*Pad,height=size.y-Heading-8;
-        (float w,float h,float l,float t) Extent(float s)
+        bool mirror=(f.side=="left")!=photo.left;
+        var text=new float[f.groups.Length];
+        for(int i=0;i<text.Length;i++){string words=LabelText(f.groups[i]);float w=measure?.Invoke(words)??0;text[i]=float.IsFinite(w)&&w>0?w:TextWidth(words)*LabelSize;}
+        // The dark ground above the keys must hold the heading and the labels: one line of labels to begin with, more when
+        // the photograph comes out too narrow for them side by side.
+        float band=HeadingFoot+8+PillHeight(1)+KeysGap;Layout l=null;
+        for(int pass=0;pass<3;pass++)
         {
-            const float lh=LabelSize*LabelLines;
-            float l=Mathf.Max(-hl*s,left?-la.x*s+lw+8:0),r=Mathf.Max(hr*s,right?ra.x*s+rw+8:0);
-            float t=Mathf.Max(-HandTop*s,Mathf.Max(left?-la.y*s+lh/2:0,Mathf.Max(right?-ra.y*s+lh/2:0,above?-Above.y*s+lh+4:0)));
-            return (l+r,t+HandBottom*s,l,t);
+            l=Frame(photo,mirror,room,pixels,band);
+            float want=HeadingFoot+8+Labels(l,f,text)+KeysGap;if(want<=band+.5f)break;band=want;
         }
-        float lo=0,hi=300;
-        for(int i=0;i<24;i++){float mid=(lo+hi)/2;var e=Extent(mid);if(e.w<=width&&e.h<=height)lo=mid;else hi=mid;}
-        var x=Extent(lo);fit.s=lo;fit.w=x.w;fit.h=x.h;
-        fit.o=new Vector2(Pad+(width-x.w)/2+x.l,Heading+Mathf.Max(0,(height-x.h)/2)+x.t);
-        return fit;
+        // The ring frames a nail: a little over a quarter of the way to the next fingertip.
+        float spacing=0;for(int k=2;k<5;k++)spacing+=Vector2.Distance(l.tips[k],l.tips[k+1]);l.ring=.28f*spacing/3;
+        float middle=l.tips[3].x;
+        for(int i=0;i<f.groups.Length;i++)foreach(int k in f.groups[i].fingers){var a=Route(l.pills[i],l.tips[k],l.ring,middle);a.group=i;a.finger=k;l.arrows.Add(a);}
+        Badges(l);
+        return l;
     }
-    // Labels: the group's words (or its finger numbers), on one line when they fit, two at most (40 characters).
-    const float LabelSize=17,LabelLines=2.6f;
+    // The photograph framed for a room (panel units): the hand (every fingertip with room round it, and its knuckles) and a
+    // band of the dark ground above the keys (panel units) always in view; as large as the room allows, but enlarged no more
+    // than MostEnlarged screen pixels to a picture pixel (pixels: screen pixels to a panel unit); what the room holds beyond
+    // that, centred on the hand, up to the picture's edges.
+    static Layout Frame(Photo photo,bool mirror,Vector2 room,float pixels,float band)
+    {
+        var l=new Layout{mirror=mirror};
+        float iw=photo.texture.width,ih=photo.texture.height,kt=photo.keyboardTop,x0=1,x1=0,y1=0;
+        for(int k=1;k<=5;k++){float u=mirror?1-photo.tips[k].x:photo.tips[k].x;x0=Mathf.Min(x0,u);x1=Mathf.Max(x1,u);y1=Mathf.Max(y1,photo.tips[k].y);}
+        float span=x1-x0;x0=Mathf.Max(0,x0-.2f*span);x1=Mathf.Min(1,x1+.2f*span);y1=Mathf.Min(1,y1+.3f*span);
+        // Panel units to a picture pixel: the largest the hand across, the band and the hand down, and sharpness allow.
+        float scale=Mathf.Min(room.x/((x1-x0)*iw),Mathf.Min(MostEnlarged/Mathf.Max(.01f,pixels),(room.y-band)/Mathf.Max(1,(y1-kt)*ih)));
+        // Less dark ground above the keys than the band: the picture from its top edge.
+        if(kt*ih*scale<band)scale=Mathf.Min(scale,room.y/(y1*ih));
+        scale=Mathf.Max(scale,.01f);
+        float y0=Mathf.Max(0,kt-band/(ih*scale));
+        l.whole=new Vector2(iw*scale,ih*scale);l.size=new Vector2(Mathf.Min(room.x,l.whole.x),Mathf.Min(room.y,l.whole.y));
+        float cw=l.size.x/l.whole.x,ch=l.size.y/l.whole.y;
+        l.crop=new Rect(Mathf.Clamp((x0+x1-cw)/2,0,1-cw),Mathf.Clamp((y0+y1-ch)/2,0,1-ch),cw,ch);
+        for(int k=1;k<=5;k++)l.tips[k]=l.At(photo.tips[k]);
+        l.keys=l.At(new Vector2(0,kt)).y;
+        return l;
+    }
+
+    // Labels: the group's words (or its finger numbers), on one line when they fit side by side, the longest wrapped when
+    // they do not.
     static string LabelText(Group g)=>string.IsNullOrWhiteSpace(g.label)?string.Join(" + ",g.fingers):g.label;
-    static float LabelWidth(Group g,float room)=>Mathf.Min(room,TextWidth(LabelText(g))*LabelSize+10);
-    // A bold label's width in font sizes, estimated from the panel's sans face.
+    static float PillHeight(int lines)=>lines*LabelSize*LineHeight+2*PillY+2;
+    // A bold label's width in font sizes, estimated from the panel's sans face (when the label cannot be measured).
     static float TextWidth(string text)
     {
         float w=0;
@@ -289,192 +387,177 @@ public sealed class PianistHand : MonoBehaviour
             char.IsUpper(c)?.72f:c==' '?.3f:.58f;
         return w;
     }
-    static Vector2 Anchor(Fit fit,int slot)=>fit.At(slot==2?Above:(slot==0)==(fit.mirror>0)?ThumbSide:LittleSide);
-    // Which side each group's label takes: the group whose fingertips lie furthest left (as drawn) at the left, the one
-    // furthest right at the right, a third above the hand.
-    static int[] Slots(Figure f)
+    // The labels in a row on the dark ground above the keys, each as near as it can be to above the middle of its
+    // fingertips, apart from the others and inside the photograph, bottoms aligned a little above the keys (text: each
+    // label's text width). Returns the tallest label's height.
+    static float Labels(Layout l,Figure f,float[] text)
     {
-        int n=f.groups.Length;var mean=new float[n];float mirror=f.side=="left"?-1:1;
-        for(int i=0;i<n;i++){float x=0;foreach(int k in f.groups[i].fingers)x+=Tip(k).x*mirror;mean[i]=x/f.groups[i].fingers.Length;}
-        var result=new int[n];
-        if(n==1){result[0]=mean[0]<Tip(3).x*mirror?0:1;return result;}
-        var order=new int[n];for(int i=0;i<n;i++)order[i]=i;Array.Sort(order,(a,b)=>mean[a].CompareTo(mean[b]));
-        result[order[0]]=0;result[order[n-1]]=1;if(n==3)result[order[1]]=2;
-        return result;
+        int n=f.groups.Length;float tallest=0;const float chrome=2*PillX+2+Slack;
+        var width=new float[n];var centre=new float[n];var height=new float[n];
+        // The row's width shared out: labels that fit their share keep their width, the rest share what is left and wrap.
+        var wraps=new bool[n];float left=l.size.x-2*Margin-(n-1)*Gap;int sharing=n;
+        for(bool settled=false;!settled&&sharing>0;)
+        {
+            settled=true;float share=left/sharing;
+            for(int i=0;i<n;i++)if(!wraps[i]&&width[i]==0&&text[i]+chrome<=share){width[i]=text[i]+chrome;left-=width[i];sharing--;settled=false;}
+            if(settled)for(int i=0;i<n;i++)if(width[i]==0){wraps[i]=true;width[i]=Mathf.Max(LabelSize*3+chrome,share);}
+        }
+        for(int i=0;i<n;i++)
+        {
+            // A label that wraps is cut into lines of about equal length, each with room to break between words.
+            int lines=1;
+            if(wraps[i]){lines=Mathf.Clamp(Mathf.CeilToInt(text[i]*1.1f/(width[i]-chrome+Slack)),2,3);width[i]=Mathf.Min(width[i],text[i]*1.2f/lines+chrome);}
+            l.lines[i]=lines;height[i]=PillHeight(lines);tallest=Mathf.Max(tallest,height[i]);
+            float x=0;foreach(int k in f.groups[i].fingers)x+=l.tips[k].x;centre[i]=x/f.groups[i].fingers.Length;
+        }
+        var order=new int[n];for(int i=0;i<n;i++)order[i]=i;Array.Sort(order,(a,b)=>centre[a].CompareTo(centre[b]));
+        for(int round=0;round<40;round++)
+        {
+            for(int j=0;j+1<n;j++){int a=order[j],b=order[j+1];float over=centre[a]+width[a]/2+Gap-(centre[b]-width[b]/2);if(over>0){centre[a]-=over/2;centre[b]+=over/2;}}
+            for(int i=0;i<n;i++)centre[i]=Mathf.Clamp(centre[i],Margin+width[i]/2,Mathf.Max(Margin+width[i]/2,l.size.x-Margin-width[i]/2));
+        }
+        float foot=Mathf.Min(l.keys-KeysGap,l.size.y-Margin);
+        for(int i=0;i<n;i++)l.pills[i]=new Rect(centre[i]-width[i]/2,foot-height[i],width[i],height[i]);
+        return tallest;
+    }
+    // An arrow from a label to a fingertip: out of the label's foot (above the fingertip, as far as the label reaches), down
+    // in a gentle curve that bows away from the middle of the hand, and in to the nail from above, over the key beyond the
+    // fingertip, ending just outside the ring round the nail.
+    static Arrow Route(Rect pill,Vector2 tip,float ring,float middle)
+    {
+        float inset=Mathf.Min(pill.height,pill.width)*.5f;
+        var from=new Vector2(Mathf.Clamp(tip.x,pill.xMin+inset,pill.xMax-inset),pill.yMax-1);
+        var dir=((tip-from).normalized+new Vector2(0,1.6f)).normalized;   // panel y runs down
+        var to=tip-dir*(ring+5);float reach=Vector2.Distance(from,to),bow=(tip.x<middle?-1:1)*reach*.14f;
+        return new Arrow{from=from,c1=from+new Vector2(bow,reach*.42f),c2=to-dir*(reach*.42f),to=to,dir=dir};
+    }
+    static Vector2 Bezier(in Arrow a,float t){float u=1-t;return u*u*u*a.from+3*u*u*t*a.c1+3*u*t*t*a.c2+t*t*t*a.to;}
+    // A number beside each fingertip, just outside its ring: above the nail where no arrow comes in, otherwise on the side
+    // away from the middle finger (the middle finger's toward the index), or the nearest place round the nail that touches
+    // no nail, badge, arrow, label or edge and sits nearer its own nail than any other.
+    static readonly (float angle,float cost)[] Around={(-90,0),(0,.8f),(-45,1.2f),(180,1.6f),(-135,2f),(45,3f),(135,3.4f)};   // degrees from the outward side, y down
+    static void Badges(Layout l)
+    {
+        const float r=BadgeRadius;var path=new List<Vector2>();
+        foreach(var a in l.arrows)for(int i=0;i<=24;i++)path.Add(Bezier(a,i/24f));
+        float reach=l.ring+r+4;
+        for(int k=1;k<=5;k++)
+        {
+            float away=Mathf.Sign((k==3?l.tips[2].x:l.tips[k].x)-l.tips[3].x);if(away==0)away=-1;
+            float best=float.MaxValue;
+            foreach(var (angle,preference) in Around)
+            {
+                float a=angle*Mathf.Deg2Rad;var at=l.tips[k]+new Vector2(Mathf.Cos(a)*away,Mathf.Sin(a))*reach;float cost=preference;
+                if(at.x<r+4||at.x>l.size.x-r-4||at.y<r+4||at.y>l.size.y-r-4)cost+=100;
+                for(int j=1;j<=5;j++)
+                {
+                    float d=Vector2.Distance(at,l.tips[j]);cost+=20*Mathf.Max(0,l.ring+r+3-d);
+                    // Beside another finger's nail it would read as that finger's number.
+                    if(j!=k&&d<reach+.6f*l.ring)cost+=4;
+                }
+                for(int j=1;j<k;j++)cost+=20*Mathf.Max(0,2*r+4-Vector2.Distance(at,l.badges[j]));
+                foreach(var p in path)cost+=8*Mathf.Max(0,r+5-Vector2.Distance(at,p));
+                foreach(var pill in l.pills)if(pill.width>0&&at.x>pill.xMin-r-3&&at.x<pill.xMax+r+3&&at.y>pill.yMin-r-3&&at.y<pill.yMax+r+3)cost+=100;
+                if(cost<best){best=cost;l.badges[k]=at;}
+            }
+        }
     }
 
-    // A smooth closed outline through the points (Catmull-Rom, as cubic Béziers).
-    static void Loop(Painter2D p,Vector2[] u,Fit fit)
+    // Fades are Gradients with alpha keys (a FillGradient made from two Colors ignores their alpha), made on the main thread
+    // when first drawn and kept.
+    static Gradient edge;static readonly Dictionary<Color,Gradient> halos=new();
+    // A halo round a ring: nothing over the nail, brightest at the ring, fading out beyond it (radius Reach rings).
+    const float Reach=1.8f;
+    static Gradient Halo(Color ink)
     {
-        int n=u.Length;p.MoveTo(fit.At(u[0]));
-        for(int i=0;i<n;i++){Vector2 a=u[(i+n-1)%n],b=u[i],c=u[(i+1)%n],d=u[(i+2)%n];p.BezierCurveTo(fit.At(b+(c-a)/6),fit.At(c-(d-b)/6),fit.At(c));}
-        p.ClosePath();
-    }
-    // A finger's outline: smooth sides through its stations and a rounded tip; every finger is wound the same way, so a fill
-    // of the palm and the fingers together is their union.
-    static void Limb(Painter2D p,List<Vector2> chain,List<float> half,Fit fit)
-    {
-        int n=chain.Count;
-        Vector2 D(int i)=>(chain[Mathf.Min(i+1,n-1)]-chain[Mathf.Max(i-1,0)]).normalized;
-        Vector2 N(int i){var d=D(i);return new Vector2(-d.y,d.x);}
-        Vector2 R(int i){i=Mathf.Clamp(i,0,n-1);return chain[i]+N(i)*half[i];}
-        Vector2 L(int i){i=Mathf.Clamp(i,0,n-1);return chain[i]-N(i)*half[i];}
-        p.MoveTo(fit.At(R(0)));
-        for(int i=0;i<n-1;i++)p.BezierCurveTo(fit.At(R(i)+(R(i+1)-R(i-1))/6),fit.At(R(i+1)-(R(i+2)-R(i))/6),fit.At(R(i+1)));
-        Vector2 dl=D(n-1),nl=N(n-1),apex=chain[n-1]+dl*half[n-1]*Cap;float h=half[n-1];const float k=.5523f;
-        p.BezierCurveTo(fit.At(R(n-1)+dl*k*h*Cap),fit.At(apex+nl*k*h),fit.At(apex));
-        p.BezierCurveTo(fit.At(apex-nl*k*h),fit.At(L(n-1)+dl*k*h*Cap),fit.At(L(n-1)));
-        for(int i=n-1;i>0;i--)p.BezierCurveTo(fit.At(L(i)+(L(i-1)-L(i+1))/6),fit.At(L(i-1)-(L(i-2)-L(i))/6),fit.At(L(i-1)));
-        p.ClosePath();
+        if(halos.TryGetValue(ink,out var g))return g;
+        const float a=.85f,ring=1/Reach;g=new Gradient();
+        g.SetKeys(new[]{new GradientColorKey(ink,0),new GradientColorKey(ink,1)},
+            new[]{new GradientAlphaKey(0,0),new GradientAlphaKey(0,ring*.8f),new GradientAlphaKey(a,ring),new GradientAlphaKey(a*.38f,ring+(1-ring)*.35f),new GradientAlphaKey(0,1)});
+        halos[ink]=g;return g;
     }
     static void Circle(Painter2D p,Vector2 c,float r){p.BeginPath();p.Arc(c,r,Angle.Degrees(0),Angle.Degrees(360));p.ClosePath();}
-    // A soft round light or shade: strength at the centre, nothing at the rim. A halo is strongest at half its radius (round
-    // a fingertip) and lighter over the finger itself.
-    static void Glow(Painter2D p,Vector2 c,float r,Color ink,float strength,bool halo=false)
-    {
-        p.fillGradient=FillGradient.MakeRadialGradient(Fade(ink,strength,halo),c,r,c,AddressMode.Clamp);Circle(p,c,r);p.Fill();p.fillGradient=default;
-    }
-    // Radial fades are Gradients with alpha keys (a FillGradient made from two Colors ignores their alpha), made on the main
-    // thread and kept, one per colour and strength (in twentieths).
-    static readonly Dictionary<(Color,int,bool),Gradient> fades=new();
-    static Gradient Fade(Color ink,float strength,bool halo)
-    {
-        int level=Mathf.Clamp(Mathf.RoundToInt(strength*20),0,20);var key=(ink,level,halo);if(fades.TryGetValue(key,out var g))return g;
-        float a=level/20f;g=new Gradient();
-        g.SetKeys(new[]{new GradientColorKey(ink,0),new GradientColorKey(ink,1)},halo?new[]{new GradientAlphaKey(a*.45f,0),new GradientAlphaKey(a,.5f),new GradientAlphaKey(a*.35f,.75f),new GradientAlphaKey(0,1)}
-            :new[]{new GradientAlphaKey(a,0),new GradientAlphaKey(a*.45f,.5f),new GradientAlphaKey(0,1)});
-        fades[key]=g;return g;
-    }
-    static Gradient Ramp(Color[] colors,float[] at,float fadeFrom)
-    {
-        var keys=new GradientColorKey[colors.Length];for(int i=0;i<colors.Length;i++)keys[i]=new GradientColorKey(colors[i],at[i]);
-        var g=new Gradient();g.SetKeys(keys,new[]{new GradientAlphaKey(1,0),new GradientAlphaKey(1,fadeFrom),new GradientAlphaKey(.42f,fadeFrom+(1-fadeFrom)*.4f),new GradientAlphaKey(0,1)});return g;
-    }
 
-    // The hand itself, drawn once per figure: skin, outline, the light on the back of the hand and the knuckles, the joints'
-    // creases, the nails and the finger numbers.
-    sealed class Drawing : VisualElement
+    // The overlay's layers, each drawn once per placement: the soft edge round the photograph; a group's glow (round its
+    // rings, at an onset's brightness, dimmed by the layer's opacity); the badges' discs; a group's marks (its arrows, the
+    // rings round its nails and round its fingers' badges).
+    enum Part { Shade,Glow,Badges,Marks }
+    sealed class Layer : VisualElement
     {
-        public Figure figure;
-        // Made on the main thread when first drawn (a Gradient is a native object).
-        static Gradient skin,outline;
-        static readonly Color NailInk=new(.98f,.92f,.9f),Crease=new(.45f,.32f,.3f),Shade=new(.45f,.3f,.27f),Number=new(.2f,.25f,.33f,.95f);
-        readonly List<Vector2> chain=new();readonly List<float> half=new();
-        public Drawing(){generateVisualContent+=Draw;}
+        readonly PianistHand owner;readonly Part part;readonly int group;
+        static readonly Color Under=new(.01f,.015f,.025f),Neutral=new(.62f,.72f,.82f);
+        public Layer(PianistHand owner,Part part,int group=-1)
+        {
+            this.owner=owner;this.part=part;this.group=group;pickingMode=PickingMode.Ignore;this.StretchToParentSize();
+            if(part is Part.Glow or Part.Marks)usageHints=UsageHints.DynamicColor;
+            generateVisualContent+=Draw;
+        }
         void Draw(MeshGenerationContext ctx)
         {
-            if(figure==null)return;var fit=Layout(contentRect.size,figure,Slots(figure));float s=fit.s;if(s<20)return;
-            var p=ctx.painter2D;p.lineJoin=LineJoin.Round;p.lineCap=LineCap.Round;
-            // The forearm fades out from the wrist to the bottom of the hand's extent.
-            float fade=(Wrist-HandTop)/(HandBottom-HandTop);
-            skin??=Ramp(new[]{new Color(.96f,.89f,.83f),new Color(.93f,.85f,.78f),new Color(.86f,.77f,.71f)},new[]{0,.45f,fade},fade);
-            outline??=Ramp(new[]{new Color(.42f,.31f,.29f),new Color(.4f,.3f,.28f)},new[]{0,fade},fade);
-            Vector2 top=fit.At(new Vector2(0,HandTop)),bottom=fit.At(new Vector2(0,HandBottom));
-            // The whole hand as one path; the outline is stroked under the fill, so it shows round the hand and between the
-            // fingers, not where the shapes overlap.
-            p.BeginPath();Loop(p,Palm,fit);
-            for(int k=1;k<=5;k++){Stations(k,chain,half);Limb(p,chain,half,fit);}
-            p.lineWidth=Mathf.Max(2,s*.014f);p.strokeFillGradient=FillGradient.MakeLinearGradient(outline,top,bottom,AddressMode.Clamp);p.Stroke();p.strokeFillGradient=default;
-            // Filled twice: one fill leaves faint seams where a shape's edge lies inside another (each shape's edge is smoothed).
-            p.fillGradient=FillGradient.MakeLinearGradient(skin,top,bottom,AddressMode.Clamp);p.Fill();p.Fill();p.fillGradient=default;
-            // Light and shade on the back of the hand, clipped to the palm (a clip of the overlapping shapes would be
-            // even-odd): a sheen in the middle, shade along the little finger's side, by the thumb and in the webs, and a
-            // highlight on each knuckle. Then a soft highlight down each finger, narrower than the finger.
-            p.BeginPath();Loop(p,Palm,fit);p.PushClip();
-            Glow(p,fit.At(new Vector2(-.05f,.36f)),.62f*s,Color.white,.22f);
-            Glow(p,fit.At(new Vector2(.66f,.6f)),.5f*s,Shade,.22f);
-            Glow(p,fit.At(new Vector2(-.56f,.3f)),.24f*s,Shade,.16f);
-            foreach(var web in Webs)Glow(p,fit.At(web+new Vector2(0,.03f)),.085f*s,Shade,.32f);
-            for(int k=2;k<=5;k++)Glow(p,fit.At(Knuckle[k]+Dir(k)*.015f),.1f*s,Color.white,.4f);
-            p.PopClip();
-            p.strokeColor=new Color(1,1,1,.13f);
-            for(int k=1;k<=5;k++)
-            {
-                p.lineWidth=(k==1?ThumbHalf[3]:Breadth[k]*.5f)*.7f*s;p.BeginPath();
-                if(k==1){p.MoveTo(fit.At(Thumb[3]));p.LineTo(fit.At(Thumb[4]));p.LineTo(fit.At(Thumb[5]));}
-                else{var d=Dir(k);p.MoveTo(fit.At(Knuckle[k]+d*.06f));p.LineTo(fit.At(Knuckle[k]+d*(Reach[k]-.17f)));}
-                p.Stroke();
-            }
-            // The joints' creases across each finger, the thumb's at its joint.
-            p.lineWidth=Mathf.Max(1,s*.0055f);
-            for(int k=1;k<=5;k++)
-            {
-                Vector2 d=Dir(k),n=new(-d.y,d.x);
-                if(k==1){d=(Thumb[4]-Thumb[3]).normalized;n=new Vector2(-d.y,d.x);Fold(p,fit,Thumb[4],d,n,ThumbHalf[4]*.62f,.4f);Fold(p,fit,Thumb[4]-d*.02f,d,n,ThumbHalf[4]*.5f,.28f);continue;}
-                float w=Breadth[k]*.5f,L=Reach[k];
-                Fold(p,fit,Knuckle[k]+d*(Pip*L-.012f),d,n,w*.6f,.42f);Fold(p,fit,Knuckle[k]+d*(Pip*L+.012f),d,n,w*.55f,.34f);
-                Fold(p,fit,Knuckle[k]+d*Dip*L,d,n,w*.5f,.32f);
-            }
-            for(int k=1;k<=5;k++)Nail(p,fit,k);
-            float size=Mathf.Clamp(.19f*s,13,34);
-            for(int k=1;k<=5;k++)
-            {
-                Vector2 at=k==1?(Thumb[3]+Thumb[4])*.5f:Knuckle[k]+Dir(k)*(.3f*Reach[k]);string text=k.ToString();
-                ctx.DrawText(text,fit.At(at)-new Vector2(text.Length*size*.29f,size*.62f),size,Number);
-            }
-        }
-        static void Fold(Painter2D p,Fit fit,Vector2 c,Vector2 d,Vector2 n,float reach,float alpha)
-        {
-            p.strokeColor=new Color(Crease.r,Crease.g,Crease.b,alpha);p.BeginPath();
-            p.MoveTo(fit.At(c-n*reach));p.QuadraticCurveTo(fit.At(c+d*.022f),fit.At(c+n*reach));p.Stroke();
-        }
-        // A nail near the tip, seen from above on a curved finger (so short); the thumb lies on its side on the keys, so its
-        // nail is narrower and turned outward.
-        static void Nail(Painter2D p,Fit fit,int k)
-        {
-            Vector2 d=Dir(k),n=new(-d.y,d.x);float h=TipHalf(k),length=k==5?.115f:k==1?.12f:.13f,a=h*(k==1?.5f:.66f),b=h*(k==1?.42f:.56f);
-            Vector2 shift=k==1?-n*h*.18f:Vector2.zero,tip=Tip(k)-d*.028f+shift,root=Tip(k)-d*(length+.028f)+shift;
-            p.BeginPath();p.MoveTo(fit.At(root-n*b));
-            p.BezierCurveTo(fit.At(root-n*b+d*length*.55f),fit.At(tip-n*a-d*length*.2f),fit.At(tip-n*a*.92f));
-            p.BezierCurveTo(fit.At(tip-n*a*.6f+d*.012f),fit.At(tip+n*a*.6f+d*.012f),fit.At(tip+n*a*.92f));
-            p.BezierCurveTo(fit.At(tip+n*a-d*length*.2f),fit.At(root+n*b+d*length*.55f),fit.At(root+n*b));
-            p.BezierCurveTo(fit.At(root+n*b*.5f-d*.03f),fit.At(root-n*b*.5f-d*.03f),fit.At(root-n*b));
-            p.ClosePath();p.fillColor=NailInk;p.Fill();
-            p.strokeColor=new Color(.55f,.4f,.38f,.5f);p.lineWidth=Mathf.Max(1,fit.s*.005f);p.Stroke();
-        }
-    }
-
-    // What is lit: a glow on each fingertip of the groups whose turn it is (brighter just after an onset), a ring on every
-    // named fingertip, and an arrow from each group's label to each of its fingertips, arriving along the finger.
-    sealed class Highlight : VisualElement
-    {
-        public PianistHand owner;
-        public Highlight(){generateVisualContent+=Draw;}
-        void Draw(MeshGenerationContext ctx)
-        {
-            var f=owner?.shown;if(f==null||owner.slots.Length!=f.groups.Length)return;
-            var fit=Layout(contentRect.size,f,owner.slots);float s=fit.s;if(s<20)return;
+            var l=owner.layout;var f=owner.shown;var r=contentRect;if(l==null||f==null||r.width<20||r.height<20)return;
+            if(group>=f.groups.Length)return;
+            using var painting=Painting.Auto();
             var p=ctx.painter2D;p.lineCap=LineCap.Round;p.lineJoin=LineJoin.Round;
-            for(int i=0;i<f.groups.Length;i++)
+            switch(part)
             {
-                bool lit=owner.turn<0||owner.turn==i;var ink=Inks[i];float lift=lit&&owner.turn>=0?owner.flare:0;Vector2 from=Anchor(fit,owner.slots[i]);
-                foreach(int k in f.groups[i].fingers)
-                {
-                    Vector2 tip=fit.At(Tip(k)),d=fit.Toward(Dir(k)),pad=tip-d*(.075f*s);
-                    if(lit)Glow(p,pad,(.26f+.08f*lift)*s,ink,.7f+.3f*lift,true);
-                    p.strokeColor=new Color(ink.r,ink.g,ink.b,lit?.95f:.35f);p.lineWidth=lit?2.4f:1.6f;Circle(p,pad,.115f*s);p.Stroke();
-                    Arrow(p,from,tip+d*(.07f*s),d,s,new Color(ink.r,ink.g,ink.b,lit?1:.3f),owner.slots[i]);
-                }
+                case Part.Shade:Shade(p,r);break;
+                case Part.Glow:
+                    foreach(int k in f.groups[group].fingers)
+                    {
+                        var c=l.tips[k];float radius=l.ring*Reach;
+                        p.fillGradient=FillGradient.MakeRadialGradient(Halo(Inks[group]),c,radius,c,AddressMode.Clamp);Circle(p,c,radius);p.Fill();
+                    }
+                    p.fillGradient=default;break;
+                case Part.Badges:
+                    for(int k=1;k<=5;k++)
+                    {
+                        p.fillColor=new Color(Under.r,Under.g,Under.b,.8f);Circle(p,l.badges[k],BadgeRadius);p.Fill();
+                        if(GroupOf(f,k)<0){p.strokeColor=new Color(Neutral.r,Neutral.g,Neutral.b,.3f);p.lineWidth=1.3f;Circle(p,l.badges[k],BadgeRadius);p.Stroke();}
+                    }
+                    break;
+                case Part.Marks:
+                    var ink=Inks[group];
+                    foreach(var a in l.arrows)if(a.group==group)DrawArrow(p,a,ink);
+                    foreach(int k in f.groups[group].fingers)
+                    {
+                        p.strokeColor=new Color(Under.r,Under.g,Under.b,.5f);p.lineWidth=4.6f;Circle(p,l.tips[k],l.ring);p.Stroke();
+                        p.strokeColor=new Color(ink.r,ink.g,ink.b,.96f);p.lineWidth=2.3f;Circle(p,l.tips[k],l.ring);p.Stroke();
+                        p.strokeColor=new Color(ink.r,ink.g,ink.b,.9f);p.lineWidth=1.3f;Circle(p,l.badges[k],BadgeRadius);p.Stroke();
+                    }
+                    break;
             }
         }
-        static void Arrow(Painter2D p,Vector2 from,Vector2 to,Vector2 d,float s,Color ink,int slot)
+        // Dark at the card's rim, so the cut-off keys and the arm fade into the card.
+        static void Shade(Painter2D p,Rect r)
         {
-            // Out of the label toward the hand, as far as the way across needs (a fingertip just below its label gets a plain
-            // curve), then in along the finger.
-            Vector2 leave=slot==0?Vector2.right:slot==1?Vector2.left:new Vector2(0,1);   // panel y runs down
-            float reach=Mathf.Clamp((slot==2?Mathf.Abs(to.y-from.y):Mathf.Abs(to.x-from.x))*.55f,.05f*s,.32f*s);
-            // A long arrow from the right rises a little and one from the left dips, so two that cross the hand (1+4 against
-            // 2+5) cross once instead of running together.
-            Vector2 c1=from+leave*reach+new Vector2(0,(slot==1?-.4f:slot==0?.25f:0)*reach),c2=to+d*(.3f*s),dir=(to-c2).normalized,side=new(-dir.y,dir.x);
-            float head=Mathf.Clamp(.055f*s,8,14);
-            var under=new Color(.02f,.04f,.07f,.7f*ink.a);
+            if(edge==null)
+            {
+                var dark=new Color(.006f,.009f,.014f);edge=new Gradient();
+                edge.SetKeys(new[]{new GradientColorKey(dark,0),new GradientColorKey(dark,1)},new[]{new GradientAlphaKey(.82f,0),new GradientAlphaKey(.3f,.45f),new GradientAlphaKey(0,1)});
+            }
+            void Band(Rect area,Vector2 from,Vector2 to)
+            {
+                p.fillGradient=FillGradient.MakeLinearGradient(edge,from,to,AddressMode.Clamp);
+                p.BeginPath();p.MoveTo(area.min);p.LineTo(new Vector2(area.xMax,area.yMin));p.LineTo(area.max);p.LineTo(new Vector2(area.xMin,area.yMax));p.ClosePath();p.Fill();
+            }
+            float side=Mathf.Min(r.width*.09f,70),foot=Mathf.Min(r.height*.16f,90);
+            Band(new Rect(0,0,side,r.height),new Vector2(0,0),new Vector2(side,0));
+            Band(new Rect(r.width-side,0,side,r.height),new Vector2(r.width,0),new Vector2(r.width-side,0));
+            Band(new Rect(0,r.height-foot,r.width,foot),new Vector2(0,r.height),new Vector2(0,r.height-foot));
+            p.fillGradient=default;
+        }
+        // A dark edge under the line and the head keeps the arrow clear over the white keys.
+        static void DrawArrow(Painter2D p,in Arrow a,Color ink)
+        {
+            const float head=10,wide=.58f;
+            Vector2 side=new(-a.dir.y,a.dir.x),stop=a.to-a.dir*head*.6f;
             for(int layer=0;layer<2;layer++)
             {
-                p.strokeColor=layer==0?under:ink;p.lineWidth=layer==0?5.5f:2.2f;
-                p.BeginPath();p.MoveTo(from);p.BezierCurveTo(c1,c2,to-dir*head*.6f);p.Stroke();
+                p.strokeColor=layer==0?new Color(Under.r,Under.g,Under.b,.6f):ink;p.lineWidth=layer==0?5.4f:2.3f;
+                p.BeginPath();p.MoveTo(a.from);p.BezierCurveTo(a.c1,a.c2,stop);p.Stroke();
             }
-            p.BeginPath();p.MoveTo(to);p.LineTo(to-dir*head+side*head*.55f);p.LineTo(to-dir*head-side*head*.55f);p.ClosePath();
-            p.strokeColor=under;p.lineWidth=3;p.Stroke();p.fillColor=ink;p.Fill();
+            p.BeginPath();p.MoveTo(a.to);p.LineTo(a.to-a.dir*head+side*head*wide);p.LineTo(a.to-a.dir*head-side*head*wide);p.ClosePath();
+            p.strokeColor=new Color(Under.r,Under.g,Under.b,.6f);p.lineWidth=2.6f;p.Stroke();p.fillColor=ink;p.Fill();
         }
     }
 }

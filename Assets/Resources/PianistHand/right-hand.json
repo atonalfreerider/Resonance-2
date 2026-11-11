@@ -1,0 +1,35 @@
+{
+ "image": "right-hand.jpg",
+ "side": "right",
+ "note": "A pianist's right hand seen from above, thumb on the left. Fingertips are the centres of the nails, as fractions of the image's width and height from its top-left corner. The left hand is this image mirrored.",
+ "tips": {
+  "1": [
+   0.285,
+   0.612
+  ],
+  "2": [
+   0.388,
+   0.457
+  ],
+  "3": [
+   0.481,
+   0.432
+  ],
+  "4": [
+   0.569,
+   0.441
+  ],
+  "5": [
+   0.662,
+   0.49
+  ]
+ },
+ "keyboardTop": 0.33,
+ "source": {
+  "generator": "OpenAI Images API, model chatgpt-image-latest",
+  "date": "2026-11-10",
+  "size": "1024x1024",
+  "quality": "high",
+  "prompt": "A refined, photorealistic photograph of a concert pianist's RIGHT hand in playing position on a grand piano keyboard, seen from directly above, looking down at the keys as the pianist sees their own hand. Low-key, cinematic lighting: a soft warm spotlight falls on the hand and the few keys under it, while the rest of the keyboard fades gently into deep shadow toward the edges of the frame, and the background above the keys is near-black. The keyboard runs horizontally across the middle of the image. The hand is arched and relaxed, the fingers naturally curved so that each of the five fingertips rests ON a different white key near the front edge of the keys: the thumb on the far LEFT, lying on its side, then the index, middle, ring and little finger spaced across the keys to the right. All five fingertips clearly visible and separated. Natural skin, short clean nails, no rings or jewelry, a plain black sleeve at the wrist coming in from the bottom edge. Generous dark empty space above the fingertips. Calm, elegant, premium music documentary look. No text, no labels, no logos, no watermark."
+ }
+}
