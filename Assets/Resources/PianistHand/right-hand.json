@@ -4,33 +4,33 @@
  "note": "A pianist's right hand seen from above, thumb on the left. Fingertips are the centres of the nails, as fractions of the image's width and height from its top-left corner. The left hand is this image mirrored.",
  "tips": {
   "1": [
-   0.285,
-   0.612
+   0.254,
+   0.604
   ],
   "2": [
-   0.388,
-   0.457
+   0.395,
+   0.459
   ],
   "3": [
-   0.481,
+   0.499,
    0.432
   ],
   "4": [
-   0.569,
-   0.441
+   0.579,
+   0.456
   ],
   "5": [
-   0.662,
-   0.49
+   0.657,
+   0.507
   ]
  },
- "keyboardTop": 0.33,
+ "keyboardTop": 0.337,
  "source": {
   "generator": "OpenAI Images API, model chatgpt-image-latest",
   "date": "2026-11-10",
   "size": "1024x1024",
   "quality": "high",
-  "prompt": "A refined, photorealistic photograph of a concert pianist's RIGHT hand in playing position on a grand piano keyboard, seen from directly above, looking down at the keys as the pianist sees their own hand. Low-key, cinematic lighting: a soft warm spotlight falls on the hand and the few keys under it, while the rest of the keyboard fades gently into deep shadow toward the edges of the frame, and the background above the keys is near-black. The keyboard runs horizontally across the middle of the image. The hand is arched and relaxed, the fingers naturally curved so that each of the five fingertips rests ON a different white key near the front edge of the keys: the thumb on the far LEFT, lying on its side, then the index, middle, ring and little finger spaced across the keys to the right. All five fingertips clearly visible and separated. Natural skin, short clean nails, no rings or jewelry, a plain black sleeve at the wrist coming in from the bottom edge. Generous dark empty space above the fingertips. Calm, elegant, premium music documentary look. No text, no labels, no logos, no watermark.",
-  "retouched": "2026-11-10: the keyboard corrected so its black keys alternate in twos and threes, as a piano's do. The generator put a black key on the E-F boundary at the far left (two pairs of black keys side by side); it was moved one key right, to F# over the F-G seam, white key backs filling its place, and the A# that belongs beside the last G# was added at the right edge. The hand, the fingertips and keyboardTop are untouched."
+  "prompt": "A refined, photorealistic photograph of a concert pianist's RIGHT hand in playing position on a real grand piano keyboard, seen from directly above, looking down at the keys as the pianist sees their own hand.\nThe keyboard must be an accurate piano keyboard: the black keys come in alternating groups of TWO and THREE all along the keyboard (C sharp and D sharp, a gap, then F sharp, G sharp and A sharp, a gap, then two again), exactly as on every real piano, with one white key between the groups. Never two groups of two side by side, never two groups of three side by side.\nLow-key, cinematic lighting: a soft warm spotlight falls on the hand and the keys under it, while the rest of the keyboard fades gently into shadow toward the left and right edges of the frame; the background above the keys is near-black. The keyboard runs horizontally across the middle of the image.\nThe hand is arched and relaxed, the fingers naturally curved so that each of the five fingertips rests ON a different white key near the front edge of the keys: the thumb on the far LEFT, lying on its side, then the index, middle, ring and little finger spaced across the keys to the right. All five fingertips clearly visible and separated. Natural skin, short clean nails, no rings or jewelry, a plain black sleeve at the wrist coming in from the bottom edge. Generous dark empty space above the fingertips. Calm, elegant, premium music documentary look. No text, no labels, no logos, no watermark.",
+  "chosen": "the one of four candidates whose black keys alternate in twos and threes (test_keyboard), checked by eye for the hand"
  }
 }

@@ -322,9 +322,10 @@ landscape one. The card is cut from the photograph to fill that part of the scre
 sharpness: the fingertips with room round them, the knuckles, and the dark ground above the keys that the labels need.
 
 The photograph, `Assets/Resources/PianistHand/right-hand.jpg`, was generated with OpenAI's `chatgpt-image-latest`;
-its prompt, date and settings are under `source` in `right-hand.json` beside it. The generator drew a keyboard no
-piano has (two pairs of black keys side by side), so the picture was retouched: the stray black key moved one key to
-the right, and the A# at the right edge added (`source.retouched` says what changed). That file also says where the
+its prompt, date and settings are under `source` in `right-hand.json` beside it. Image generators often draw a
+keyboard no piano has (the first picture had two pairs of black keys side by side), so four were generated with a
+prompt that spells out the pattern, and the one whose black keys alternate in twos and threes was kept, untouched
+(`source.chosen`). That file also says where the
 fingertips are: `tips`, the centre of each nail as `[x, y]`, fractions of the picture's width and height from its
 top-left corner, for fingers `"1"` to `"5"`; `side`, the hand it shows; and `keyboardTop`, the fraction of the height
 above which the picture is dark enough for the labels. To replace the photograph, overwrite the JPEG in place (so its
