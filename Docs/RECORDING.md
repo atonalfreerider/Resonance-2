@@ -42,29 +42,52 @@ Output, in `Recordings/Videos/`:
 ## The editor's package: re-edit the mix outside Resonance
 
 The MP4 is a finished mix. Every take also gets the parts of that mix, so an external editor
-(Premiere Pro, DaVinci Resolve, Final Cut) can re-balance, re-cut or re-caption it. Every file starts
-at the video's first frame and lasts as long as the video, so they line up when dropped at 00:00;
-audio is 48 kHz, 24-bit.
+(Premiere Pro, DaVinci Resolve or Final Cut Pro 7; Final Cut Pro X/11 needs the timeline converted to
+FCPXML first, e.g. with SendToX) can re-balance, re-cut or re-caption it. Every file starts at the
+video's first frame and lasts as long as its picture, so they line up when dropped at 00:00. Audio is
+48 kHz: the narration 24-bit, the music 32-bit float (so the resampled music's peaks over full scale
+do not clip).
 
 | File | What it is |
 |---|---|
-| `narration.wav` | the voice alone (a tour's narration track; the tutorial's step clips) |
-| `music.wav` | the original music, never ducked: the song's recording (tours); the app's own synth sound, captured live during the take (tutorial, Quest performances) |
-| `music-as-played.wav` | tours whose cues solo a stem: the music with Director mode's solos and crossfades, never ducked |
-| `ducking.csv` | one row per spoken line: the music starts to dip 0.12 s before it (`duck_starts`), reaches `music_gain` (also in dB) by `duck_reached`, starts back 0.15 s after it (`release_starts`) and is back by `release_done` |
-| `ducking-envelope.csv` | the exact music gain at every video frame |
-| `captions.srt` | the spoken words in captions of up to two 42-character lines |
-| `timeline.xml` | an FCP7 XML sequence: video on V1, the MP4's own mix on A1 (muted, for reference), the music on A2 with the ducking as Audio Levels keyframes, the narration on A3 at its level in the take |
-| `check.json` | how the parts were lined up with the video (cross-correlation against the MP4's own audio), the music and narration levels the take used, how closely the parts rebuild its sound (SNR in dB), and per spoken line the music level measured under the voice against the cue sheet |
+| `narration.wav` | the voice alone (a tour's narration; the tutorial's step clips) |
+| `music.wav` | the original music, never ducked: what the take played of the song's recording (tours); the app's own synth sound, captured live during the take (tutorial); the take's own sound, after the performance recorder's loudness pass (Quest performances) |
+| `music-as-played.wav` | tours whose cues solo a stem: the music as Director mode played it, never ducked (each solo at its `soloGain`, clamped to 0.25–4 as `StemPlayback` does, and dropped to 1 as the solo fades out; the crossfades) |
+| `ducking.csv` | one row per spoken line the take played, read off the take: when the music starts to dip (`duck_starts_s`), reaches the line's level (`duck_reached_s`), starts back up (`release_starts_s`: 0.15 s after the line, or at its end once a `releaseSoloAfterNarration` cue's lines are over) and is back (`release_done_s`; blank when the next line dips first). Times are seconds from the video's first frame, `music_gain` is linear amplitude (1 = unducked) and also in dB, `cue` is the story's 0-based cue index and `line` counts from 1; the 95% points are where the music has made 95% of the move |
+| `ducking-envelope.csv` | the music gain at every video frame, as the take applied it |
+| `captions.srt` | the spoken words, at most two 42-character lines a caption, UTF-8 with a BOM and CRLF line ends (how Premiere reads accented text); timed by the narration's aligned word times when `narration.json` has them (`spokenStarts`, from `story_timing.py`), else spread over each line by characters; a `[direction]` inside a line is left out; no file when nothing is spoken |
+| `timeline.xml` | an FCP7 XML sequence: the video on V1 linked to the MP4's own sound (muted on the clip and its tracks, for reference), then the music with the ducking as Audio Levels keyframes, the narration, and for a soloing tour the original recording (muted), each stereo file as a linked pair of tracks (left, right) that Premiere joins into one stereo clip, at the take's own levels so the timeline plays as loud as the MP4; a marker at each cue. Paths are absolute: a moved folder asks to be relinked |
+| `check.json` | how the parts were lined up with the video, the levels the take used, how closely they rebuild its sound (reproduction SNR in dB), per spoken line the music level heard under the voice against the cue sheet, and whether the parts match the take at all (`matchesTake`, `problems`) |
 
-The take's mix is music × ducking + narration × a level measured from the take: the app asks for
-0.95 of the music's volume, and Unity plays the mono voice into both stereo channels at −3 dB each, so
-a tour's narration sits near 0.67 of the music. On the Chopin tour take the parts rebuild the MP4's
-sound to 24 dB SNR, and every line's measured duck matches the cue sheet within 0.003. A tour's
-parts are rebuilt exactly from its bundle (the recording, the stems, the narration and its measured
-ducking), placed where the song started in the video; the tutorial's synth sound exists in no file,
-so `RecordingStemTap` captures it while the take records. A Quest performance has no voice, so its
-package is its sound and a timeline. Build or rebuild a package by hand:
+The package models the take from the runtime's own rules. The music and the voice are found in the
+MP4's sound on their own, each to a fraction of a sample (cross-correlation at 8 kHz, refined at
+48 kHz, placed with a windowed-sinc fractional delay): the voice is scheduled on the song clock, which
+sits 39 ms ahead of an MP3 recording's first sample (the app's NAudio decoder keeps the encoder delay
+that the exporter's decoder trims), and one sample off costs a rebuild 3 to 9 dB, which is what held
+the horizontal Chopin take of 10 November at 17 dB. Director mode decides the ducking and the stem
+crossfades once a frame, and the music plays each frame's volumes from the 1024-sample DSP block where
+that frame stood; takes made before the report's `duckLagFrames` existed (it is 0 now that `SongAudio`
+and `StemPlayback` set the volumes in `LateUpdate`) applied them a frame later. A take that starts
+mid-song (`songStart`) played nothing before it: song time t sits at `audioStart` + t. Unity plays the
+mono voice into both channels at −3 dB, so a tour's narration sits near 0.95 × 0.71 = 0.67 of the
+music. The tutorial's synth sound exists in no file, so `RecordingStemTap` captures it while the take
+records (a tutorial take from before that capture gets its narration only, which its README notes);
+a Quest performance has no voice, so its package is its sound and a timeline.
+
+Whether the parts match the take is checked, not assumed. A take whose report names a `story.json` or
+a narration the bundle no longer has (`storySha256`, `narrationSha256`) gets no package: the tool
+prints why and exits 2. A take that played no narration gets a package without narration, captions or
+ducking. Every other package is measured against the MP4: when the parts rebuild its sound to less
+than 15 dB SNR, the narration fits at less than 0.3 or more than 1.5 of the music, narration.wav's
+voice is not where the take has it, a line's measured duck is more than 0.05 off the cue sheet, or a
+cue marker is not where the story puts it (how older reports, without the hashes, catch a bundle
+rebuilt since), `check.json` and `README.txt` say so and the tool exits 2, which Unity logs as an
+error. Such a package never replaces an earlier one that matched its take: it goes beside it as
+`<take>-edit-failed`. A package is built in a temporary folder beside the take and moved into place
+only when complete. The Chopin tour takes of 10 November rebuild to 26.6 dB SNR, vertical and
+horizontal alike, and the Rachmaninoff tour of 3 October (an MP3 bundle) to 23.2 dB; every line's
+measured duck matches the cue sheet within 0.005. Building one needs about 1.3 MB of memory per second
+of take (1.6 with a soloed stem; it needed 4.6). Build or rebuild a package by hand:
 
 ```powershell
 Tools/SongLibrary/.venv/Scripts/python.exe Tools/Video/edit_package.py Recordings/Videos/<take>.json
