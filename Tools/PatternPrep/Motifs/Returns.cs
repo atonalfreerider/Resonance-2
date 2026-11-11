@@ -177,6 +177,8 @@ public sealed class Returns
     public Cut[][] Cuts = Array.Empty<Cut[]>();           // per section, by tick
     public long[] Directions = Array.Empty<long>();       // ticks of tempo and expression directions that mark sections (+0.3 evidence in §8's DPs)
     public long[] Boundaries => Sections.Skip(1).Select(s => s.Start).ToArray();
+    public long[] ArrivalCuts => arrivalCuts;             // §8 F1's arrival cuts in time order (§8 F2 weighs them too) …
+    public bool[] ArrivalFull => arrivalFull;             // … and whether each closes on the tonic
     public static Action<string> Trace;
 
     MotifInput input; MotifGrid grid; MotifSettings settings; CellLexicon lex;
@@ -889,6 +891,9 @@ public sealed class Returns
             {
                 var p = any[i]; if (p.Structural) continue;
                 if (p.Cols[0] < targetFirst - barColumns || p.Cols[^1] > targetLast + barColumns || p.Cols[^1] < targetFirst || p.Cols[0] > targetLast) continue;
+                // A source inside the target region restates the target itself: with a1′ equal to a1 (F13) the target's own
+                // [9.2–10.2]~[12.2–13.2] otherwise grew the hull over the copy, and the internal return a1′ ≅ a1 was lost.
+                if (p.Rows[^1] >= targetFirst && p.Rows[0] <= targetLast) continue;
                 sources.Add(p); spent[anyOrigin[i]] = true;
             }
             double allow = Math.Max(settings.StructuralBars * barColumns, columns / (double)settings.MinLagDivisor);

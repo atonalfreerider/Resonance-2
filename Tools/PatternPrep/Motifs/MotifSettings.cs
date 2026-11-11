@@ -62,6 +62,9 @@ public sealed record MotifSettings
     public double PeriodLambda { get; init; } = .5;               // × the median evidence
     public double PeriodKappa { get; init; } = 1;                 // 0.5 would split 38–41 | 42–45
     public int[] PeriodBars { get; init; } = { 2, 4, 8, 12, 16 };
+    public double SubPhraseBars { get; init; } = 6;               // a phrase this long splits into sub-phrases …
+    public double FamilyHoldBars { get; init; } = 2;              // … where a new family of the principal line holds this long
+    public double CrossReferenceShare { get; init; } = .75;       // one element relates this share of a span's columns to an earlier one's
     // §9 export
     public int MaxCells { get; init; } = 40000;
     public int MaxBytes { get; init; } = 4_000_000;               // the Motifs JSON alone: bounded Unity load time and bundle growth

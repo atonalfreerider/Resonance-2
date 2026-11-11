@@ -20,6 +20,7 @@ public static partial class SelfTests
         MotifCells(verbose);
         MotifIteration(verbose);
         MotifReturns(verbose);
+        MotifHierarchy(verbose);
         Console.WriteLine("PASS: motif contract (F24) — a version 6 layer round-trips with the §13.1 field names, HasMotifs is not written, a version 5 bundle reads as Schema 0");
         Console.WriteLine("PASS: motif ingest — tick grid, metric weights and printed bars after a silent lead-in, score import (scaled ticks, staves, voices, tpc, graces, directions), transcription snap, skyline and voice streams, principal stream; B♭ minor's leading tone is A (F28)");
         Console.WriteLine("PASS: motif transform group — costs, composition, images, stabilisers and orders; names: tonal sequence up a second (F3), the leading tone of A minor (F4), the parallel minor (F5)");
@@ -27,6 +28,7 @@ public static partial class SelfTests
         Console.WriteLine("PASS: motif cells (F1–F6, F14, F18, F26, F27) — neighbour chirality, exact mirror, tonal and tonicizing sequences, parallel minor, modal mixture, ornamented and lengthened-head variants, distinct figures, phase on beat 2; every member decodes from its prototype");
         Console.WriteLine("PASS: motif iteration (F7–F10, F15–F17, F20) — tritone and diminished-seventh cycles, an alternation, doubling with contrary motion, liquidation, a nested power and a two-cell unit power, drum loops; F3's sequence as a power; the near relation extends an exact sequence");
         Console.WriteLine("PASS: motif returns (F11–F13 at level 1, F19, F21) — the étude-shaped ternary is A B A′ with A′ = A − (a2 a1′) + coda and a1′ ≅ a1 inside A; a head-deleted reprise; the omission stays a2 + a1′ when a1′ equals a1 and under transcription noise; pop sections verbatim with (V2 C2) ← (V1 C1) and C3 ← C1 a whole tone up");
+        Console.WriteLine("PASS: motif hierarchy (F11 in full, F12, F13) — phrases a1 a2 a1′ a3 with a3 cut at the sigh head, periods B1 … with B1 = (U²)² ↑1, A′ = a1 · a3′ · Coda omitting a2 and a1′ (also when a1′ equals a1), a head-deleted reprise omitting x; bar 16 = bar 6 a sixth higher; pop copies inherit their phrases; the formula and caption lines");
     }
 
     // Line(score, startBeat, "C4/8 B3/16 C4/16 D4/16*5 …"): a monophonic line, note after note. A token is
@@ -973,26 +975,8 @@ public static partial class SelfTests
         deleted = Deleted(ret);
         Check(deleted.Length == 1 && Math.Abs(deleted[0].start - 10.5) <= 1 && Math.Abs(deleted[0].end - 26.5) <= 1, "F13: with a1′ = a1 the return still deletes a2 + a1′: " + string.Join("; ", ret.All.Where(r => r.Level == 1).Select(ret.Describe)));
 
-        // F12: a head-deleted reprise in 2/4: x (8 bars, a half cadence) y (12, a full cadence) | B (32 bars of new material) |
-        // y (12) coda (4). B is 32 bars, not §16's 16: the head x joins the hull only within min_lag = L/8 of the first downbeat,
-        // and among 52 bars its 8 would make it an Intro (see the deviations).
-        var f12 = new Score(); Bars(f12, 68, 2);
-        const string x = "E4/8 G4/8 C5/4 B4/8 A4/8 G4/4 A4/8 C5/8 F5/4 E5/8 D5/8 C5/4 D5/8 E5/8 F5/8 D5/8 C5/8 B4/8 A4/4 G4/8 A4/8 B4/8 C5/8 D5/2";
-        const string y = "G5/8 F5/8 E5/8 D5/8 C5/4 E5/4 A4/8 B4/8 C5/8 D5/8 E5/4 C5/4 F5/8 E5/8 D5/8 C5/8 B4/4 G4/4 A4/8 G4/8 F4/8 E4/8 D4/4 G4/4 C5/8 D5/8 E5/8 F5/8 G5/4 E5/4 D5/8 C5/8 B4/8 D5/8 C5/2";
-        const string yBass = "C3/2 A2/2 F2/2 C3/2 D3/2 G2/2 F2/2 G2/2 A2/2 E2/2 G2/2 C2/2";
-        const float bassVelocity = 80 / 127f;
-        Line(f12, 0, x); Line(f12, 0, "C3/4 E3/4 G2/4 B2/4 F2/4 A2/4 C3/4 E3/4 F2/4 D2/4 A2/4 F2/4 G2/2 G2/2", 2, 2, bassVelocity);
-        Line(f12, 16, y); Line(f12, 16, yBass, 2, 2, bassVelocity);
-        var random = new Random(12); string[] minor = { "A", "B", "C", "D", "E", "F", "G#" };
-        for (int b = 0; b < 32; b++)
-        {
-            double start = 40 + 2 * b;
-            for (int k = 0; k < 4; k++) f12.Note(start + k / 2.0, .5, ScorePitch(minor[random.Next(7)] + (5 + random.Next(2))), 96 / 127f, 3, 3);
-            f12.Note(start, 2, ScorePitch(minor[random.Next(7)] + "2"), bassVelocity, 2, 2);
-        }
-        Line(f12, 104, y); Line(f12, 104, yBass, 2, 2, bassVelocity);
-        Line(f12, 128, "C5/4 G4/4 E4/4 C4/4 G4/2 C4/2"); Line(f12, 128, "C3/2 C3/2 G2/2 C2/2", 2, 2, bassVelocity);
-        (_, _, ret) = Returned(f12, "F12", verbose);
+        // F12: a head-deleted reprise (HeadDeletedScore).
+        (_, _, ret) = Returned(HeadDeletedScore(), "F12", verbose);
         Ternary(ret, "F12", 40, 104, .5);
         var reprise = ret.All.Single(r => r.Level == 1);
         Check(reprise.Script.Length == 3 && reprise.Script[0].Op == Delete && Near(reprise.Script[0].SourceStart, 0, 0) && Near(reprise.Script[0].SourceEnd, 16, 0)
@@ -1009,16 +993,7 @@ public static partial class SelfTests
 
         // F19: pop. Level 1 is data.Sections verbatim; (V2 C2) ← (V1 C1) is one return spanning both; C3 ← C1 a whole tone up; the
         // verse holds its 4-bar progression twice; the drums loop.
-        var names = new[] { "", "Keys", "Bass", "Lead Vocal", "Drums" };
-        var cycles = PopScore().Cycles();
-        var form = FormAnalysis.Build(cycles, new SongSettings { Key = 3 }, names);
-        var data = PreparedPatternSong.Capture(cycles, form.Form);
-        data.TrackNames = names; data.Style = form.Style; data.Key = 3; data.LeadVocalTrack = 3;
-        data.Tempos = new[] { new PreparedPatternSong.Tempo { Beat = 0, Seconds = 0, Microseconds = 500000 } };
-        for (int i = 0; i < data.Sections.Length; i++) { var info = form.Sections[i]; data.Sections[i].Label = info.Label; data.Sections[i].Role = info.Role; data.Sections[i].Letter = info.Letter; data.Sections[i].PhraseBars = info.PhraseBars; }
-        FormAnalysis.Apply(form, data);
-        MelodySelection.Build(data);
-        var input = MotifInput.Read(data, cycles, form.Grid, MotifSettings.FromSong(new SongSettings { Key = 3 }), null, MotifPpq);
+        var (input, data) = PopMotifInput();
         var lex = CellLexicon.Build(input);
         if (verbose) { Console.WriteLine("  F19 returns:"); Returns.Trace = t => Console.WriteLine("  " + t); }
         ret = Returns.Build(input, lex, data);
@@ -1035,6 +1010,184 @@ public static partial class SelfTests
         Check(it.Relations.Any(r => r.IsPower && r.Source != Iteration.FromCells && r.Count == 2 && r.Unit == 16 * MotifPpq && r.Start >= ret.Sections[1].Start && r.End <= ret.Sections[1].End), "F19: the verse holds its 4-bar progression twice (a power of Count 2)");
         var drums = input.Streams.All.Where(s => s.Kind == MotifStreams.Drums).Select(s => s.Id).ToArray();
         Check(it.Relations.Any(r => r.IsPower && drums.Contains(r.StreamA) && r.Count >= 8), "F19: a drum power with Count ≥ 8");
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Stage F (§8): the hierarchy.
+
+    const int PieceKind = PreparedPatternSong.MotifKinds.Piece, SectionKind = PreparedPatternSong.MotifKinds.Section, PhraseKind = PreparedPatternSong.MotifKinds.Phrase,
+        PeriodKind = PreparedPatternSong.MotifKinds.Period, SubPhraseKind = PreparedPatternSong.MotifKinds.SubPhrase, PowerKind = PreparedPatternSong.MotifKinds.Power,
+        UnitKind = PreparedPatternSong.MotifKinds.Unit, CodaKind = PreparedPatternSong.MotifKinds.Coda, IntroKind = PreparedPatternSong.MotifKinds.Intro;
+
+    // Stages A–F on a fixture: the tree's shape is checked, and a second run must give the same tree, texts and relations.
+    static (MotifInput input, CellLexicon lex, Returns ret, Iteration it, global::Hierarchy tree) Tree(MotifInput input, PreparedPatternSong data, string name, bool verbose)
+    {
+        var lex = CellLexicon.Build(input);
+        Check(lex.DecodeErrors.Length == 0, $"{name}: every member decodes: " + string.Join("; ", lex.DecodeErrors));
+        var ret = Returns.Build(input, lex, data);
+        var it = Iteration.Build(input, lex, ret.Theta, ret.Boundaries);
+        if (verbose) { Console.WriteLine($"  {name} hierarchy:"); global::Hierarchy.Trace = x => Console.WriteLine("  " + x); }
+        var tree = global::Hierarchy.Build(input, lex, it, ret, data);
+        global::Hierarchy.Trace = null;
+        if (verbose)
+        {
+            foreach (var line in tree.Dump().Split('\n', StringSplitOptions.RemoveEmptyEntries)) Console.WriteLine("    " + line);
+            Console.WriteLine("    formula:\n      " + tree.Formula.Replace("\n", "\n      "));
+            Console.WriteLine("    caption: " + tree.Line);
+            foreach (var text in tree.ReturnText) Console.WriteLine("    return: " + text);
+        }
+        CheckTree(tree, name);
+        var again = global::Hierarchy.Build(input, lex, it, ret, data);
+        Check(again.Dump() == tree.Dump() && again.Formula == tree.Formula && again.Line == tree.Line && again.ReturnText.SequenceEqual(tree.ReturnText)
+            && again.PowerNode.SequenceEqual(tree.PowerNode) && again.ReturnNode.SequenceEqual(tree.ReturnNode), $"{name}: two runs give the same tree");
+        return (input, lex, ret, it, tree);
+    }
+    // §8 F7: Nodes[0] is the piece; each node's children are contiguous, in time order, inside it, one level down or nested at
+    // level 3 (Level 1 sections, 2 phrases, periods and codas, 3 sub-phrases, powers and units), and Depth counts the tree.
+    static void CheckTree(global::Hierarchy t, string name)
+    {
+        var n = t.Nodes; bool ok = n.Length > 0 && n[0].Kind == PieceKind && n[0].Parent == -1 && n[0].Level == 0 && n[0].Depth == 0; string bad = "";
+        for (int i = 0; i < n.Length && ok; i++)
+        {
+            var x = n[i];
+            ok = x.Id == i && x.Start < x.End && x.Prototype < n.Length && (x.Kind == PieceKind) == (i == 0)
+                && (x.Level == 1) == (x.Kind is SectionKind or IntroKind) && (x.Level == 2) == (x.Kind is PhraseKind or PeriodKind or CodaKind) && (x.Level == 3) == (x.Kind is SubPhraseKind or PowerKind or UnitKind);
+            for (int j = 0; j < x.ChildCount && ok; j++)
+            {
+                var k = n[x.FirstChild + j];
+                ok = k.Parent == i && k.Depth == x.Depth + 1 && (k.Level == x.Level + 1 || k.Level == 3 && x.Level == 3) && k.Start >= x.Start && k.End <= x.End
+                    && (j == 0 || n[x.FirstChild + j - 1].End <= k.Start);
+            }
+            if (!ok) bad = $"{x.Label} [{x.Start / (double)MotifPpq}, {x.End / (double)MotifPpq}) kind {x.Kind} level {x.Level}";
+        }
+        Check(ok, $"{name}: the tree is a preorder of contiguous children in time order, each inside its parent at its level: {bad}");
+    }
+
+    static void MotifHierarchy(bool verbose)
+    {
+        global::Hierarchy.Node[] nodes = Array.Empty<global::Hierarchy.Node>();
+        global::Hierarchy.Node[] Kids(global::Hierarchy.Node x) => x.ChildCount == 0 ? Array.Empty<global::Hierarchy.Node>() : nodes[x.FirstChild..(x.FirstChild + x.ChildCount)];
+        static string Show(IEnumerable<global::Hierarchy.Node> xs) => string.Join(" | ", xs.Select(x => FormattableString.Invariant($"{x.Label} [{x.Start / (double)MotifPpq}, {x.End / (double)MotifPpq})")));
+        const int Altered = PreparedPatternSong.MotifSparks.Altered, Lengthened = PreparedPatternSong.MotifSparks.Lengthened;
+
+        // F11 in full: level 1 A B A′; one return whose deletion is a2 + a1′, which A′ omits; A's phrases 5 + 3 + 5 + 7 bars after
+        // the pickup, a1′ restating a1; a3's sub-phrase cut at the sigh head; B1 = (U²)² ↑1; the tritone run's 6-cycle in B; A′ =
+        // a1 · a3′ · Coda, the coda's two cells at Steps −7 with A♭3 named ♭6 and its lengthened-head variant; bar 16 = bar 6 a
+        // sixth higher (E14's cross-reference); the formula and caption lines.
+        var f11 = Ingest(TernaryMotifScore(), out var f11Data);
+        var (input, lex, ret, it, tree) = Tree(f11, f11Data, "F11", verbose);
+        nodes = tree.Nodes;
+        var top = Kids(nodes[0]);
+        Check(top.Length == 3 && top[0].Label == "A" && top[1].Label == "B" && top[2].Label == "A′" && top.All(x => x.Kind == SectionKind)
+            && Near(top[0].End, 41.5, .5) && Near(top[2].Start, 82.5, .5) && top[2].Prototype == top[0].Id && top[2].Return >= 0 && ret.All[top[2].Return].Level == 1
+            && tree.ReturnNode[top[2].Return] == top[2].Id && tree.ReturnSource[top[2].Return] == top[0].Id, "F11: level 1 is A B A′, A′ the copy of A through the level-1 return: " + Show(top));
+        var deleted = Deleted(ret);
+        Check(top[2].Omits == "a2, a1′" && deleted.Length == 1 && Math.Abs(deleted[0].start - 10.5) <= 1 && Math.Abs(deleted[0].end - 26.5) <= 1,
+            $"F11: the return deletes a2 + a1′ and A′ omits them: \"{top[2].Omits}\"");
+        var a = Kids(top[0]);
+        Check(a.Length == 4 && string.Join(",", a.Select(x => x.Label)) == "a1,a2,a1′,a3" && a.All(x => x.Kind == PhraseKind)
+            && Near(a[0].Start, 0, 0) && Near(a[0].End, 10.5, .5) && Near(a[1].End, 16.5, .5) && Near(a[2].End, 26.5, .5) && Near(a[3].End, 41.5, .5)
+            && a[2].Prototype == a[0].Id && a[2].Return >= 0 && ret.All[a[2].Return].Level == 2 && !a[2].Projected,
+            "F11: A's phrases are a1 a2 a1′ a3, the pickup and 5 + 3 + 5 + 7 bars, a1′ restating a1: " + Show(a));
+        var sub = Kids(a[3]);
+        Check(sub.Length == 2 && sub.All(x => x.Kind == SubPhraseKind) && sub[0].Label == "a3a" && sub[1].Label == "a3b" && Near(sub[1].Start, 32.5, 1),
+            "F11: a3 splits into two sub-phrases at the sigh head, 17.1 (beat 32.5): " + Show(sub));
+        // B1 = (U²)² ↑1 as §15.1 E6 states it for the étude: a Power node in B1 at its start, Count 2, StepSteps +1 (tonal), whose
+        // two iterations are powers of Count 2 with step 0 and 4-beat units.
+        var periods = Kids(top[1]);
+        var b1 = periods.Length > 0 ? periods[0] : null;
+        var power = b1 == null ? null : Kids(b1).FirstOrDefault(x => x.Kind == PowerKind);
+        var inner = power == null ? Array.Empty<global::Hierarchy.Node>() : Kids(power);
+        Check(periods.Length >= 2 && periods.All(x => x.Kind == PeriodKind) && b1.Label == "B1" && Near(b1.Start, 41.5, 0)
+            && power != null && Near(power.Start, 41.5, 1) && power.Count == 2 && power.StepSteps == 1 && !power.StepReal && power.Power >= 0 && tree.PowerNode[power.Power] == power.Id
+            && inner.Length == 2 && inner.All(x => x.Kind == PowerKind && x.Count == 2 && x.StepSteps == 0 && x.StepSemitones == 0 && Kids(x).All(u => u.Kind == UnitKind && u.End - u.Start == 4 * MotifPpq))
+            && inner[1].Prototype == inner[0].Id && inner[1].Steps == 1 && System.Text.RegularExpressions.Regex.IsMatch(power.Text, @"^\(\S+²\)² ↑1$")
+            && b1.Text.StartsWith(power.Text, StringComparison.Ordinal),
+            $"F11: B1 is (U²)² ↑1, a power of two powers of two 2-bar units a step apart: {Show(periods)}; {power?.Text}; B1 = {b1?.Text}");
+        Check(it.Relations.Any(r => r.Kind == PreparedPatternSong.MotifRelations.Run && r.Period == 6 && r.Symmetry.SequenceEqual(new[] { 0, 6 }) && periods.Any(p => r.Start >= p.Start && r.End <= p.End)),
+            "F11: the left hand's tritone run (Period 6, Symmetry {0, 6}) lies in a period of B");
+        var reprise = Kids(top[2]);
+        Check(reprise.Length == 3 && reprise[0].Label == "a1" && reprise[0].Projected && reprise[0].Prototype == a[0].Id && Near(reprise[0].Start, 82.5, 0) && Near(reprise[0].End, 92.5, .5)
+            && reprise[1].Label == "a3′" && reprise[1].Projected && reprise[1].Prototype == a[3].Id && Near(reprise[1].End, 104.5, 1)
+            && reprise[2].Kind == CodaKind && reprise[2].Label == "Coda" && Near(reprise[2].Start, 104.5, 1) && Near(reprise[2].End, 114.5, 0)
+            && Kids(reprise[1]).Length == 2 && Kids(reprise[1]).All(x => x.Projected && x.Kind == SubPhraseKind),
+            "F11: A′ = a1 (projected) · a3′ (projected, without its cadence, its sub-phrases too) · Coda: " + Show(reprise));
+        var coda = reprise[2];
+        var codaCells = lex.Of(input.Streams.Principal).Where(c => c.Start >= coda.Start && c.End <= coda.End).ToArray();
+        Check(codaCells.Count(c => c.Paradigm >= 0 && c.G.Steps == -7 && c.Sparks.Any(s => s.Kind == Altered && s.Pitch == 56 && s.Tag.Contains('♭') && s.Tag.Contains('6'))) >= 2
+            && codaCells.Any(c => c.Paradigm >= 0 && !c.Exact && c.Sparks.Any(s => s.Kind == Lengthened)),
+            "F11: the coda holds two cells at Steps −7 whose A♭3 is named ♭6, and the lengthened-head variant");
+        Check(tree.Formula.StartsWith("A · B · A′", StringComparison.Ordinal) && tree.Line.Contains("A′ = A", StringComparison.Ordinal) && tree.Line.Contains("6–13", StringComparison.Ordinal)
+            && tree.ReturnText[top[2].Return].StartsWith("A′ restates A from bar 1, leaving out bars 6–13 (a2, a1′)", StringComparison.Ordinal),
+            $"F11: the formula starts with A · B · A′ and the caption reads A′ = A − bars 6–13: \"{tree.Formula.Split('\n')[0]}\", \"{tree.Line}\", \"{tree.ReturnText[top[2].Return]}\"");
+        Check(tree.CrossReferences.Any(x => Near(x.Start, 30.5, 0) && Near(x.End, 32.5, 0) && Near(x.SourceStart, 10.5, 0) && x.G.Steps == 5 && x.G.Frame != Transform.Real && x.Text.Contains("sixth", StringComparison.Ordinal)),
+            "F11: bar 16 = bar 6 a sixth higher (a cross-reference): " + string.Join("; ", tree.CrossReferences.Select(x => x.Text)));
+
+        // F13: with a1′ equal to a1 the deletion is still a2 + a1′, and A′ omits them by those labels.
+        (input, lex, ret, it, tree) = Tree(Ingest(TernaryMotifScore(plainNine: true), out var f13Data), f13Data, "F13", verbose);
+        nodes = tree.Nodes; top = Kids(nodes[0]); a = top.Length > 0 ? Kids(top[0]) : a;
+        deleted = Deleted(ret);
+        Check(top.Length == 3 && top[2].Omits == "a2, a1′" && string.Join(",", a.Select(x => x.Label)) == "a1,a2,a1′,a3" && a[2].Prototype == a[0].Id
+            && deleted.Length == 1 && Math.Abs(deleted[0].start - 10.5) <= 1 && Math.Abs(deleted[0].end - 26.5) <= 1,
+            $"F13: with a1′ = a1 the deletion is a2 + a1′ and A′ omits them: \"{(top.Length == 3 ? top[2].Omits : "")}\"; {Show(a)}");
+
+        // F12: a head-deleted reprise. Level 1 A B A′; the return deletes x, A′ omits x's label and restates y's phrases.
+        (input, lex, ret, it, tree) = Tree(Ingest(HeadDeletedScore(), out var f12Data), f12Data, "F12", verbose);
+        nodes = tree.Nodes; top = Kids(nodes[0]);
+        var x0 = top.Length == 3 ? Kids(top[0]) : Array.Empty<global::Hierarchy.Node>();
+        var reprised = top.Length == 3 ? Kids(top[2]) : Array.Empty<global::Hierarchy.Node>();
+        Check(top.Length == 3 && string.Join(",", top.Select(x => x.Label)) == "A,B,A′" && x0.Length > 0 && Near(x0[0].Start, 0, 0) && Near(x0[0].End, 16, 0)
+            && top[2].Omits == x0[0].Label && reprised.Length >= 2 && reprised[^1].Kind == CodaKind && reprised.Take(reprised.Length - 1).All(x => x.Projected && x.Prototype > x0[0].Id),
+            $"F12: A′ deletes x and omits its label \"{(x0.Length > 0 ? x0[0].Label : "")}\": omits \"{(top.Length == 3 ? top[2].Omits : "")}\"; {Show(reprised)}");
+
+        // F21 (noise) and F19 (pop): the tree holds its shape; pop sections stay level 1, copies inherit their phrases.
+        Tree(Ingest(Noisy(TernaryMotifScore(), new Random(7)), out var f21Data, song: new SongSettings { PatternTimingToleranceBeats = .125 }), f21Data, "F21", verbose);
+        var (popInput, popData) = PopMotifInput();
+        (_, _, ret, _, tree) = Tree(popInput, popData, "F19", verbose);
+        nodes = tree.Nodes; top = Kids(nodes[0]);
+        Check(top.Length == popData.Sections.Length && top.All(x => x.Kind == SectionKind) && string.Join(",", top.Select(x => x.Label)) == "Intro,Verse 1,Chorus 1,Verse 2,Chorus 2,Bridge,Chorus 3,Outro"
+            && top[3].Prototype == top[1].Id && top[4].Prototype == top[2].Id && top[6].Prototype == top[2].Id && top[6].Semitones == 2 && top[3].Return == top[4].Return
+            && top[3].ChildCount == top[1].ChildCount && Kids(top[3]).All(x => x.Projected) && Kids(top[1]).All(x => x.Kind == PhraseKind),
+            "F19: the eight pop sections are level 1, (V2 C2) and C3 inherit the phrases of V1 and C1: " + Show(top) + "; " + Show(Kids(top[3])));
+    }
+
+    // F12: a head-deleted reprise in 2/4: x (8 bars, a half cadence) y (12, a full cadence) | B (32 bars of new material) |
+    // y (12) coda (4). B is 32 bars, not §16's 16: the head x joins the hull only within min_lag = L/8 of the first downbeat,
+    // and among 52 bars its 8 would make it an Intro (see the deviations).
+    static Score HeadDeletedScore()
+    {
+        var f12 = new Score(); Bars(f12, 68, 2);
+        const string x = "E4/8 G4/8 C5/4 B4/8 A4/8 G4/4 A4/8 C5/8 F5/4 E5/8 D5/8 C5/4 D5/8 E5/8 F5/8 D5/8 C5/8 B4/8 A4/4 G4/8 A4/8 B4/8 C5/8 D5/2";
+        const string y = "G5/8 F5/8 E5/8 D5/8 C5/4 E5/4 A4/8 B4/8 C5/8 D5/8 E5/4 C5/4 F5/8 E5/8 D5/8 C5/8 B4/4 G4/4 A4/8 G4/8 F4/8 E4/8 D4/4 G4/4 C5/8 D5/8 E5/8 F5/8 G5/4 E5/4 D5/8 C5/8 B4/8 D5/8 C5/2";
+        const string yBass = "C3/2 A2/2 F2/2 C3/2 D3/2 G2/2 F2/2 G2/2 A2/2 E2/2 G2/2 C2/2";
+        const float bassVelocity = 80 / 127f;
+        Line(f12, 0, x); Line(f12, 0, "C3/4 E3/4 G2/4 B2/4 F2/4 A2/4 C3/4 E3/4 F2/4 D2/4 A2/4 F2/4 G2/2 G2/2", 2, 2, bassVelocity);
+        Line(f12, 16, y); Line(f12, 16, yBass, 2, 2, bassVelocity);
+        var random = new Random(12); string[] minor = { "A", "B", "C", "D", "E", "F", "G#" };
+        for (int b = 0; b < 32; b++)
+        {
+            double start = 40 + 2 * b;
+            for (int k = 0; k < 4; k++) f12.Note(start + k / 2.0, .5, ScorePitch(minor[random.Next(7)] + (5 + random.Next(2))), 96 / 127f, 3, 3);
+            f12.Note(start, 2, ScorePitch(minor[random.Next(7)] + "2"), bassVelocity, 2, 2);
+        }
+        Line(f12, 104, y); Line(f12, 104, yBass, 2, 2, bassVelocity);
+        Line(f12, 128, "C5/4 G4/4 E4/4 C4/4 G4/2 C4/2"); Line(f12, 128, "C3/2 C3/2 G2/2 C2/2", 2, 2, bassVelocity);
+        return f12;
+    }
+
+    // F19's input: the existing PopScore prepared as PatternPrep prepares a pop song (form, sections, melody), C major.
+    static (MotifInput input, PreparedPatternSong data) PopMotifInput()
+    {
+        var names = new[] { "", "Keys", "Bass", "Lead Vocal", "Drums" };
+        var cycles = PopScore().Cycles();
+        var form = FormAnalysis.Build(cycles, new SongSettings { Key = 3 }, names);
+        var data = PreparedPatternSong.Capture(cycles, form.Form);
+        data.TrackNames = names; data.Style = form.Style; data.Key = 3; data.LeadVocalTrack = 3;
+        data.Tempos = new[] { new PreparedPatternSong.Tempo { Beat = 0, Seconds = 0, Microseconds = 500000 } };
+        for (int i = 0; i < data.Sections.Length; i++) { var info = form.Sections[i]; data.Sections[i].Label = info.Label; data.Sections[i].Role = info.Role; data.Sections[i].Letter = info.Letter; data.Sections[i].PhraseBars = info.PhraseBars; }
+        FormAnalysis.Apply(form, data);
+        MelodySelection.Build(data);
+        return (MotifInput.Read(data, cycles, form.Grid, MotifSettings.FromSong(new SongSettings { Key = 3 }), null, MotifPpq), data);
     }
 
     // F21's perturbation of a score (§16): each note dropped with probability 0.03, else its onset moved by a normal jitter of

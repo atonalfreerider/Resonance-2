@@ -1772,3 +1772,34 @@ Generator order signs on the wheel:
   9.1–13.2 with its one substitution at 9.1, not 9.1–14.2 (bar 14 is bar 6 with a new head).
 - §16 F12 (step 5): B is 32 bars, not 16. With x of 8 bars in a 52-bar piece, min_lag = L/8 is 6.5 bars, so §7 E4 and E6 make
   x an Intro; at 68 bars (min_lag 8.5 bars) x joins A and the return deletes it, as F12 asserts.
+- §7 E4 (step 6): a non-structural path whose source lies inside the family's target region is no hull source, since it restates
+  the target itself. With a1′ equal to a1 note for note (F13), the target's own [9.2–10.2]~[12.2–13.2] grew A's internal hull to
+  [1.1–10.2], over the copy, and a1′ ≅ a1 was lost, so a1′ could not be labelled. Stage E's output on the 22 library bundles is
+  unchanged.
+- §8 F2 (step 6): P's grid score counts the section's own ends as evidence 1 at the grid points within a bar of them. Read
+  literally, the mean over grid points is highest for the sparsest grid through the strongest cuts: the étude's B scores 0.75 with
+  P = 16 through bars 30 and 46 against 0.60 with P = 8, and the DP then keeps three periods against the five §8 F2 measures. With
+  the ends both reach 0.83 and 0.03·|log2(L/(4P))| chooses 8; the Nocturne's B takes 16. On F11's synthetic 20.5-bar B the same
+  rule takes P = 16, so its B1 holds (U²)² ↑1 and then the tritone bars; the fixture checks "B1 = (U²)² ↑1" as §15 E6 states it
+  for the étude (a power node in B1, at its start). Adding to the score the share of the candidates' evidence the grid reaches gave
+  F11 its four periods, but P = 2 and ten periods on the Nocturne's B, against N3.
+- §8 F2 (step 6): a generator-label change cuts at the start of the generator labelling the new bar when that generator starts
+  inside the bar before (F11's B runs a beat off the barline: 29.2, 33.2), and no candidate lies strictly inside a unit power, so a
+  period holds whole powers (F11's arrivals on 23.1 and 25.1 close statements of U inside (U²)² ↑1).
+- §8 F3 (step 6): a figure opened by a held head and falling (§5 C7's sigh) is one family for the sub-phrase cut, whatever the
+  first token of its atom. Bar 18 (the étude's D♯5[N+ Rep] C♯5 G♯4, F11's B4 C5 B4 A4 E4) reduces to an upper neighbour, so with
+  atoms alone the sigh head's family holds one bar and a3 does not split at 17.1 (§15 E3, F11). Each sub-phrase lasts at least
+  PhraseMinBars; SubPhraseBars (6) and FamilyHoldBars (2) are settings.
+- §8 F4 (step 6): a projected child is exact when the script restates, unedited, every column of it that the alignment accounts
+  for: the family's hull (an internal return's: the span its script covers). Columns outside the hull do not prime it, so A′
+  restates a1 without its pickup as a1 (§15 E4), while a3 without its cadence (hull column 20.1 unmatched) is a3′. Inserted columns
+  between two images join the image before them, or become a phrase of their own, analysed by F1–F3, when they last
+  PhraseMinBars.
+- §8 F5 (step 6): cross-references relate the principal line's columns (the leads struck and held in each tactus, by T_k, or by t_d
+  with at most one altered note a column), not every pitched note: bar 16 restates bar 6 a sixth higher in the right hand's first
+  voice, over a different accompaniment (§15 E14). Only powers in the tree (and the principal line's cell powers) explain a bar:
+  the étude's soft repeat of bars 1–8 at 9–16 crosses its phrases, is no unit, and would otherwise hide bar 16.
+- §8 F6 (step 6): a unit that is one principal-line cell takes that cell's paradigm letter, placed as the cell is (the coda's
+  (μ⁻′ ↓8ve [♭6])², Appendix A's (S′ ↓8ve [♭6])²); U, V, W … name units of several cells. F11's and the étude's 2-bar sixths unit
+  is one cell of the principal line, so B1 reads (ι²)² ↑1 and (ν²)² ↑1. The formula's first line starts with the sections
+  ("A · B · A′    A′ = A − (a2 a1′) + Coda", as §15 E16 and §13.1's fragment have it), not with "Étude =" as Appendix A writes it.
