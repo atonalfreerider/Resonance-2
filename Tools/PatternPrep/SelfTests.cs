@@ -56,7 +56,8 @@ public static partial class SelfTests
         var (score, bpm) = name switch
         {
             "pop" => (PopScore(), 112), "variation" => (VariationScore().score, 116), "alternating" => (AlternatingScore(), 108), "strain" => (StrainScore(), 96), "ternary" => (TernaryScore(), 88),
-            _ => throw new ArgumentException("fixtures: pop, variation, alternating, strain, ternary, lyrics")
+            "motif-ternary" => (TernaryMotifScore(), 66),
+            _ => throw new ArgumentException("fixtures: pop, variation, alternating, strain, ternary, motif-ternary, lyrics")
         };
         const int ppq = 480;
         var events = new NAudio.Midi.MidiEventCollection(1, ppq);
@@ -64,10 +65,15 @@ public static partial class SelfTests
         events.AddTrack(); events.AddEvent(new NAudio.Midi.TempoEvent(60000000 / bpm, 0), 0);
         events.AddEvent(new NAudio.Midi.KeySignatureEvent(0, 0, 0), 0); // every fixture is in C major
         events.AddEvent(new NAudio.Midi.TextEvent(name + " (generated pattern-wheel fixture)", NAudio.Midi.MetaEventType.SequenceTrackName, 0), 0);
-        int last = -1;
+        (int, int) last = (-1, -1);
         foreach (var bar in score.Bars)
-            if (bar.Numerator != last) { events.AddEvent(new NAudio.Midi.TimeSignatureEvent(Tick(bar.Start), bar.Numerator, 2, 24, 8), 0); last = bar.Numerator; }
-        bool piano = name is "strain" or "ternary";
+            if ((bar.Numerator, bar.Denominator) != last)
+            {
+                // The denominator as a power of two (motif-ternary opens with a 1/8 pickup).
+                events.AddEvent(new NAudio.Midi.TimeSignatureEvent(Tick(bar.Start), bar.Numerator, System.Numerics.BitOperations.Log2((uint)Math.Max(1, bar.Denominator)), 24, 8), 0);
+                last = (bar.Numerator, bar.Denominator);
+            }
+        bool piano = name is "strain" or "ternary" or "motif-ternary";
         string[] names = piano ? new[] { "", "Piano chords", "Piano left hand", "Piano melody", "" } : new[] { "", "Keys", "Bass", "Lead Vocal", "Drums" };
         for (int track = 1; track <= 4; track++)
         {

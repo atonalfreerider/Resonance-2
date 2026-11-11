@@ -1734,3 +1734,41 @@ Generator order signs on the wheel:
   exact rule left 54–57 without a period and 54–61 without its liquidation ("8,4,2").
 - §6 D8, D3 (step 4): the identity is no cross-scale generator (every loop inside a loop would qualify); tonal steps compare
   in scale steps. A cell joins one cell power at most (`MotifCell.Relation` names one).
+- §7 E1 (step 5): in transcription mode a note matches within one step of the transcription grid (a sixteenth at a quarter
+  tactus: `SlotsPerTactus / 4` slots), not one slot. F21's jitter (σ = ⅛ beat, re-quantised to sixteenths) moves a third of
+  the onsets a whole sixteenth, two slots, so with one slot they never matched and the noisy reprise lost its head. Score
+  mode keeps one slot. `Iteration.Columns` holds the reach, so stage D's near relation shares it.
+- §7 E2, E5 (step 5): the anchored DPs score a match at the return's transposition k: E2's S − θ where k lies within E3's
+  0.05 of S, as a discovered path scores; elsewhere S_k, which then lies below S − 0.05 (where that is below θ its bound
+  S − 0.05 serves, and S_k is computed only where it could still reach θ). With S taken at any transposition a return
+  could match each column under another k.
+- §7 E3 (step 5): repetitions below min_lag need no protection of their own here: stage E cuts only at the edges of hulls and
+  copies (and their snaps), never inside a complement, and §7 E7 finds them inside each section.
+- §7 E4 (step 5): a family's hull takes the sources of every discovered path whose target lies within a bar of the family's
+  target region, structural or not, as `align_check.py` built it (§0.4). Under F21's noise [1.1–6.2]~[42.1–47.2] scores below
+  6(1 − θ) while it still places the reprise's head. When the head the hull takes on (within min_lag of the first downbeat)
+  leaves no occurrence with half the hull matched, the hull drops it again: the Rach2 Moderato returns only bars 31–54, and
+  its 30 bars before them otherwise made the family vanish. A later family lying wholly inside one span between the
+  sections of earlier families is that span's structure and waits for its internal returns (§7 E7): the Nocturne's refrain
+  C ≅ C′ inside B otherwise cut level 1 into seven sections against N1's three.
+- §7 E5 (step 5): in gap sliding, a placement whose exchanged hull columns restate the best placement's (mean S ≥ θ between
+  them: §0.4's equal-content region a1 ≅ a1′) is a near tie whatever its score. With F11's two voices under F21's noise, a1
+  and a1′ differ by 1.0 in placement score (δ = 0.37) and the deletion fell on 1.1–8.2; the phrase edges now place it on
+  6.1–13.2. A phrase that starts before the hull (a1 with its pickup) starts at the hull's first column, and one that ends
+  after it ends at its last.
+- §7 E6 (step 5): where a hull or a copy ends and a complement begins, the boundary moves to the nearest arrival cut within a
+  bar, as §8 F1 snaps internal-return edges: repetition ends where the copies diverge (the étude's hull ends at 20.1, where
+  A′ turns into its coda), while E1 closes A on its cadence at 21.1. The cell snap applies only where the boundary lies inside
+  an alignment (the coda's start, and a copy's end that no arrival places): at a hull's end or a copy's start there is no
+  aligned source, its condition holds for any cell, and on F21's noisy tiling it pulled A's end and A′'s start a beat early.
+  A complement restates an earlier section only as a whole (its share counts all its columns): judged by its aligned head,
+  the Rach2 Adagio's 93-bar B became an A′.
+- §7 E6 (step 5), reviewed and pop forms: two sections are aligned at the transpositions some pair of their columns allows
+  above θ. Of overlapping unions the longer is taken first, then the later target, then the earlier source: Ticket to Ride's
+  bridge, verse and chorus at bars 63–87 then restate 38–62 (T2's "should"); the earlier target would have taken V C Br.
+- §8 F1 (step 5, built here for §7 E5): an arrival's cut lies at the next tactus after the arrival note, at the end of the
+  column its held note ends in (a release less than half a slot late is no hold), so F25's whole-note cadences close their
+  bars. An internal return's ends move to an arrival's cut within a bar and its matches outside them leave it: a1′ ≅ a1 is
+  9.1–13.2 with its one substitution at 9.1, not 9.1–14.2 (bar 14 is bar 6 with a new head).
+- §16 F12 (step 5): B is 32 bars, not 16. With x of 8 bars in a 52-bar piece, min_lag = L/8 is 6.5 bars, so §7 E4 and E6 make
+  x an Intro; at 68 bars (min_lag 8.5 bars) x joins A and the return deletes it, as F12 asserts.

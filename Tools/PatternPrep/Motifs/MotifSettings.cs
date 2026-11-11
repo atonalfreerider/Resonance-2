@@ -46,6 +46,9 @@ public sealed record MotifSettings
     public double GapOpen { get; init; } = 4;                     // × (1 − θ): an 8-bar omission costs 8 strong beats
     public double GapExtend { get; init; } = .25;                 // × (1 − θ) per beat
     public int MinLagDivisor { get; init; } = 8;                  // min_lag = max(1 bar, round(L/8)), the scale rule
+    public int DiscoveryPaths { get; init; } = 40;                // Waterman–Eggert: at most 40 paths a node …
+    public double DiscoveryStop { get; init; } = 3;               // … and none scoring below 3(1 − θ)
+    public int BarColumnsAbove { get; init; } = 2500;             // above this many tactus columns discovery runs on bars (§11)
     public double PathTrim { get; init; } = .15;                  // trim path ends whose best match is below θ + 0.15
     public double StructuralScore { get; init; } = 6;             // × (1 − θ)
     public double StructuralBars { get; init; } = 2;              // span ≥ max(2 bars, L/16): no one-bar coincidences
@@ -66,6 +69,7 @@ public sealed record MotifSettings
     // From the song (song.json's own fields), never from the "Motifs" object.
     [JsonIgnore] public double TimingToleranceBeats { get; init; }   // PatternTimingToleranceBeats: > 0 is transcription mode (§3 A3)
     [JsonIgnore] public double ScoreLeadInBeats { get; init; }       // where the score import's tick 0 lies in the MIDI
+    [JsonIgnore] public bool ReviewedSections { get; init; }         // SectionBoundaries is set: data.Sections are level 1 (§7 E6)
     [JsonIgnore] public bool Transcription => TimingToleranceBeats > 0;
 
     static readonly JsonSerializerOptions Overrides = new() { PropertyNameCaseInsensitive = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
@@ -77,13 +81,14 @@ public sealed record MotifSettings
         {
             // System.Text.Json skips ignored members silently; these belong to song.json itself.
             foreach (var p in json.EnumerateObject())
-                if (p.Name.Equals(nameof(TimingToleranceBeats), StringComparison.OrdinalIgnoreCase) || p.Name.Equals(nameof(ScoreLeadInBeats), StringComparison.OrdinalIgnoreCase) || p.Name.Equals(nameof(Transcription), StringComparison.OrdinalIgnoreCase))
-                    throw new ArgumentException($"song.json \"Motifs\": {p.Name} comes from the song's own PatternTimingToleranceBeats and ScoreLeadInBeats");
+                if (p.Name.Equals(nameof(TimingToleranceBeats), StringComparison.OrdinalIgnoreCase) || p.Name.Equals(nameof(ScoreLeadInBeats), StringComparison.OrdinalIgnoreCase) || p.Name.Equals(nameof(Transcription), StringComparison.OrdinalIgnoreCase)
+                    || p.Name.Equals(nameof(ReviewedSections), StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException($"song.json \"Motifs\": {p.Name} comes from the song's own PatternTimingToleranceBeats, ScoreLeadInBeats and SectionBoundaries");
             try { settings = json.Deserialize<MotifSettings>(Overrides) ?? settings; }
             catch (JsonException e) { throw new ArgumentException("song.json \"Motifs\" overrides: " + e.Message, e); }
         }
         else if (motifs is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) }) throw new ArgumentException("song.json \"Motifs\" must be an object of parameter overrides");
-        if (settings.SlotsPerTactus < 1 || settings.GridDivisions.Length == 0 || settings.WindowBars.Length == 0) throw new ArgumentException("song.json \"Motifs\": slots, grids and window lengths must be positive");
-        return settings with { TimingToleranceBeats = Math.Max(0, song?.PatternTimingToleranceBeats ?? 0), ScoreLeadInBeats = song?.ScoreLeadInBeats ?? 0 };
+        if (settings.SlotsPerTactus < 1 || settings.GridDivisions.Length == 0 || settings.WindowBars.Length == 0 || settings.DiscoveryPaths < 1 || settings.BarColumnsAbove < 2) throw new ArgumentException("song.json \"Motifs\": slots, grids, window lengths and path counts must be positive");
+        return settings with { TimingToleranceBeats = Math.Max(0, song?.PatternTimingToleranceBeats ?? 0), ScoreLeadInBeats = song?.ScoreLeadInBeats ?? 0, ReviewedSections = !string.IsNullOrWhiteSpace(song?.SectionBoundaries) };
     }
 }

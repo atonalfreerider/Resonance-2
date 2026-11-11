@@ -43,6 +43,7 @@ public sealed class Iteration
         public int[] First = Array.Empty<int>(), Size = Array.Empty<int>(), Struck = Array.Empty<int>();
         public ColumnNote[] Notes = Array.Empty<ColumnNote>();   // per column, by (hand, slot, pitch, morph)
         public double Theta = double.NaN;                         // §7 E2's θ; NaN: no near relation
+        public int Reach = 1;                                     // sim_k matches notes this many slots apart: one, or a transcription grid's step
         int[] byMorph = Array.Empty<int>();                      // per column, its notes by (hand, slot, morph, pitch)
         MotifGrid grid; KeyFrames frames; MotifEvent[] events;
         readonly Dictionary<long, Pair> cache = new();            // (u, v) → their relation: looked up only
@@ -68,7 +69,10 @@ public sealed class Iteration
                     (lists[d] ??= new List<ColumnNote>()).Add(new ColumnNote { Event = i, Hand = hand, Tied = true, Pitch = e.Pitch, Morph = e.Morph, Alter = e.Alter });
                 }
             }
-            var cols = new Columns { Count = count, First = new int[count], Size = new int[count], Struck = new int[count], Theta = theta, grid = grid, frames = input.Frames, events = ev };
+            // A transcription's onsets lie on its grid (a sixteenth at a quarter tactus, §3 A3), so a note a grid step off still
+            // matches there; a score's lie a slot apart at most.
+            var cols = new Columns { Count = count, First = new int[count], Size = new int[count], Struck = new int[count], Theta = theta, grid = grid, frames = input.Frames, events = ev,
+                Reach = input.Settings.Transcription ? Math.Max(1, input.Settings.SlotsPerTactus / 4) : 1 };
             var notes = new List<ColumnNote>(); var byMorph = new List<int>();
             for (int c = 0; c < count; c++)
             {
@@ -129,51 +133,67 @@ public sealed class Iteration
         }
 
         // §7 E1's sim_k(u, v) for k = from … to, into sims[k − from]: the notes of u matched greedily to those of v in the same
-        // hand class at most a slot apart, first at the pitch moved by k (weight 1), then an octave off it (0.8), then a
+        // hand class at most a slot apart (Reach), first at the pitch moved by k (weight 1), then an octave off it (0.8), then a
         // semitone off it where the morph moves by the pair's modal shift (0.7, tonal credit: the modal shift of the exact
         // matches, else of the semitone-off pairs); Dice over both columns, 0 when either is silent. Each note of u takes the
-        // unused fitting note of v nearest in slot (the earlier on a tie). The candidate pairs do not depend on k, so they are
-        // listed once and each k walks only them. It allocates nothing for ordinary columns and only reads, so stage E may
-        // call it from parallel rows (Relate, with its cache, is stage D's alone).
+        // unused fitting note of v nearest in slot (the earlier on a tie). The candidate pairs do not depend on k: they are
+        // listed once (a column's notes are sorted by hand and slot, so each note's partners are ranges: its slot, then the slot
+        // before and the slot after, nearer first), and a candidate whose pitch moves by d matters only for k = d, d ± 12, d ± 1, so
+        // each k walks only its own bucket, in candidate order (stage E computes all 13 for every pair of columns, §11). It
+        // allocates nothing once its per-thread scratch has grown and only reads, so stage E may call it from parallel rows
+        // (Relate, with its cache, is stage D's alone).
+        [ThreadStatic] static int[] scratch;
+        static readonly int[] Offsets = { 0, -12, 12, -1, 1 };
         public void Similarities(int u, int v, int from, int to, Span<double> sims)
         {
-            int nu = Size[u], nv = Size[v], fu = First[u], fv = First[v];
-            if (nu == 0 || nv == 0) { sims[..(to - from + 1)].Clear(); return; }
-            int capacity = nu * nv;
-            Span<int> first = nu < 256 ? stackalloc int[nu + 1] : new int[nu + 1];
-            Span<int> partner = capacity <= 1024 ? stackalloc int[capacity] : new int[capacity];
-            Span<int> dp = capacity <= 1024 ? stackalloc int[capacity] : new int[capacity];
-            Span<int> dm = capacity <= 1024 ? stackalloc int[capacity] : new int[capacity];
-            Span<int> shifts = capacity <= 1024 ? stackalloc int[capacity] : new int[capacity];
-            Span<bool> usedU = nu <= 256 ? stackalloc bool[nu] : new bool[nu], usedV = nv <= 256 ? stackalloc bool[nv] : new bool[nv];
+            int nu = Size[u], nv = Size[v], fu = First[u], fv = First[v], ks = to - from + 1;
+            if (nu == 0 || nv == 0) { sims[..ks].Clear(); return; }
+            int capacity = nu * nv, need = 10 * capacity + 2 * ks + 1 + nu + nv, ranges = 2 * Reach + 1;
+            var buffer = scratch;
+            if (buffer == null || buffer.Length < need) scratch = buffer = new int[Math.Max(need, 4096)];
+            var all = buffer.AsSpan(0, need);
+            Span<int> own = all[..capacity], partner = all.Slice(capacity, capacity), dp = all.Slice(2 * capacity, capacity), dm = all.Slice(3 * capacity, capacity);
+            Span<int> bucket = all.Slice(4 * capacity, 5 * capacity), shifts = all.Slice(9 * capacity, capacity), start = all.Slice(10 * capacity, ks + 1), fill = all.Slice(10 * capacity + ks + 1, ks);
+            Span<int> usedU = all.Slice(10 * capacity + 2 * ks + 1, nu), usedV = all.Slice(10 * capacity + 2 * ks + 1 + nu, nv);
+            usedU.Clear(); usedV.Clear(); start.Clear();
             int n = 0;
             for (int i = 0; i < nu; i++)
             {
-                first[i] = n; var a = Notes[fu + i];
-                for (int gap = 0; gap <= 1; gap++)   // the nearest slot first, then the earlier note
-                    for (int j = 0; j < nv; j++)
+                var a = Notes[fu + i];
+                for (int g = 0; g < ranges; g++)   // the nearest slot first, then the earlier note
+                {
+                    int slot = g == 0 ? a.Slot : g % 2 == 1 ? a.Slot - (g + 1) / 2 : a.Slot + g / 2;
+                    for (int j = LowerBound(fv, nv, a.Hand, slot), end = LowerBound(fv, nv, a.Hand, slot + 1); j < end; j++)
                     {
                         var b = Notes[fv + j];
-                        if (b.Hand == a.Hand && Math.Abs(b.Slot - a.Slot) == gap) { partner[n] = j; dp[n] = b.Pitch - a.Pitch; dm[n] = b.Morph - a.Morph; n++; }
+                        own[n] = i; partner[n] = j; dp[n] = b.Pitch - a.Pitch; dm[n] = b.Morph - a.Morph; n++;
                     }
+                }
             }
-            first[nu] = n;
+            for (int c = 0; c < n; c++) foreach (int o in Offsets) { int k = dp[c] + o; if (k >= from && k <= to) start[k - from + 1]++; }
+            for (int x = 0; x < ks; x++) { start[x + 1] += start[x]; fill[x] = start[x]; }
+            for (int c = 0; c < n; c++) foreach (int o in Offsets) { int k = dp[c] + o; if (k >= from && k <= to) bucket[fill[k - from]++] = c; }
             for (int k = from; k <= to; k++)
             {
-                usedU.Clear(); usedV.Clear();
+                int b0 = start[k - from], b1 = start[k - from + 1], stamp = k - from + 1;
+                if (b0 == b1) { sims[k - from] = 0; continue; }
                 int exact = 0, octave = 0, tonal = 0, count = 0;
-                for (int i = 0; i < nu; i++)
-                    for (int c = first[i]; c < first[i + 1]; c++)
-                        if (!usedV[partner[c]] && dp[c] == k) { usedU[i] = usedV[partner[c]] = true; exact++; shifts[count++] = dm[c]; break; }
-                for (int i = 0; i < nu; i++)
-                    if (!usedU[i])
-                        for (int c = first[i]; c < first[i + 1]; c++)
-                            if (!usedV[partner[c]] && Math.Abs(dp[c] - k) == 12) { usedU[i] = usedV[partner[c]] = true; octave++; break; }
+                for (int x = b0; x < b1; x++)
+                {
+                    int c = bucket[x]; if (dp[c] != k || usedU[own[c]] == stamp || usedV[partner[c]] == stamp) continue;
+                    usedU[own[c]] = usedV[partner[c]] = stamp; exact++; shifts[count++] = dm[c];
+                }
+                for (int x = b0; x < b1; x++)
+                {
+                    int c = bucket[x]; if (Math.Abs(dp[c] - k) != 12 || usedU[own[c]] == stamp || usedV[partner[c]] == stamp) continue;
+                    usedU[own[c]] = usedV[partner[c]] = stamp; octave++;
+                }
                 if (count == 0)
-                    for (int i = 0; i < nu; i++)
-                        if (!usedU[i])
-                            for (int c = first[i]; c < first[i + 1]; c++)
-                                if (!usedV[partner[c]] && Math.Abs(dp[c] - k) == 1) shifts[count++] = dm[c];
+                    for (int x = b0; x < b1; x++)
+                    {
+                        int c = bucket[x];
+                        if (Math.Abs(dp[c] - k) == 1 && usedU[own[c]] != stamp && usedV[partner[c]] != stamp) shifts[count++] = dm[c];
+                    }
                 if (count > 0)
                 {
                     var found = shifts[..count]; found.Sort();
@@ -184,13 +204,22 @@ public sealed class Iteration
                         if (j - i > most || j - i == most && Math.Abs(found[i]) < Math.Abs(modal)) { most = j - i; modal = found[i]; }
                         i = j;
                     }
-                    for (int i = 0; i < nu; i++)
-                        if (!usedU[i])
-                            for (int c = first[i]; c < first[i + 1]; c++)
-                                if (!usedV[partner[c]] && Math.Abs(dp[c] - k) == 1 && dm[c] == modal) { usedU[i] = usedV[partner[c]] = true; tonal++; break; }
+                    for (int x = b0; x < b1; x++)
+                    {
+                        int c = bucket[x];
+                        if (Math.Abs(dp[c] - k) != 1 || dm[c] != modal || usedU[own[c]] == stamp || usedV[partner[c]] == stamp) continue;
+                        usedU[own[c]] = usedV[partner[c]] = stamp; tonal++;
+                    }
                 }
                 sims[k - from] = 2 * (exact + .8 * octave + .7 * tonal) / (nu + nv);
             }
+        }
+        // The first of column notes [f, f + count) at or after (hand, slot) in their (hand, slot) order.
+        int LowerBound(int f, int count, int hand, int slot)
+        {
+            int lo = 0, hi = count;
+            while (lo < hi) { int mid = (lo + hi) >> 1; var x = Notes[f + mid]; if (x.Hand < hand || x.Hand == hand && x.Slot < slot) lo = mid + 1; else hi = mid; }
+            return lo;
         }
         public double Similarity(int u, int v, int k) { Span<double> sim = stackalloc double[1]; Similarities(u, v, k, k, sim); return sim[0]; }
         // §7 E1's S(u, v) = max over k of sim_k − 0.04 for a transposed match, and K(u, v), its argmax (the smaller |k| on a

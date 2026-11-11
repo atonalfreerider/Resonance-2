@@ -19,12 +19,14 @@ public static partial class SelfTests
         MotifReduction(verbose);
         MotifCells(verbose);
         MotifIteration(verbose);
+        MotifReturns(verbose);
         Console.WriteLine("PASS: motif contract (F24) — a version 6 layer round-trips with the §13.1 field names, HasMotifs is not written, a version 5 bundle reads as Schema 0");
         Console.WriteLine("PASS: motif ingest — tick grid, metric weights and printed bars after a silent lead-in, score import (scaled ticks, staves, voices, tpc, graces, directions), transcription snap, skyline and voice streams, principal stream; B♭ minor's leading tone is A (F28)");
         Console.WriteLine("PASS: motif transform group — costs, composition, images, stabilisers and orders; names: tonal sequence up a second (F3), the leading tone of A minor (F4), the parallel minor (F5)");
         Console.WriteLine("PASS: motif reduction (F25) — diminution tokens E4[N− Rep] F4[N+ Rep Rep], appoggiaturas and turns; arrivals at bars 4 (half), 8, 12 (half), 16 cut a period into 4 + 4 + 4 + 4, never at a decorated held note");
         Console.WriteLine("PASS: motif cells (F1–F6, F14, F18, F26, F27) — neighbour chirality, exact mirror, tonal and tonicizing sequences, parallel minor, modal mixture, ornamented and lengthened-head variants, distinct figures, phase on beat 2; every member decodes from its prototype");
         Console.WriteLine("PASS: motif iteration (F7–F10, F15–F17, F20) — tritone and diminished-seventh cycles, an alternation, doubling with contrary motion, liquidation, a nested power and a two-cell unit power, drum loops; F3's sequence as a power; the near relation extends an exact sequence");
+        Console.WriteLine("PASS: motif returns (F11–F13 at level 1, F19, F21) — the étude-shaped ternary is A B A′ with A′ = A − (a2 a1′) + coda and a1′ ≅ a1 inside A; a head-deleted reprise; the omission stays a2 + a1′ when a1′ equals a1 and under transcription noise; pop sections verbatim with (V2 C2) ← (V1 C1) and C3 ← C1 a whole tone up");
     }
 
     // Line(score, startBeat, "C4/8 B3/16 C4/16 D4/16*5 …"): a monophonic line, note after note. A token is
@@ -803,5 +805,259 @@ public static partial class SelfTests
         var again = Iteration.Build(drumsInput, drumsLex);
         Check(again.Relations.Length == drumsIt.Relations.Length && again.Relations.Zip(drumsIt.Relations).All(p => p.First.Start == p.Second.Start && p.First.End == p.Second.End && p.First.Kind == p.Second.Kind && p.First.Count == p.Second.Count && p.First.Text == p.Second.Text)
             && again.Labels.Select(l => l.Text).SequenceEqual(drumsIt.Labels.Select(l => l.Text)), "motif iteration: two runs give the same relations");
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Stage E (§7): returns and sections.
+
+    // F11's A and A′: the étude's principal line (the right hand's first voice) and bass (the left hand's lowest note at each of
+    // its onsets), transposed down a major third to C major; Chopin's Op. 10 No. 3 is in the public domain. Bars 0–20 and the
+    // arrival on 21.1 (its first beat only), then bars 62–77. Tokens: pitch@onset/length in sixteenths from the bar line; a
+    // grace note is a sixty-fourth just before its host (A♯4 → F♯4 in bars 7–8), as a MIDI-only grace is found by its length.
+    static readonly (string melody, string bass)[] EtudeA =
+    {
+        ("G3@0/2", ""),   // 0, the pickup
+        ("C4@0/2 B3@2/1 C4@3/1 D4@4/5", "C2@0/4 G2@1/2 G2@3/1 G1@4/4 G2@5/2 G2@7/1"),
+        ("E4@1/1 E4@2/1 D4@3/1 C4@4/4 E4@4/5", "G1@0/4 G2@1/2 G2@3/1 C2@4/4 G2@5/2 G2@7/1"),
+        ("F4@1/1 F4@2/1 E4@3/1 A4@4/3 G4@7/1", "C2@0/4 G2@1/2 G2@3/1 G1@4/4 G2@5/2 G2@7/1"),
+        ("F4@0/1 E4@1/1 B3@2/1 C4@3/1 D4@4/5", "C2@0/4 G2@1/2 G2@3/1 G1@4/4 G2@5/2 G2@7/1"),
+        ("E4@1/1 E4@2/1 D4@3/1 C4@4/4", "G1@0/4 G2@1/2 G2@3/1 C2@4/4 G2@5/2 G2@7/1"),   // 5, arrival on 5.2
+        ("E4@0/1 F4@1/1 D4@2/1 E4@3/1 F4@4/1 G4@5/1 E4@6/1 F4@7/1", "C2@0/4 C3@1/2 C3@3/1 F2@4/4 C3@5/2 C3@7/1"),
+        ("A4@0/2 D4@2/4 F#4@5.75/0.25 E4@6/1 D4@7/3", "F2@0/4 D3@1/2 D3@3/1 G2@4/4 D3@5/2 D3@7/1"),
+        ("F#4@1.75/0.25 E4@2/1 D4@3/1 B3@4/4 G4@4/4", "A2@0/4 D3@1/2 D3@3/1 G2@4/4 D3@5/2 D3@7/1"),   // 8, half arrival on 8.2
+        ("C4@0/2 E4@0/2 B3@2/1 C4@3/1 D4@4/5", "C2@0/4 G2@1/2 G2@3/1 G1@4/4 G2@5/2 G2@7/1"),   // 9 = 1 with E4 added
+        ("E4@1/1 E4@2/1 D4@3/1 C4@4/4 E4@4/5", "G1@0/4 G2@1/2 G2@3/1 C2@4/4 G2@5/2 G2@7/1"),
+        ("F4@1/1 F4@2/1 E4@3/1 A4@4/3 G4@7/1", "C2@0/4 G2@1/2 G2@3/1 G1@4/4 G2@5/2 G2@7/1"),
+        ("F4@0/1 E4@1/1 B3@2/1 C4@3/1 D4@4/5", "C2@0/4 G2@1/2 G2@3/1 G1@4/4 G2@5/2 G2@7/1"),
+        ("E4@1/1 E4@2/1 D4@3/1 C4@4/4", "G1@0/4 G2@1/2 G2@3/1 C2@4/4 G2@5/2 G2@7/1"),   // 13, arrival on 13.2
+        ("G4@0/1 A4@1/1 A4@2/1 G4@3/1 F4@4/1 G4@5/1 E4@6/1 F4@7/1", "C2@0/4 C3@1/2 C3@3/1 F2@4/4 C3@5/2 C3@7/1"),
+        ("B4@0/1 C5@1/1 C5@2/1 B4@3/1 A4@4/1 B4@5/1 G#4@6/1 A4@7/1", "E2@0/4 E3@1/2 E3@3/1 A2@4/4 E3@5/2 E3@7/1"),
+        ("C4@0/1 F#4@0/1 C5@0/1 D4@1/1 F#4@1/1 D5@1/1 B3@2/1 F#4@2/1 B4@2/1 C4@3/1 F#4@3/1 C5@3/1 D4@4/1 F#4@4/1 D5@4/1 E4@5/1 F#4@5/1 E5@5/1 C4@6/1 F#4@6/1 C5@6/1 D4@7/1 F#4@7/1 D5@7/1", "A2@0/1 A2@1/1 A2@2/1 A2@3/1 G#2@4/1 G#2@5/1 G#2@6/1 G#2@7/1"),
+        ("C5@0/4 E5@0/5 D5@5/1 C5@6/1 A4@7/1", "G2@0/8"),   // 17, the sigh head
+        ("B4@0/4 C5@4/1 B4@5/1 A4@6/1 E4@7/1", "D3@0/1 G3@1/1 G2@2/1 G3@3/1 A2@4/1 E3@5/1 E2@6/1 E3@7/1"),
+        ("G4@0/4 A4@4/1 G4@5/1 F4@6/1 C4@7/1", "B2@0/1 E3@1/1 E2@2/1 E3@3/1 F2@4/1 C3@5/1 C2@6/1 C3@7/1"),
+        ("E4@0/7.2 D4@7.2/0.8", "G2@0/1 C3@1/1 C2@2/1 C3@3/1 G2@4/1 C3@5/1 C2@6/6 G2@7/5"),   // 20, the cadential six-four
+        ("C4@0/4", "C3@0/4"),   // 21.1, the arrival that closes A
+    };
+    static readonly (string melody, string bass)[] EtudeReprise =
+    {
+        ("C4@0/2 B3@2/1 C4@3/1 D4@4/5", "C2@0/4 G2@1/2 G2@3/1 G1@4/4 G2@5/2 G2@7/1"),   // 62, Tempo I
+        ("E4@1/1 E4@2/1 D4@3/1 C4@4/4 E4@4/5", "G1@0/4 G2@1/2 G2@3/1 C2@4/4 G2@5/2 G2@7/1"),
+        ("F4@1/1 F4@2/1 E4@3/1 A4@4/3 G4@7/1", "C2@0/4 G2@1/2 G2@3/1 G1@4/4 G2@5/2 G2@7/1"),
+        ("F4@0/1 E4@1/1 B3@2/1 C4@3/1 D4@4/5", "C2@0/4 G2@1/2 G2@3/1 G1@4/4 G2@5/2 G2@7/1"),
+        ("E4@1/1 E4@2/1 D4@3/1 C4@4/4", "G1@0/4 G2@1/2 G2@3/1 C2@4/4 G2@5/2 G2@7/1"),
+        ("G4@0/1 A4@1/1 A4@2/1 G4@3/1 F4@4/1 G4@5/1 E4@6/1 F4@7/1", "C2@0/4 C3@1/2 C3@3/1 F2@4/4 C3@5/2 C3@7/1"),
+        ("B4@0/1 C5@1/1 C5@2/1 B4@3/1 A4@4/1 B4@5/1 G#4@6/1 A4@7/1", "E2@0/4 E3@1/2 E3@3/1 A2@4/4 E3@5/2 E3@7/1"),
+        ("C4@0/1 F#4@0/1 C5@0/1 D4@1/1 F#4@1/1 D5@1/1 B3@2/1 F#4@2/1 B4@2/1 C4@3/1 F#4@3/1 C5@3/1 D4@4/1 F#4@4/1 D5@4/1 E4@5/1 F#4@5/1 E5@5/1 C4@6/1 F#4@6/1 C5@6/1 D4@7/1 F#4@7/1 D5@7/1", "A2@0/1 A2@1/1 A2@2/1 A2@3/1 G#2@4/1 G#2@5/1 G#2@6/1 G#2@7/1"),
+        ("C5@0/4 E5@0/5 D5@5/1 C5@6/1 A4@7/1", "G2@0/8"),
+        ("B4@0/4 C5@4/1 B4@5/1 A4@6/1 E4@7/1", "D3@0/1 G3@1/1 G2@2/1 G3@3/1 A2@4/1 E3@5/1 E2@6/1 E3@7/1"),
+        ("G4@0/4 A4@4/1 G4@5/1 F4@6/1 C4@7/1", "B2@0/1 E3@1/1 E2@2/1 E3@3/1 F2@4/1 C3@5/1 C2@6/1 C3@7/1"),
+        ("E4@0/5 D4@5/1 C4@6/1 G#3@7/1", "G2@0/1 C3@1/1 C2@2/1 C3@3/1 G#2@4/1 C3@5/1 C2@6/1 C3@7/1"),   // 73, the coda: the sigh an octave lower, A♭3 = ♭6
+        ("E4@0/5 D4@5/1 C4@6/1 G#3@7/1", "G2@0/1 C3@1/1 C2@2/1 C3@3/1 G#2@4/1 C3@5/1 C2@6/1 C3@7/1"),
+        ("E4@0/13", "G2@0/1 C3@1/1 C2@2/1 C3@3/1 G2@4/1 C3@5/1 C2@6/1 C3@7/1"),   // 75, the head held 13/16
+        ("D4@5/1 C4@6/1 G3@7/1", "G2@0/1 C3@1/1 C2@2/1 C3@3/1 G2@4/1 C3@5/1 C2@6/1 G2@7/9"),
+        ("E3@0/8 C4@0/8", "C2@0/8"),   // 77, the final arrival
+    };
+    // Writes a bar's "pitch@onset/length" tokens (sixteenths) from the bar's start beat.
+    static void Tokens(Score score, double bar, string tokens, int track, int channel, float velocity)
+    {
+        foreach (string token in tokens.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int at = token.IndexOf('@'), slash = token.IndexOf('/');
+            double onset = double.Parse(token[(at + 1)..slash], System.Globalization.CultureInfo.InvariantCulture), length = double.Parse(token[(slash + 1)..], System.Globalization.CultureInfo.InvariantCulture);
+            score.Note(bar + onset / 4, length / 4, ScorePitch(token[..at]), velocity, channel, track);
+        }
+    }
+    // F11 (motif-ternary, also the Unity fixture): 2/4 after a 1/8 pickup, C major. A is the étude's bars 0–21.1; B is twenty
+    // synthetic bars from 21.2: a 2-bar unit of lilting sixths U twice, then a step higher twice ((U²)² ↑1, 21.2–29.1); left-hand
+    // tritones falling a semitone each sixteenth under falling right-hand quarters (29.2–33.1); a 2-bar unit of alternating
+    // sixths twice (33.2–37.1); a beat on the dominant; four bars liquidating 8 → 4 → 2 over a dominant pedal (38–41). A′ is the
+    // étude's bars 62–77 (fixture bars 42–57). Printed bar b ≥ 1 starts at beat 0.5 + 2(b − 1). plainNine: F13, bar 9 without
+    // its added E4, so a1′ equals a1.
+    static Score TernaryMotifScore(bool plainNine = false)
+    {
+        var s = new Score();
+        s.Bars.Add(new MidiCycleAnalysis.Bar { Start = 0, End = .5, Numerator = 1, Denominator = 8 }); s.Beat = .5;
+        Bars(s, 57, 2);
+        static double BarAt(int b) => b == 0 ? 0 : .5 + 2 * (b - 1);
+        const float melody = 96 / 127f, low = 80 / 127f;
+        for (int b = 0; b < EtudeA.Length; b++)
+        {
+            Tokens(s, BarAt(b), plainNine && b == 9 ? EtudeA[1].melody : EtudeA[b].melody, 3, 3, melody);
+            Tokens(s, BarAt(b), EtudeA[b].bass, 2, 2, low);
+        }
+        for (int b = 0; b < EtudeReprise.Length; b++) { Tokens(s, BarAt(42 + b), EtudeReprise[b].melody, 3, 3, melody); Tokens(s, BarAt(42 + b), EtudeReprise[b].bass, 2, 2, low); }
+        const string U = "E4+C5/16 D4+B4/16 E4+C5/8 B3+G4/8 C4+A4/8 D4+B4/16 C4+A4/16 D4+B4/8 G3+E4/4", U1 = "F4+D5/16 E4+C5/16 F4+D5/8 C4+A4/8 D4+B4/8 E4+C5/16 D4+B4/16 E4+C5/8 A3+F4/4";
+        double at = BarAt(21) + 1;
+        foreach (bool up in new[] { false, false, true, true }) { Line(s, at, up ? U1 : U); Line(s, at, up ? "D3/4 B2/4 A2/4 D3/4" : "C3/4 A2/4 G2/4 C3/4", 2, 2, low); at += 4; }
+        for (int k = 0; k < 32; k++) foreach (string p in new[] { "F#4", "C5" }) s.Note(at + k / 4.0, .25, ScorePitch(p) - k, low, 2, 2);
+        Line(s, at, "B4/4 A#4/4 A4/4 G#4/4 G4/4 F#4/4 F4/4 E4/4"); at += 8;
+        for (int k = 0; k < 2; k++)
+        {
+            Line(s, at, string.Concat(Enumerable.Repeat("E4+C5/16 G4+E5/16 ", 4)) + string.Concat(Enumerable.Repeat("D4+B4/16 F4+D5/16 ", 4)));
+            Line(s, at, "C3/2 G2/2", 2, 2, low); at += 4;
+        }
+        Line(s, at, "B3+G4/4"); Line(s, at, "G2/4", 2, 2, low); at += 1;
+        Line(s, at, "G4/16 A4/16 B4/16 D5/16 C5/16 B4/16 A4/16 G4/16 G4/16 A4/16 B4/16 D5/16 C5/16 B4/16 A4/16 G4/16 B4/16 C5/16 D5/16 C5/16 B4/16 C5/16 D5/16 C5/16"
+            + string.Concat(Enumerable.Repeat(" D5/16 C5/16", 4)));
+        Line(s, at, "G2/2 G2/2 G2/2 G2/2", 2, 2, low);
+        return s;
+    }
+
+    // Stages A–E on a fixture: the lexicon (every member decoding) and the returns.
+    static (MotifInput input, CellLexicon lex, Returns ret) Returned(Score score, string name, bool verbose, SongSettings song = null)
+    {
+        var input = Ingest(score, out var data, song: song);
+        var lex = CellLexicon.Build(input);
+        Check(lex.DecodeErrors.Length == 0, $"{name}: every member decodes: " + string.Join("; ", lex.DecodeErrors));
+        if (verbose) { Console.WriteLine($"  {name} returns:"); Returns.Trace = x => Console.WriteLine("  " + x); }
+        var ret = Returns.Build(input, lex, data);
+        Returns.Trace = null;
+        if (verbose) DumpReturns(input, ret, lex);
+        var again = Returns.Build(input, lex, data);
+        Check(again.DescribeSections() == ret.DescribeSections() && again.All.Select(again.Describe).SequenceEqual(ret.All.Select(ret.Describe)) && again.Theta == ret.Theta, $"{name}: two runs give the same sections and scripts");
+        return (input, lex, ret);
+    }
+    static void DumpReturns(MotifInput input, Returns ret, CellLexicon lex = null)
+    {
+        double q = input.Ppq;
+        int principal = input.Streams.Principal;
+        if (lex != null && principal >= 0 && lex.Lines[principal] != null)
+            Console.WriteLine("    arrivals: " + string.Join(", ", Diminution.Arrivals(input, lex.Lines[principal]).Select(a => $"{a.Tick / q:0.###}{(a.Full ? "" : " (half)")}")));
+        Console.WriteLine($"    θ {ret.Theta:0.###}; sections {ret.DescribeSections()}");
+        foreach (var r in ret.All) Console.WriteLine($"    level {r.Level} return {r.Id}: [{r.SourceStart / q:0.###}, {r.SourceEnd / q:0.###}) → [{r.Start / q:0.###}, {r.End / q:0.###}) k {r.K}: {ret.Describe(r)}; omits {string.Join(", ", r.Omitted.Select(o => $"[{o.Start / q:0.###}, {o.End / q:0.###})"))}");
+        for (int i = 0; i < ret.Sections.Length; i++) Console.WriteLine($"    cuts of {ret.Sections[i].Label}: {string.Join(" ", ret.Cuts[i].Select(c => $"{c.Tick / q:0.###}{(c.Arrival ? "" : "*")}"))}");
+    }
+    static bool Near(long tick, double beat, double tolerance) => Math.Abs(tick / (double)MotifPpq - beat) <= tolerance + 1e-9;
+    // The level-1 returns' deletions, in beats.
+    static (double start, double end)[] Deleted(Returns ret) => ret.All.Where(r => r.Level == 1).SelectMany(r => r.Script).Where(e => e.Op == PreparedPatternSong.MotifEdits.Delete)
+        .Select(e => (e.SourceStart / (double)MotifPpq, e.SourceEnd / (double)MotifPpq)).ToArray();
+    // Level 1 is A B A′, A′ restating A, with the boundaries within tolerance of a and b.
+    static void Ternary(Returns ret, string name, double a, double b, double tolerance)
+    {
+        var s = ret.Sections;
+        Check(s.Length == 3 && s[0].Label == "A" && s[1].Label == "B" && s[2].Label == "A′" && s[0].Kind == Returns.PrototypeKind && s[1].Kind == Returns.ComplementKind && s[2].Kind == Returns.CopyKind && s[2].Prototype == 0
+            && Near(s[1].Start, a, tolerance) && Near(s[2].Start, b, tolerance), $"{name}: level 1 is A B A′ with A′ restating A, boundaries at {a} and {b} (±{tolerance}): {ret.DescribeSections()}");
+    }
+    static string Omits(Returns.Return r) => string.Join(", ", r.Omitted.Select(o => $"[{o.Start / (double)MotifPpq}, {o.End / (double)MotifPpq})"));
+
+    static void MotifReturns(bool verbose)
+    {
+        const int Match = PreparedPatternSong.MotifEdits.Match, Delete = PreparedPatternSong.MotifEdits.Delete, Insert = PreparedPatternSong.MotifEdits.Insert, Substitute = PreparedPatternSong.MotifEdits.Substitute;
+
+        // F11: the étude-shaped ternary. A [0, 41.5) closes on its arrival at 21.1, B from 21.2, A′ from 42.1 (82.5), its coda
+        // from 53.1 (104.5).
+        var (_, _, ret) = Returned(TernaryMotifScore(), "F11", verbose);
+        Ternary(ret, "F11", 41.5, 82.5, .5);
+        var level1 = ret.All.Where(r => r.Level == 1).ToArray();
+        Check(level1.Length == 1 && level1[0].Section == 2 && level1[0].SourceSection == 0 && level1[0].K == 0 && ret.Sections[2].Return == level1[0].Id, "F11: one level-1 return, A′ ← A");
+        var deleted = Deleted(ret);
+        Check(deleted.Length == 1 && Math.Abs(deleted[0].start - 10.5) <= 1 && Math.Abs(deleted[0].end - 26.5) <= 1, $"F11: the return deletes exactly a2 + a1′, bars 6–13 = [10.5, 26.5) (±1 beat): {ret.Describe(level1[0])}");
+        var script = level1[0].Script;
+        Check(script.Length == 4 && script[0].Op == Match && Near(script[0].SourceStart, .5, 0) && Near(script[0].TargetStart, 82.5, 0) && script[1].Op == Delete && script[2].Op == Match
+            && script[3].Op == Insert && Near(script[3].TargetStart, 104.5, 1) && Near(script[3].TargetEnd, 114.5, 0),
+            $"F11: A′ restates A from bar 1, leaves out bars 6–13 and ends with the coda's insert from 53.1: {ret.Describe(level1[0])}");
+        Check(level1[0].Omitted.Length == 2 && Near(level1[0].Omitted[0].Start, 10.5, 0) && Near(level1[0].Omitted[0].End, 16.5, 0) && Near(level1[0].Omitted[1].Start, 16.5, 0) && Near(level1[0].Omitted[1].End, 26.5, 0)
+            && ret.Sections[2].CodaStart >= 0 && Near(ret.Sections[2].CodaStart, 104.5, 1),
+            $"F11: the omitted phrases are a2 [10.5, 16.5) and a1′ [16.5, 26.5), and the coda starts with the sigh at 53.1: omits {Omits(level1[0])}, coda {ret.Sections[2].CodaStart / (double)MotifPpq}");
+        var inner = ret.All.Where(r => r.Level == 2 && r.Section == 0).ToArray();
+        Check(inner.Length == 1 && Near(inner[0].SourceStart, .5, 0) && Near(inner[0].Start, 16.5, 0) && Near(inner[0].End, 26.5, 0)
+            && inner[0].Script.Count(e => e.Op == Substitute) == 1 && inner[0].Script.Single(e => e.Op == Substitute) is var sub && Near(sub.TargetStart, 16.5, 0) && Near(sub.TargetEnd, 17.5, 0),
+            "F11: inside A, a1′ ≅ a1 with one substitution at 9.1 (the added E4): " + string.Join("; ", inner.Select(ret.Describe)));
+        Check(ret.Cuts[0].Select(c => c.Tick / (double)MotifPpq).SequenceEqual(new[] { 10.5, 16.5, 26.5 }), "F11: A's phrase cuts are 6.1, 9.1 and 14.1 (the pickup and 5 + 3 + 5 + 7 bars): " + string.Join(" ", ret.Cuts[0].Select(c => c.Tick / (double)MotifPpq)));
+
+        // F13: the same with a1′ identical to a1. With no exact-surface hint, the phrase edges and then the earliest source still
+        // place the deletion on a2 + a1′.
+        (_, _, ret) = Returned(TernaryMotifScore(plainNine: true), "F13", verbose);
+        Ternary(ret, "F13", 41.5, 82.5, .5);
+        deleted = Deleted(ret);
+        Check(deleted.Length == 1 && Math.Abs(deleted[0].start - 10.5) <= 1 && Math.Abs(deleted[0].end - 26.5) <= 1, "F13: with a1′ = a1 the return still deletes a2 + a1′: " + string.Join("; ", ret.All.Where(r => r.Level == 1).Select(ret.Describe)));
+
+        // F12: a head-deleted reprise in 2/4: x (8 bars, a half cadence) y (12, a full cadence) | B (32 bars of new material) |
+        // y (12) coda (4). B is 32 bars, not §16's 16: the head x joins the hull only within min_lag = L/8 of the first downbeat,
+        // and among 52 bars its 8 would make it an Intro (see the deviations).
+        var f12 = new Score(); Bars(f12, 68, 2);
+        const string x = "E4/8 G4/8 C5/4 B4/8 A4/8 G4/4 A4/8 C5/8 F5/4 E5/8 D5/8 C5/4 D5/8 E5/8 F5/8 D5/8 C5/8 B4/8 A4/4 G4/8 A4/8 B4/8 C5/8 D5/2";
+        const string y = "G5/8 F5/8 E5/8 D5/8 C5/4 E5/4 A4/8 B4/8 C5/8 D5/8 E5/4 C5/4 F5/8 E5/8 D5/8 C5/8 B4/4 G4/4 A4/8 G4/8 F4/8 E4/8 D4/4 G4/4 C5/8 D5/8 E5/8 F5/8 G5/4 E5/4 D5/8 C5/8 B4/8 D5/8 C5/2";
+        const string yBass = "C3/2 A2/2 F2/2 C3/2 D3/2 G2/2 F2/2 G2/2 A2/2 E2/2 G2/2 C2/2";
+        const float bassVelocity = 80 / 127f;
+        Line(f12, 0, x); Line(f12, 0, "C3/4 E3/4 G2/4 B2/4 F2/4 A2/4 C3/4 E3/4 F2/4 D2/4 A2/4 F2/4 G2/2 G2/2", 2, 2, bassVelocity);
+        Line(f12, 16, y); Line(f12, 16, yBass, 2, 2, bassVelocity);
+        var random = new Random(12); string[] minor = { "A", "B", "C", "D", "E", "F", "G#" };
+        for (int b = 0; b < 32; b++)
+        {
+            double start = 40 + 2 * b;
+            for (int k = 0; k < 4; k++) f12.Note(start + k / 2.0, .5, ScorePitch(minor[random.Next(7)] + (5 + random.Next(2))), 96 / 127f, 3, 3);
+            f12.Note(start, 2, ScorePitch(minor[random.Next(7)] + "2"), bassVelocity, 2, 2);
+        }
+        Line(f12, 104, y); Line(f12, 104, yBass, 2, 2, bassVelocity);
+        Line(f12, 128, "C5/4 G4/4 E4/4 C4/4 G4/2 C4/2"); Line(f12, 128, "C3/2 C3/2 G2/2 C2/2", 2, 2, bassVelocity);
+        (_, _, ret) = Returned(f12, "F12", verbose);
+        Ternary(ret, "F12", 40, 104, .5);
+        var reprise = ret.All.Single(r => r.Level == 1);
+        Check(reprise.Script.Length == 3 && reprise.Script[0].Op == Delete && Near(reprise.Script[0].SourceStart, 0, 0) && Near(reprise.Script[0].SourceEnd, 16, 0)
+            && reprise.Script[1].Op == Match && Near(reprise.Script[1].TargetStart, 104, 0) && Near(reprise.Script[1].TargetEnd, 128, 0) && reprise.Script[2].Op == Insert
+            && reprise.Omitted.Length == 1 && Near(reprise.Omitted[0].Start, 0, 0) && Near(reprise.Omitted[0].End, 16, 0) && Near(ret.Sections[2].CodaStart, 128, 0),
+            $"F12: A′ deletes x (omitting its phrase), restates y and adds its coda: {ret.Describe(reprise)}; omits {Omits(reprise)}");
+
+        // F21: F11 under transcription noise (new Random(7)): onsets jittered by σ = ⅛ beat and re-quantised to sixteenths, 3% of
+        // the notes dropped, 2% spurious (±1, ±2 or +12 semitones), transcription mode at 0.125 beat; no voices (MIDI only).
+        (_, _, ret) = Returned(Noisy(TernaryMotifScore(), new Random(7)), "F21", verbose, new SongSettings { PatternTimingToleranceBeats = .125 });
+        Ternary(ret, "F21", 41.5, 82.5, 1);
+        deleted = Deleted(ret);
+        Check(deleted.Length == 1 && Math.Abs(deleted[0].start - 10.5) <= 2 && Math.Abs(deleted[0].end - 26.5) <= 2, "F21: under noise the return still deletes a2 + a1′ (±2 beats): " + string.Join("; ", ret.All.Where(r => r.Level == 1).Select(ret.Describe)));
+
+        // F19: pop. Level 1 is data.Sections verbatim; (V2 C2) ← (V1 C1) is one return spanning both; C3 ← C1 a whole tone up; the
+        // verse holds its 4-bar progression twice; the drums loop.
+        var names = new[] { "", "Keys", "Bass", "Lead Vocal", "Drums" };
+        var cycles = PopScore().Cycles();
+        var form = FormAnalysis.Build(cycles, new SongSettings { Key = 3 }, names);
+        var data = PreparedPatternSong.Capture(cycles, form.Form);
+        data.TrackNames = names; data.Style = form.Style; data.Key = 3; data.LeadVocalTrack = 3;
+        data.Tempos = new[] { new PreparedPatternSong.Tempo { Beat = 0, Seconds = 0, Microseconds = 500000 } };
+        for (int i = 0; i < data.Sections.Length; i++) { var info = form.Sections[i]; data.Sections[i].Label = info.Label; data.Sections[i].Role = info.Role; data.Sections[i].Letter = info.Letter; data.Sections[i].PhraseBars = info.PhraseBars; }
+        FormAnalysis.Apply(form, data);
+        MelodySelection.Build(data);
+        var input = MotifInput.Read(data, cycles, form.Grid, MotifSettings.FromSong(new SongSettings { Key = 3 }), null, MotifPpq);
+        var lex = CellLexicon.Build(input);
+        if (verbose) { Console.WriteLine("  F19 returns:"); Returns.Trace = t => Console.WriteLine("  " + t); }
+        ret = Returns.Build(input, lex, data);
+        Returns.Trace = null;
+        if (verbose) DumpReturns(input, ret);
+        Check(ret.Reviewed && ret.Sections.Length == data.Sections.Length && Enumerable.Range(0, data.Sections.Length).All(i => ret.Sections[i].Start == MotifInput.Ticks(data.Sections[i].Start, MotifPpq) && ret.Sections[i].End == MotifInput.Ticks(data.Sections[i].End, MotifPpq) && ret.Sections[i].Label == data.Sections[i].DisplayName)
+            && string.Join(",", ret.Sections.Select(s => s.Label)) == "Intro,Verse 1,Chorus 1,Verse 2,Chorus 2,Bridge,Chorus 3,Outro", "F19: level 1 is the eight pop sections verbatim: " + ret.DescribeSections());
+        level1 = ret.All.Where(r => r.Level == 1).ToArray();
+        string Pairs() => string.Join("; ", level1.Select(r => $"{r.SourceSection}–{r.LastSourceSection} → {r.Section}–{r.LastSection} k {r.K}"));
+        Check(level1.Count(r => r.Section == 3) == 1 && level1.Single(r => r.Section == 3) is var vc && vc.LastSection == 4 && vc.SourceSection == 1 && vc.LastSourceSection == 2 && vc.K == 0
+            && vc.Start == ret.Sections[3].Start && vc.End == ret.Sections[4].End, "F19: (V2 C2) ← (V1 C1) is one return spanning both: " + Pairs());
+        Check(level1.Count(r => r.Section == 6) == 1 && level1.Single(r => r.Section == 6) is var c3 && c3.LastSection == 6 && c3.SourceSection == 2 && c3.K == 2, "F19: C3 ← C1 with Semitones +2: " + Pairs());
+        var it = Iteration.Build(input, lex, ret.Theta, ret.Boundaries);
+        Check(it.Relations.Any(r => r.IsPower && r.Source != Iteration.FromCells && r.Count == 2 && r.Unit == 16 * MotifPpq && r.Start >= ret.Sections[1].Start && r.End <= ret.Sections[1].End), "F19: the verse holds its 4-bar progression twice (a power of Count 2)");
+        var drums = input.Streams.All.Where(s => s.Kind == MotifStreams.Drums).Select(s => s.Id).ToArray();
+        Check(it.Relations.Any(r => r.IsPower && drums.Contains(r.StreamA) && r.Count >= 8), "F19: a drum power with Count ≥ 8");
+    }
+
+    // F21's perturbation of a score (§16): each note dropped with probability 0.03, else its onset moved by a normal jitter of
+    // σ = ⅛ beat and rounded to the sixteenth (never before 0); then 2% of the kept notes (rounded) struck again a semitone or
+    // a whole tone either way, or an octave up.
+    static Score Noisy(Score clean, Random random)
+    {
+        var s = new Score { Beat = clean.Beat }; s.Bars.AddRange(clean.Bars);
+        var kept = new List<MidiCycleAnalysis.Hit>();
+        foreach (var n in clean.Notes)
+        {
+            if (random.NextDouble() < .03) continue;
+            double u1 = 1 - random.NextDouble(), u2 = random.NextDouble(), jitter = .125 * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+            double beat = Math.Max(0, Math.Round((n.Beat + jitter) * 4, MidpointRounding.AwayFromZero) / 4);
+            kept.Add(new MidiCycleAnalysis.Hit { Beat = beat, Length = n.Length, Pitch = n.Pitch, Velocity = n.Velocity, Channel = n.Channel, Track = n.Track });
+        }
+        int extra = (int)Math.Round(.02 * kept.Count); int[] moves = { -1, 1, -2, 2, 12 };
+        for (int i = 0; i < extra; i++)
+        {
+            var n = kept[random.Next(kept.Count)];
+            kept.Add(new MidiCycleAnalysis.Hit { Beat = n.Beat, Length = n.Length, Pitch = n.Pitch + moves[random.Next(moves.Length)], Velocity = n.Velocity, Channel = n.Channel, Track = n.Track });
+        }
+        s.Notes.AddRange(kept);
+        return s;
     }
 }
