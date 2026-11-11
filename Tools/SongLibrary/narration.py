@@ -16,6 +16,8 @@ from story import duck_floor, validate_cues
 RATE=24000
 # Music under a spoken line is ducked until the voice stands this far above it.
 SPEECH_OVER_MUSIC_DB=10
+# A duck floor that leaves a line's voice less than this far above the music is reported: words start to get lost.
+FLOOR_WARNING_DB=6
 STEM_CROSSFADE_SECONDS=.45
 DUCK_RANGE=(.14,.8)
 DELIVERY='Deep masculine baritone, resonant lower register, warm and grounded music-documentary narration. Maintain the same low vocal placement throughout. No impersonation of any real person. Conversational and quietly engaged, never theatrical. Natural neutral English. Keep a flowing, fairly brisk pace with short pauses. Read only the supplied words. No singing, music, sound effects, introductions or added words.'
@@ -68,6 +70,12 @@ def duck_gain(speech,music):
     voice at 0.95 of the music's master volume)."""
     if music<=1e-6:return DUCK_RANGE[1]
     return float(np.clip(.95*speech/(music*10**(SPEECH_OVER_MUSIC_DB/20)),*DUCK_RANGE))
+
+
+def speech_over_music(speech,music,duck):
+    """How far (dB) the voice stands above the music ducked to `duck`, by duck_gain's model; None over silence."""
+    if music<=1e-6:return None
+    return 20*math.log10(.95*max(speech,1e-9)/(music*duck))
 
 
 def duck_envelope(segments,duration,rate=100):
@@ -232,7 +240,16 @@ def generate(bundle,key_file,voice=None,model=None,notify=print,provider='openai
         # A floor keeps a passage's music up (the cue's own, else the story's): the line ducks no deeper, even where the
         # voice then stands less than SPEECH_OVER_MUSIC_DB clear. Unity, the preview and the exporter read `duck`.
         lowest=cues[i].get('duckFloor',floor)
-        if lowest is not None:segment.update(duck=round(max(segment['duck'],lowest),4),duckMeasured=segment['duck'],duckFloor=lowest)
+        if lowest is not None:
+            segment.update(duck=round(max(segment['duck'],lowest),4),duckMeasured=segment['duck'],duckFloor=lowest)
+            # What the floor leaves of the voice's clearance is kept with it, and too little is said, with the floor
+            # that keeps FLOOR_WARNING_DB: nothing downstream judges whether the words can still be followed.
+            clear=speech_over_music(speech,level,segment['duck']);segment['speechOverMusicDb']=None if clear is None else round(clear,1)
+            if clear is not None and clear<FLOOR_WARNING_DB:
+                keeps=.95*speech/(level*10**(FLOOR_WARNING_DB/20))
+                notify(f"Warning: cue {i}'s duckFloor {lowest:g} leaves its voice {clear:.1f} dB above the music (under {FLOOR_WARNING_DB} dB, words get lost): "
+                       +(f'a floor of {math.floor(keeps*100)/100:.2f} keeps {FLOOR_WARNING_DB} dB' if keeps>segment['duckMeasured'] else f'even its measured duck leaves under {FLOOR_WARNING_DB} dB')
+                       +', or move or shorten the line to a quieter spot')
         segments.append(segment)
     spoken=sum(s['end']-s['start'] for s in segments)
     fraction=spoken/story['duration']

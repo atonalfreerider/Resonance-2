@@ -6,13 +6,15 @@ and above all a changed note name, major or minor, or number (the voice said "A 
 
 Each line's clip in the narration WAV is transcribed offline by Whisper (openai/whisper-small.en from the local Hugging
 Face cache; nothing is downloaded or sent anywhere), and the transcription is cached by the clip's samples, so a check
-after a render only hears the lines that changed. What Whisper changes on its own is tolerated: punctuation, case,
-hyphens and compounds, Op./Opus, No./Number, digits, dates and currency signs, small words it drops or swaps (an/in),
-homophones (sighs/size, chords/cords) and the spelling of names and foreign words (Gorlatch/Gorlach, étude/etude,
-Chopin/Sopa). A phrase of two or more words said twice, and any change to a note name, major/minor or a number, is
-critical; other differences are flagged for a listen. The report (narration-check.txt, and
+after a render only hears the lines that changed. What Whisper changes on its own is tolerated: punctuation, case
+("A major" as "a major"), hyphens and compounds, Op./Opus, No./Number, digits (decades, leading zeros, "0-3" for
+"03"), chord symbols (B7, Bb7, Am7), letters run into digits (PS1), dates and currency signs, small words it drops or
+swaps (an/in), homophones (sighs/size, chords/cords), this project's words it hears as everyday ones (torus as chorus)
+and the spelling of names and foreign words when it sounds alike (Gorlatch/Gorlach, étude/etude, Chopin/Sopa, but not
+Chopin/Liszt). A phrase of two or more words said twice, whole sentences too, and any change to a note name,
+major/minor or a number, is critical; other differences are flagged for a listen. The report (narration-check.txt, and
 narration-check.json for tools) goes to Reports/SongProcessing/<bundle>/; the exit status is 1 when a line has a
-critical issue, 2 when the narration cannot be checked.
+critical issue, 2 when the narration cannot be checked (or the check itself fails).
 """
 import argparse
 import collections
@@ -25,7 +27,7 @@ import sys
 import unicodedata
 from pathlib import Path
 from common import DATA, ROOT, atomic_json, read_json, sha
-from story_timing import spoken_words
+from story_timing import SPOKEN_ABBREVIATIONS, chord_words, spoken_words
 
 MODEL = 'openai/whisper-small.en'
 # Part of every transcription's cache key: bump it when the model or its decoding changes, to hear every line again.
@@ -48,14 +50,20 @@ SCALES = {'hundred': 100, 'thousand': 1000, 'million': 10**6}
 ORDINALS = dict({'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5, 'sixth': 6, 'seventh': 7, 'eighth': 8,
                  'ninth': 9, 'tenth': 10, 'eleventh': 11, 'twelfth': 12, 'hundredth': 100, 'thousandth': 1000},
                 **{w+'th': v for w, v in UNITS.items() if 13 <= v <= 19}, **{w[:-1]+'ieth': v for w, v in TENS.items()})
-# Numbers that sound like a word ("where he won", "bars 6 to 13"): one for the other is not a change.
-NUMBER_SOUNDS = {'#1': {'won'}, '#2': {'to', 'too'}, '#4': {'for', 'fore'}, '#8': {'ate'}}
+# Numbers that sound like a word ("where he won", "bars 6 to 13", "rises forte"): one for the other is not a change.
+NUMBER_SOUNDS = {'#1': {'won'}, '#2': {'to', 'too'}, '#4': {'for', 'fore'}, '#8': {'ate'}, '#40': {'forte'}}
 # Short words that go with a name ("an étude", "his pupil Adolph") when Whisper respells the name and runs them in.
 NAME_COMPANIONS = {'a', 'an', 'the', 'of', 'de', 'la', 'le', 'du', 'von', 'van', 'his', 'her', 'its', 'and'}
 # Unstressed words Whisper drops, adds and swaps on its own ("circling an invisible shape" as "in invisible shape").
 SMALL_WORDS = {'a', 'an', 'the', 'of', 'in', 'on', 'at', 'to', 'as', 'and', 'or', 'for', 'by', 'with', 'from'}
 CURRENCY = {'$': 'dollars', '£': 'pounds', '€': 'euros'}            # Whisper writes "four dollars, or five" as "$4 or $5"
 MONTHS = {'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'}
+# A chord's quality as a script spells it out and as a chord symbol shortens it (Dsus4 is "D sus four").
+QUALITIES = {'sus': 'suspended', 'dim': 'diminished', 'aug': 'augmented'}
+# Words of this project that Whisper hears as everyday ones, whatever the voice said: one for the other is no change.
+LEXICON = {'torus': {'taurus', 'chorus', 'tourist'}, 'toruses': {'tauruses', 'choruses', 'tourists'}}
+# A name heard as something that sounds this much like it (name_sound) is a respelling, not another word.
+NAME_LIKENESS = .5
 Token = collections.namedtuple('Token', 'key kind text word')     # kind: word, note, mode or number
 
 
@@ -69,9 +77,18 @@ def word_key(text):
     return re.sub(r"[^a-z0-9]", '', fold(text).lower())
 
 
+def spoken_key(key):
+    """A word's key as it is said: St. and Saint, Jr and Junior, sus and suspended are one."""
+    return QUALITIES.get(key) or SPOKEN_ABBREVIATIONS.get(key, key)
+
+
 def pieces(words):
     """(word index, text, starts a sentence, ends at a pause) for every piece of the words: hyphens and dashes split a
-    word, edge punctuation goes, [tags] are not spoken, and A′ is "A prime"."""
+    word, edge punctuation goes, [tags] are not spoken, A′ is "A prime", a chord symbol is its words (Bb7 is "B flat
+    7", Am7 "A minor 7") and letters run into digits are two pieces (PS1 is "PS 1", as "P.S. 1" is said).
+
+    A dash between digits splits them and is not "to": Whisper writes "Kit 03" (said "oh three") as "0-3", and where it
+    stands for a "to" ("1829–1832"), that small word is tolerated anyway."""
     out, start, tag = [], True, False
     for w, word in enumerate(words):
         if word.startswith('['):
@@ -82,11 +99,18 @@ def pieces(words):
         said = fold(word.replace('″', ' double prime ').replace('′', ' prime ').replace('&', ' and ').replace('%', ' percent'))
         said = re.sub(r'(?<![A-Ga-g])#(?=\d)', 'number ', said)                 # "#3" is "number 3", G#3 a note
         said = re.sub(r'([$£€])(\d+(?:[,.]\d+)*)', lambda m: m.group(2) + ' ' + CURRENCY[m.group(1)], said)
-        said = re.sub(r'(?<=\d)[‒–—-](?=\d)', ' to ', said)                      # 1829–1832 is said "1829 to 1832"
-        parts = [p.strip(STRIP) for p in DASHES.split(said)]
-        parts = [p for p in parts if p]
+        parts = []                                                               # (text, may start a sentence)
+        for part in (p.strip(STRIP) for p in DASHES.split(said)):
+            if not part:
+                continue
+            chord = chord_words(part)
+            run = re.fullmatch(r'([A-Za-z]+)(\d+(?:st|nd|rd|th|s)?)', part)
+            if chord:                     # a chord's letter is a note even where a sentence starts ("A7 resolves")
+                parts += [(c, False) for c in chord]
+            else:
+                parts += [(p, True) for p in (run.groups() if run else [part])]
         pause = bool(re.search(r'[,;:.!?][\'"”)\]]*$', said))
-        out += [(w, p, start and n == 0, pause and n == len(parts)-1) for n, p in enumerate(parts)]
+        out += [(w, p, start and n == 0 and may, pause and n == len(parts)-1) for n, (p, may) in enumerate(parts)]
         if parts:
             start = bool(re.search(r'[.!?][\'"”)\]]*$', said))
     return out
@@ -94,35 +118,44 @@ def pieces(words):
 
 def number_value(text):
     """A number written in digits: (value, suffix), suffix 'th' for an ordinal (6th), 'ths' for intervals (6ths,
-    3rds), 's' for a decade (1830s); None for anything else."""
-    m = re.fullmatch(r'(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?:(st|nd|rd|th)(s?)|(s))?', text.lower())
+    3rds), 's' for a decade (1830s, 90's); None for anything else. A leading zero stays ("03" is said "oh three"):
+    numbers are compared without it where they differ (tolerated)."""
+    m = re.fullmatch(r"(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?:(st|nd|rd|th)(s?)|'?(s))?", text.lower())
     if not m:
         return None
     value = m.group(1).replace(',', '')
-    value = str(float(value)).rstrip('0').rstrip('.') if '.' in value else str(int(value))
+    value = str(float(value)).rstrip('0').rstrip('.') if '.' in value else value
     return value, ('th' + m.group(3) if m.group(2) else m.group(4) or '')
 
 
 def spelled(words):
     """Numbers said in words, from the start of `words`: [(value, suffix, words used)], one per number. "two
-    thousand and nine" is 2009, "eighteen thirty-two" (a year) 1832, "twenty-first" 21st, "two three" two numbers,
-    "sixths" the ordinal 6 in the plural. Empty when the first word is not a number."""
+    thousand and nine" is 2009, "eighteen thirty-two" (a year) 1832, "nineteen oh five" 1905, "oh three" 03,
+    "twenty-first" 21st, "two three" two numbers, "sixths" the ordinal 6 in the plural, "the nineties" and "the
+    eighteen hundreds" the decades 90s and 1800s. Empty when the first word is not a number."""
     numbers, i = [], 0
     total = current = None
     last = suffix = None
-    begin = 0
+    begin = zeros = 0
 
     def close():
-        nonlocal total, current, last, suffix
+        nonlocal total, current, last, suffix, zeros
         if current is not None or total is not None:
-            numbers.append([(total or 0) + (current or 0), suffix or '', i - begin, last])
+            numbers.append([(total or 0) + (current or 0), suffix or '', i - begin, last, zeros])
         total = current = last = suffix = None
+        zeros = 0
     while i < len(words):
         w = words[i]
         plural = w.endswith('s') and w[:-1] in ORDINALS
         ordinal = ORDINALS.get(w[:-1] if plural else w)
-        value = UNITS.get(w, TENS.get(w, ordinal))
+        decade = TENS.get(w[:-3] + 'y') if w.endswith('ies') else None          # "the nineties"
+        value = UNITS.get(w, TENS.get(w, ordinal if decade is None else decade))
         if w == 'and' and last == 'scale' and i+1 < len(words) and (words[i+1] in UNITS or words[i+1] in TENS):
+            i += 1
+            continue
+        if w == 'oh' and i+1 < len(words) and 1 <= UNITS.get(words[i+1], 0) <= 9:   # a zero said "oh": 1905, 03
+            close()
+            begin, zeros = i, 1
             i += 1
             continue
         if w in SCALES and suffix is None and (current is not None or total is None):
@@ -135,29 +168,42 @@ def spelled(words):
             last = 'scale'
             i += 1
             continue
+        if w[:-1] in SCALES and w.endswith('s') and current is not None and suffix is None:   # "the eighteen hundreds"
+            if SCALES[w[:-1]] == 100:
+                current *= 100
+            else:
+                total, current = (total or 0) + current*SCALES[w[:-1]], None
+            last, suffix = 'scale', 's'
+            i += 1
+            continue
         if value is None:
             break
-        kind = 'ten' if w in TENS or (ordinal and ordinal >= 20 and ordinal % 10 == 0) else 'unit'
-        joins = (current is not None or total is not None) and suffix is None and (
+        kind = 'ten' if w in TENS or decade or (ordinal and ordinal >= 20 and ordinal % 10 == 0) else 'unit'
+        joins = (current is not None or total is not None) and suffix is None and not zeros and (
             (last == 'ten' and kind == 'unit' and value < 10) or (last == 'scale' and (current or 0) % 100 == 0 and value < 100))
-        if not joins:
+        if not joins and not (zeros and current is None):
             close()
             begin = i
             current = 0
         current = (current or 0) + value
         last = kind if value < 100 else 'scale'
-        if ordinal:
+        if ordinal and decade is None:
             suffix = 'ths' if plural else 'th'
+        if decade:
+            suffix = 's'
         i += 1
+        if zeros:                                                 # "oh three" is one digit
+            close()
     close()
-    # A year said in two halves: "eighteen thirty-two", "twenty twenty".
+    # A year said in two halves: "eighteen thirty-two", "twenty twenty", "nineteen nineties", "nineteen oh five".
     merged = []
     for n in numbers:
-        if merged and not merged[-1][1] and 10 <= merged[-1][0] <= 99 and 10 <= n[0] <= 99 and merged[-1][3] != 'scale':
-            merged[-1] = [merged[-1][0]*100 + n[0], n[1], merged[-1][2] + n[2], n[3]]
+        second = 10 <= n[0] <= 99 and not n[4] or 1 <= n[0] <= 9 and n[4] == 1
+        if merged and not merged[-1][1] and not merged[-1][4] and 10 <= merged[-1][0] <= 99 and second and merged[-1][3] != 'scale':
+            merged[-1] = [merged[-1][0]*100 + n[0], n[1], merged[-1][2] + n[2], n[3], 0]
         else:
             merged.append(n)
-    return [(str(v), s, used) for v, s, used, _ in merged]
+    return [('0'*z + str(v), s, used) for v, s, used, _, z in merged]
 
 
 def tokens(words):
@@ -200,7 +246,7 @@ def tokens(words):
                 out.append(Token('#' + value + suffix, 'number', ' '.join(p[1] for p in found[k:k+used]), found[k][0]))
                 k += used
             continue
-        key = low[k]
+        key = spoken_key(low[k])
         if key in ('op', 'opus', 'no', 'nr', 'number') and k+1 < len(found) and (number_value(found[k+1][1]) or spelled(low[k+1:k+2])):
             key = 'opus' if key.startswith('op') else 'number'
         if key:
@@ -229,6 +275,36 @@ def sound(letters):
     return re.sub(r'(.)\1+', r'\1', s)
 
 
+def name_sound(letters):
+    """A name as it sounds, loosely: spellings of one sound made one (ch, sh and s, as Chopin is said; ph and f),
+    voiced and unvoiced pairs made one (b/p, d/t, g/k, v/f, z/s), m and n made one, h, w and doubled letters dropped.
+    Its vowels stay: a respelling keeps them (Chopin as Shopa), another name mostly does not (Schumann)."""
+    s = re.sub(r'[^a-z]', '', letters)
+    for a, b in (('sch', 's'), ('tch', 's'), ('ch', 's'), ('sh', 's'), ('ph', 'f'), ('gh', ''), ('ck', 'k'), ('qu', 'kw'),
+                 ('kn', 'n'), ('wr', 'r')):
+        s = s.replace(a, b)
+    s = re.sub(r'c(?=[eiy])', 's', s)
+    s = ''.join(dict(c='k', q='k', x='ks', z='s', b='p', d='t', g='k', v='f', m='n', h='', w='', y='i').get(c, c) for c in s)
+    return re.sub(r'(.)\1+', r'\1', s)
+
+
+def sounds_alike(a, b):
+    """Whether Whisper's spelling `b` could be the name `a` said: the same first sound (any vowel for a vowel) and
+    much of the rest (Chopin heard as Sopa or Showpass, Gorlatch as Gorlach; not Chopin as Liszt or Schumann, Piano as
+    Violin)."""
+    x, y = name_sound(a), name_sound(b)
+    first = lambda s: 'a' if s[:1] in 'aeiou' else s[:1]
+    return bool(x and y) and first(x) == first(y) and difflib.SequenceMatcher(None, x, y, autojunk=False).ratio() >= NAME_LIKENESS
+
+
+def as_note(run):
+    """The note the article would be with what follows it ("a" A, "a sharp" A sharp), or None."""
+    keys = [t.key for t in run]
+    if keys[:1] != ['a'] or len(keys) > 2 or any(t.kind != 'word' for t in run):
+        return None
+    return 'note:a' + ACCIDENTALS[keys[1]] if len(keys) == 2 and keys[1] in ACCIDENTALS else 'note:a' if len(keys) == 1 else None
+
+
 def critical_change(a, b):
     """Which of a note name, major/minor and a number differs between two runs of tokens, or ''."""
     kinds = []
@@ -247,11 +323,15 @@ def tolerated(a, b, names, before=None):
     if not a or not b:
         money = all(t.key in CURRENCY.values() for t in a or b)
         return 'currency' if money and before is not None and before.kind == 'number' else None
+    # "A major" written "a major", or the article heard as the note A: one sound, and Whisper guesses the case.
+    if len(a) == 1 and a[0].kind == 'note' and as_note(b) == a[0].key or len(b) == 1 and b[0].kind == 'note' and as_note(a) == b[0].key:
+        return 'case'
     if len(a) == len(b) == 1 and {a[0].kind, b[0].kind} == {'number', 'word'}:
         number, word = (a[0], b[0]) if a[0].kind == 'number' else (b[0], a[0])
         return 'sounds the same' if word.key in NUMBER_SOUNDS.get(number.key, ()) else None
-    # "Blink one eighty-two" is 182: the same digits, grouped as they are said.
-    if all(re.fullmatch(r'#\d+', t.key) for t in a+b) and ''.join(t.key[1:] for t in a) == ''.join(t.key[1:] for t in b):
+    # "Blink one eighty-two" is 182: the same digits, grouped as they are said; "Kit 03" is "0-3", "3" and "oh, three".
+    digits = lambda run: ''.join('0' if t.key == 'oh' else t.key[1:] for t in run).lstrip('0')
+    if all(re.fullmatch(r'#\d+', t.key) or t.key == 'oh' for t in a+b) and digits(a) == digits(b):
         return 'number grouping'
     if critical_change(a, b):
         return None
@@ -262,17 +342,20 @@ def tolerated(a, b, names, before=None):
         return 'sounds the same'                                              # it/its, toward/towards
     if len({t.word for t in a}) <= 3 and len({t.word for t in b}) <= 3 and sound(joined_a) == sound(joined_b):
         return 'sounds the same'
+    if len(a) == len(b) == 1 and (b[0].key in LEXICON.get(a[0].key, ()) or a[0].key in LEXICON.get(b[0].key, ())):
+        return 'project word'
     if (len(b) <= len(a)+1 and all(t.kind == 'word' for t in a+b) and any(t.key in names for t in a)
-            and all(t.key in names or t.key in NAME_COMPANIONS for t in a)):
+            and all(t.key in names or t.key in NAME_COMPANIONS for t in a) and sounds_alike(joined_a, joined_b)):
         return 'name'
     return None
 
 
 def repeats(keys):
-    """Every run said again straight after itself, longest first at each place: [(start of the second copy, length)]."""
+    """Every run said again straight after itself, longest first at each place, up to a whole sentence or line:
+    [(start of the second copy, length)]."""
     found, k = [], 0
     while k < len(keys):
-        n = next((n for n in range(min(12, (len(keys)-k)//2), 0, -1) if keys[k:k+n] == keys[k+n:k+2*n]), 0)
+        n = next((n for n in range((len(keys)-k)//2, 0, -1) if keys[k:k+n] == keys[k+n:k+2*n]), 0)
         if n:
             found.append((k+n, n))
         k += n or 1
@@ -294,17 +377,18 @@ def compare(script_words, heard_text, names=()):
         copy = heard[a:a+n]
         issues.append(dict(kind='repeated', critical=n >= 2 or bool(critical_change(copy, [])),
                            why='repeated phrase' if n >= 2 else 'repeated word', script='', heard=' '.join(t.text for t in copy),
-                           first=a-n))
+                           first=a-n, length=n))
         drop.update(range(a, a+n))
     kept = [k for k in range(len(heard)) if k not in drop]
     voice = [heard[k] for k in kept]
     matcher = difflib.SequenceMatcher(None, [t.key for t in script], [t.key for t in voice], autojunk=False)
-    # Where each heard token sits in the script, to place a repeat in time: at the start of the phrase's words, which the
-    # aligner put on one copy or the other, so both copies are heard from there.
+    # Where each heard token sits in the script, to place a repeat in time: the phrase's script words, which the aligner
+    # put on one copy or the other (check() listens from a phrase's length before them, so both copies are heard).
     place = {kept[j+d]: i+d for i, j, n in matcher.get_matching_blocks() for d in range(n)}
     for issue in issues:
-        first = place.get(issue.pop('first'))
-        issue.update(word=script[first].word if first is not None else None, end=False)
+        first, n = place.get(issue.pop('first')), issue.pop('length')
+        issue.update(word=script[first].word if first is not None else None, end=False,
+                     through=script[min(first+n, len(script))-1].word if first is not None else None)
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == 'equal':
             continue
@@ -323,18 +407,22 @@ def compare(script_words, heard_text, names=()):
 
 
 def story_names(story):
-    """Words Whisper cannot be expected to spell: names (capitalised inside a sentence anywhere in the story's speech or
-    captions) and foreign words (accented in the script: étude, più)."""
-    names = set()
+    """Words Whisper cannot be expected to spell: names (capitalised inside a sentence somewhere in the story's speech
+    or captions, and never written in lower case: "the piano" makes the Piano of "Leeds International Piano
+    Competition" a word) and foreign words (accented in the script: étude, più)."""
+    capital, lower, foreign = set(), set(), set()
     for cue in story['cues']:
         for text in (cue.get('speech'), cue.get('text')):
             words = (text or '').split()
             for _, piece, initial, _ in pieces(words):
-                key = word_key(piece)
-                if len(key) > 1 and not key.isdigit() and piece[:1].isupper() and not initial:
-                    names.add(key)
-            names.update(word_key(w) for w in words if any(unicodedata.combining(c) for c in unicodedata.normalize('NFKD', w)))
-    return names - set(MODES)
+                key = spoken_key(word_key(piece))
+                if len(key) > 1 and not key.isdigit():
+                    if piece[:1].islower():
+                        lower.add(key)
+                    elif piece[:1].isupper() and not initial:
+                        capital.add(key)
+            foreign.update(word_key(w) for w in words if any(unicodedata.combining(c) for c in unicodedata.normalize('NFKD', w)))
+    return (capital - lower | foreign) - set(MODES)
 
 
 def whisper(clips, device='auto'):
@@ -398,8 +486,13 @@ def check(bundle, out=None, cache=None, device='auto'):
         starts, ends = segment.get('spokenStarts'), segment.get('spokenEnds')
         timed = isinstance(starts, list) and isinstance(ends, list) and len(starts) == len(ends) == len(words)
         for issue in result['issues']:
-            word, end = issue.pop('word'), issue.pop('end')
-            issue['at'] = round(segment['start'] + ((ends if end else starts)[word] if word is not None else 0), 2) if timed else None
+            word, end, through = issue.pop('word'), issue.pop('end'), issue.pop('through', None)
+            at = (ends if end else starts)[word] if timed and word is not None else 0
+            if timed and word is not None and through is not None:
+                # The aligner put a repeated phrase's words on one of its copies: from a phrase's length before them
+                # (or the line's start) both copies are heard.
+                at = max(0, starts[word] - (ends[through] - starts[word]))
+            issue['at'] = round(segment['start'] + at, 2) if timed else None
         lines.append(dict(cue=segment['cue'], take=cue.get('take', 0), start=round(segment['start'], 3), end=round(segment['end'], 3),
                           script=' '.join(words), heard=text, **result))
     report = dict(version=1, bundle=bundle.name, narration=narration['audioPath'], narrationSha256=narration['sha256'],
@@ -458,8 +551,9 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')    # a console in cp1252 cannot show É or ′
     try:
         report = check(a.bundle, a.out, a.cache, a.device)
-    except (ValueError, OSError, RuntimeError, ImportError) as error:
-        # 2, not 1: nothing was found wrong with the voice, it could not be heard (a stale narration, a missing model).
+    except Exception as error:
+        # 2, not 1: nothing was found wrong with the voice, it could not be heard (a stale narration, a missing model, a
+        # narration.json without the fields it needs, a fault here); `narration.py --check` passes 1 on as critical.
         print(f'Narration check could not run: {type(error).__name__}: {error}', file=sys.stderr)
         return 2
     print(readable(report) + 'Report: ' + report['files'][0])

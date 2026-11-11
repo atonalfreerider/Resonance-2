@@ -34,6 +34,71 @@ HEARD = [
     ('Twice it sighs; the third time the shadow lifts.', 'Twice its size. The third time, the shadow lifts.'),
     ('In gold, bars 6 to 13 of the first time through: a second phrase.', 'In gold, bars 6 to 13 of the first time through. A second phrase.'),
 ]
+# The étude's narration as it is published now (take 0 of a rewritten script, every line read as written), and what
+# Whisper heard of it: all 21 lines pass.
+ETUDE_NOW = [
+    ('Chopin told his pupil Adolph Gutmann that he had never in his life written another such beautiful melody. This is it: Opus 10, Number 3, in E major.',
+     'Chopin told his pupil Adolph Gutemann that he had never in his life written another such beautiful melody. This is it. Opus 10, number three in E major.'),
+    ('This performance is by Alexei Gorlatch, at the 2009 Leeds International Piano Competition, where he won second prize.',
+     'This performance is by Alexei Gorlach at the 2009 Leeds International Piano Competition, where he won second prize.'),
+    ('An étude is a study, written to perfect one skill. Listen to the right hand alone.',
+     'Anichud is a study written to perfect one skill. Listen to the right hand alone.'),
+    ('It plays two parts at once: the weaker outer fingers sing the melody, while the thumb and index finger keep a soft pulse beneath it.',
+     'It plays two parts at once. The weaker outer fingers sing the melody, while the thumb and index finger keep a soft pulse beneath it.'),
+    ('Now the line climbs, each bar reaching higher. At the top, a single high voice begins to fall.',
+     'Now the line climbs, each bar reaching higher. At the top, a single high voice begins to fall.'),
+    ('Each phrase falls a fifth: G sharp to C sharp.', 'Each phrase falls a fifth, G sharp to C sharp.'),
+    ('The next begins a fourth lower, on D sharp.', 'The next begins a fourth lower on D sharp.'),
+    ('Then a third lower, on B.', 'Then a third lower on B.'),
+    ('Then a smaller third, on G sharp, and home to E.', 'Then a smaller third on G sharp and home to E.'),
+    ("The bridge begins, a little more animated, and the étude's other skill appears: sixths.",
+     'The bridge begins, a little more animated, and the etudes other skill appears, sixths.'),
+    ('The right hand rocks between two shapes, typically thumb with ring finger, then index with little finger.',
+     'The right hand rocks between two shapes, typically thumb with ring finger, then index with little finger.'),
+    ('Two swells follow: the first rises forte in A major, and answers itself softly in A minor.',
+     'Two swells follow. The first rises forte in A major and answers itself softly in A minor.'),
+    ('The second swell climbs a step higher, then darkens into a chain of diminished chords and tritones: notes from opposite sides of the circle of fifths.',
+     'The second swell climbs a step higher, then darkens into a chain of diminished chords and tritones, notes from opposite sides of the circle of fifths.'),
+    ('Out of the spin, the hands lock into repeating, alternating sixths, the same rocking the étude trains.',
+     'Out of the spin, the hands lock into repeating, alternating 6ths, the same rocking the etude trains.'),
+    ('It steadies the storm, and the music settles onto the dominant, waiting.', 'It steadies the storm and the music settles onto the dominant, waiting.'),
+    ('Its nickname is Tristesse: sadness.', 'Its nickname is Tristes. Sadness.'),
+    ('The melody returns, but Chopin shortens the way home.', 'The melody returns, but Chopin shortens the way home.'),
+    ('In gold, bars 6 to 13 of the first time through: a second phrase, then the opening again. Watch the return reach the cut.',
+     'In gold, bars 6 to 13 of the first time through. A second phrase, then the opening again. Watch the return reach the cut.'),
+    ('This time he skips them, straight to the climb.', 'This time he skips them straight to the climb.'),
+    ("Beneath the sigh, the chords walk the path of Pachelbel's Canon: each bright major chord answered by a darker minor one. Bittersweet.",
+     "Beneath the sigh, the cords walk the path of Pachelbel's canon, each bright major chord answered by a darker minor one. Bitter sweet."),
+    ('In the outro the sigh returns an octave lower, darkened by a C natural borrowed from E minor. Twice it sighs; the third time the shadow lifts, and the melody comes home.',
+     'In the outro, the sigh returns an octave lower, darkened by a C natural borrowed from E minor. Twice its size. The third time, the shadow lifts and the melody comes home.'),
+]
+# Lines of ten other narrated tours (ComeFirst, Drank, Ni**as in Paris, SaySo, Sexual, Sorry, Sugar, Touch x Be My Baby,
+# Umbrella), which the check's first rules were not written for, as Whisper heard them, and what a listener wants: the
+# first six were critical alarms over Whisper's formatting alone (chord symbols, "a major", "90s", "PS1", "0-3").
+OTHERS = [
+    ("Then the beat drops in. Ryan Riback's remix brings what NYLON called future-nineties house.",
+     "Then the beat drops in. Ryan Ribac's remix brings what Nylon called future 90s house.", 'ok'),
+    ('The post-chorus drop: kick and snare arrive and the drum wheel fills. Underneath, B seven leans toward E minor, a borrowed dominant the torus marks as a tension.',
+     'The post-chorus drop, kick and snare arrive and the drum wheel fills. Underneath, B7 leans toward E minor, a borrowed dominant the Taurus marks his attention.', 'flagged'),
+    ('The torus turns back to B-flat. Listen for the last resolution: B-flat seven, the dominant, settling onto E-flat.',
+     'The tourist turns back to Bb. Listen for the last resolution. Bb7, the dominant settling onto Eb.', 'ok'),
+    ('The outro changes the whole progression. The torus turns to A-flat, and the chords rock between B-flat minor and A-flat, the second and home, with A major sliding in half a step above: the Neapolitan.',
+     'The outro changes the whole progression. The torus turns to A-flat and the chords rock between B-flat minor and A-flat, the second in home, with a major sliding in half, a step above the Neapolitan.', 'ok'),
+    ('Cashmere Cat first played Be My Baby in public at a DJ set at MoMA P.S. 1 in New York, weeks before the album came out.',
+     'Kashmir Cat first played Be My Baby in public at a DJ set at MoMA PS1 in New York, weeks before the album came out.', 'ok'),
+    ("Umbrella starts with a stock drum loop from Apple's GarageBand, Vintage Funk Kit 03. Tricky Stewart's team built a number one on it.",
+     "Umbrella starts with a stock drum loop from Apple's GarageBand. Vintage Funk Kit, 0-3. Tricky Stewart's team built a number one on it.", 'ok'),
+    ('Under Kanye\'s verse the harmony darkens: the analysis hears the home turn from C major to C minor, and the torus follows.',
+     "Under Kanye's verse, the harmony darkens. The analysis hears the home turn from C major to C minor, and the chorus follows.", 'ok'),
+    # A word heard as a number is still critical: "this verse" may be "this first" said.
+    ('On the pattern wheels, this verse plays its loop eight times where the others play four.',
+     'On the pattern wheels, this first plays its loop eight times where the others play four.', 'critical'),
+    ('In this interlude the drums nearly vanish: barely a strike a bar on the drum wheel.',
+     'In this interlude the drums nearly vanish, barely a striker bar on the drum wheel.', 'flagged'),
+    ('The chorus is G and D, a fifth apart, rocking back and forth.', 'The chorus is G and D, a fifth apart, rocking back and forth.', 'ok'),
+    ('Underneath runs a restrained dembow, the reggaeton pulse. On the drum wheel, the groove keeps changing its details: sixty-four drum families in one song.',
+     'Underneath runs a restrained Dembo, the reggaeton pulse. On the drum wheel, the groove keeps changing its details, 64 drum families in one song.', 'flagged'),
+]
 
 
 def check_line(script, heard):
@@ -131,10 +196,104 @@ class Compare(unittest.TestCase):
 
     def test_names_from_the_story(self):
         story = dict(cues=[dict(text='x', speech='Chopin told his pupil Adolph Gutmann. This time Chopin skips the Étude in E major.'),
-                           dict(text='The bridge, poco più animato')])
+                           dict(text='The bridge, poco più animato'),
+                           dict(text='At the Leeds International Piano Competition, on a Steinway: the piano sings.')])
         names = nc.story_names(story)
-        self.assertTrue({'chopin', 'adolph', 'gutmann', 'etude', 'piu'} <= names)
-        self.assertFalse({'this', 'the', 'e', 'major'} & names)
+        self.assertTrue({'chopin', 'adolph', 'gutmann', 'etude', 'piu', 'leeds', 'steinway'} <= names)
+        # Capitalised in a title but written in lower case elsewhere: a word, not a name.
+        self.assertFalse({'this', 'the', 'e', 'major', 'piano'} & names)
+
+    def test_the_etude_as_published_passes(self):
+        for script, heard in ETUDE_NOW:
+            with self.subTest(script=script):
+                self.assertEqual(check_line(script, heard)['status'], 'ok')
+
+    def test_other_tours_alarm_only_on_the_voice(self):
+        for script, heard, status in OTHERS:
+            with self.subTest(script=script):
+                self.assertEqual(nc.compare(script.split(), heard, {'kanyes', 'cashmere', 'moma', 'nylon', 'neapolitan'})['status'], status)
+
+    def test_chord_symbols_case_decades_and_digits_as_whisper_writes_them(self):
+        keys = lambda text: [t.key for t in nc.tokens(text.split())]
+        self.assertEqual(keys('B7 Bb7, Am7 F#m Cmaj7 Gdim Dsus4.'), ['note:b', '#7', 'note:bb', '#7', 'note:a', 'minor', '#7', 'note:f#', 'minor',
+                                                                     'note:c', 'major', '#7', 'note:g', 'diminished', 'note:d', 'suspended', '#4'])
+        self.assertEqual(keys('A7 resolves. Am I wrong?'), ['note:a', '#7', 'resolves', 'am', 'i', 'wrong'])
+        self.assertEqual(keys('the nineteen nineties, the nineties, the 90s, the 90\'s, the eighteen hundreds'),
+                         ['the', '#1990s', 'the', '#90s', 'the', '#90s', 'the', '#90s', 'the', '#1800s'])
+        self.assertEqual(keys('nineteen oh five, oh three, 03, PS1, P.S. 1'), ['#1905', '#03', '#03', 'ps', '#1', 'ps', '#1'])
+        self.assertEqual(keys('the St. Louis Dr. Dre Jr'), ['the', 'saint', 'louis', 'doctor', 'dre', 'junior'])
+        for script, heard in [
+                ('Underneath, B seven leans toward E minor', 'Underneath, B7 leans toward E minor'),
+                ('B-flat seven, the dominant', 'Bb7, the dominant'),
+                ('A minor seven, then F sharp minor', 'Am7, then F#m'),
+                ('C major seven', 'Cmaj7'),
+                ('a D sus four chord', 'a Dsus4 chord'),
+                ('with A major sliding in', 'with a major sliding in'),           # case, which Whisper guesses
+                ('in A major, and answers itself softly in A minor.', 'in a major, and answers itself softly in a minor.'),
+                ('a minor third above', 'A minor third above'),
+                ('a major chord', 'the major chord'),
+                ('on A sharp', 'on a sharp'),
+                ('future-nineties house', 'future 90s house'),
+                ('the 1830s', 'the eighteen thirties'),
+                ('in nineteen oh five', 'in 1905'),
+                ("the '90s", 'the nineties'),
+                ('at MoMA P.S. 1 in New York', 'at MoMA PS1 in New York'),
+                ('Vintage Funk Kit 03.', 'Vintage Funk Kit, 0-3.'),
+                ('Vintage Funk Kit 03.', 'Vintage Funk Kit 3.'),
+                ('Vintage Funk Kit 03.', 'Vintage Funk Kit oh three.'),
+                ('Oh, one more time', 'Oh one more time'),
+                ('bars 6 to 13', 'bars 6-13'),
+                ('the first rises forte', 'the first rises forty'),
+                ('Watch the torus twist', 'Watch the chorus twist'),
+                ('The torus turns back', 'The tourist turns back'),
+                ('St. Louis', 'Saint Louis')]:
+            with self.subTest(heard=heard):
+                self.assertEqual(check_line(script, heard)['issues'], [])
+        # Still critical: the note, the number or the chord changed.
+        for script, heard, why in [
+                ('in E major.', 'in a major.', 'note name'),
+                ('and home to E.', 'and home to a.', 'note name'),
+                ('B seven', 'B9', 'number'),
+                ('B-flat seven', 'B7', 'note name'),
+                ('E minor', 'Em7', 'number'),
+                ('bars 6 to 13', 'bars 6-30', 'number'),
+                ('the nineties', 'the 80s', 'number'),
+                ('Kit 03', 'Kit 0-4', 'number')]:
+            with self.subTest(heard=heard):
+                line = check_line(script, heard)
+                self.assertEqual((line['status'], line['issues'][0]['why']), ('critical', why))
+
+    def test_a_sentence_said_twice_is_critical_however_long(self):
+        sentence = "Beneath the sigh, the chords walk the path of the old canon each time, slowly."
+        line = check_line(sentence, sentence + ' ' + sentence)
+        self.assertEqual(line['status'], 'critical')
+        self.assertEqual([(i['kind'], i['why'], i['heard']) for i in line['issues']],
+                         [('repeated', 'repeated phrase', 'Beneath the sigh the chords walk the path of the old canon each time slowly')])
+        twice = 'It plays two parts at once: the weaker outer fingers sing the melody, while the thumb keeps a soft pulse.'
+        self.assertEqual(check_line(twice + ' ' + twice, twice + ' ' + twice)['issues'], [])     # as the script has it
+
+    def test_a_name_heard_as_another_name_is_flagged(self):
+        names = NAMES | {'leeds', 'international', 'piano', 'competition'}
+        for script, heard, why in [
+                ('This time Chopin skips them.', 'This time Sopa skips them.', 'name'),
+                ('This time Chopin skips them.', 'This time Shopa skips them.', 'name'),
+                ('This time Chopin skips them.', 'This time Showpass skips them.', 'name'),
+                ('An étude is a study', 'Anichud is a study', 'name')]:
+            with self.subTest(heard=heard):
+                line = nc.compare(script.split(), heard, names)
+                self.assertEqual((line['status'], [t['why'] for t in line['tolerated']]), ('ok', [why]))
+        for script, heard in [
+                ('This time Chopin skips them.', 'This time Liszt skips them.'),
+                ('This time Chopin skips them.', 'This time Schumann skips them.'),
+                ('his pupil Adolph Gutmann', 'his pupil Franz Liszt'),
+                ('the Leeds International Piano Competition', 'the Chopin International Piano Competition'),
+                ('the Leeds International Piano Competition', 'the Leeds International Violin Competition'),
+                ('the piano remains restless', 'the guitar remains restless')]:
+            with self.subTest(heard=heard):
+                line = nc.compare(script.split(), heard, names)
+                self.assertEqual((line['status'], line['issues'][0]['why']), ('flagged', 'changed words'))
+        self.assertTrue(nc.sounds_alike('gorlatch', 'gorlach') and nc.sounds_alike('elina', 'alina'))
+        self.assertFalse(nc.sounds_alike('chopin', 'liszt') or nc.sounds_alike('piano', 'violin') or nc.sounds_alike('', 'a'))
 
 
 def bundle(folder, speech, take=0):
@@ -215,6 +374,27 @@ class Check(unittest.TestCase):
             self.assertEqual(nc.main([str(self.bundle), '--out', str(self.out), '--cache', str(self.cache)]), 2)
         heard.assert_not_called()
         self.assertIn('render it again', said.getvalue())
+
+    def test_a_fault_in_the_check_exits_2_not_1(self):
+        # 1 is a critical difference in the voice; a narration.json the check cannot read is no verdict on it.
+        manifest = json.loads((self.bundle/'narration.json').read_text(encoding='utf-8'))
+        del manifest['storySha256']
+        (self.bundle/'narration.json').write_text(json.dumps(manifest), encoding='utf-8')
+        with patch.object(nc, 'whisper') as heard, redirect_stderr(io.StringIO()) as said:
+            self.assertEqual(nc.main([str(self.bundle), '--out', str(self.out), '--cache', str(self.cache)]), 2)
+        heard.assert_not_called()
+        self.assertIn('KeyError', said.getvalue())
+
+    def test_a_repeat_is_timed_from_before_its_first_copy(self):
+        # The aligner put "Then two swells." on one copy (here the second, 2.0-3.0 s into the line): from a phrase's
+        # length before it both copies are heard; never before the line starts.
+        for starts, ends, at in (([2.0, 2.3, 2.6], [2.3, 2.6, 3.0], 4.2+1.0), ([.3, .6, .8], [.6, .8, 1.0], 4.2)):
+            manifest = json.loads((self.bundle/'narration.json').read_text(encoding='utf-8'))
+            manifest['segments'][1].update(spokenStarts=starts, spokenEnds=ends)
+            (self.bundle/'narration.json').write_text(json.dumps(manifest), encoding='utf-8')
+            with patch.object(nc, 'whisper', side_effect=self.fake_whisper):
+                issue = nc.check(self.bundle, self.out, self.cache)['lines'][1]['issues'][0]
+            self.assertEqual((issue['why'], issue['at']), ('repeated phrase', round(at, 2)))
 
 
 if __name__ == '__main__':
