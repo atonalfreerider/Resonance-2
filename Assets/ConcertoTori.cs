@@ -18,6 +18,12 @@ public sealed class ConcertoTori : MonoBehaviour
     int lastSeek=-1;double focusSince=-1;readonly float[] depths=new float[2];bool lastDirected;
     public string ManualFocus {get;private set;}="balanced";
     public void SetFocus(string focus){if(!new[]{"balanced","piano","orchestra","piano-only","orchestra-only"}.Contains(focus))throw new ArgumentException("Invalid concerto focus");ManualFocus=focus;focusSince=-1;}
+    // Two pianos (Liszt and Chopin): both groups are hands of a named piano ("Liszt RH", "Liszt LH"), so each torus
+    // is titled by its pianist and names the hands sounding in it, held 0.8 s after their last note.
+    readonly double[][] handLast={new[]{-9.0,-9.0},new[]{-9.0,-9.0}};
+    string PartName(int group){var names=midi.HarmonicPrepared.TrackNames;var tracks=group==0?midi.HarmonicPrepared.PianoTracks:midi.HarmonicPrepared.OrchestraTracks;
+        if(names==null||tracks.Length<2||tracks[0]>=names.Length||!names[tracks[0]].EndsWith(" RH",StringComparison.Ordinal))return null;return names[tracks[0]].Substring(0,names[tracks[0]].Length-3);}
+    bool TwoPianos=>PartName(0)!=null&&PartName(1)!=null;
     public bool SplitActive {get;private set;}
     public Rect PianoViewport=>bounds[0];
     public Rect OrchestraViewport=>bounds[1];
@@ -37,9 +43,9 @@ public sealed class ConcertoTori : MonoBehaviour
             go.AddComponent<TonalDominance>();go.SetActive(true);
             var feature=go.GetComponent<FeaturedInstrument>();feature.PlaybackSource=midi;feature.GroupTracks=i==0?midi.HarmonicPrepared.PianoTracks:midi.HarmonicPrepared.OrchestraTracks;
             shapes[i]=shape;
-            var label=new Label(i==0?"PIANO":"ORCHESTRA"){name=i==0?"piano-torus-label":"orchestra-torus-label",pickingMode=PickingMode.Ignore};
-            label.style.position=Position.Absolute;label.style.color=new Color(.85f,.92f,1);label.style.fontSize=14;label.style.letterSpacing=3;root.Add(label);labels[i]=label;
-            var badge=new PartBadge(i==0){name=i==0?"piano-part-badge":"orchestra-part-badge",pickingMode=PickingMode.Ignore};badge.style.position=Position.Absolute;badge.style.width=92;badge.style.height=36;root.Add(badge);badges[i]=badge;
+            var label=new Label(TwoPianos?PartName(i).ToUpperInvariant():i==0?"PIANO":"ORCHESTRA"){name=i==0?"piano-torus-label":"orchestra-torus-label",pickingMode=PickingMode.Ignore};
+            label.style.position=Position.Absolute;label.style.color=new Color(.9f,.95f,1);label.style.fontSize=TwoPianos?34:14;label.style.letterSpacing=TwoPianos?5:3;if(TwoPianos)label.style.unityFontStyleAndWeight=FontStyle.Bold;label.enableRichText=true;root.Add(label);labels[i]=label;
+            var badge=new PartBadge(i==0||TwoPianos){name=i==0?"piano-part-badge":"orchestra-part-badge",pickingMode=PickingMode.Ignore};badge.style.position=Position.Absolute;badge.style.width=92;badge.style.height=36;root.Add(badge);badges[i]=badge;
         }
     }
     void LateUpdate()
@@ -113,8 +119,13 @@ public sealed class ConcertoTori : MonoBehaviour
                 shape.SetNotes(notes,false);
             }
             if(midi.IsAudible&&!seek)for(int f=frameIndex;f<lo;f++)foreach(var attack in source.Frames[f].Attacks)if(tracks.Contains(attack.Track))shape.StrikeNote(attack.Pitch-21,attack.Velocity);
+            if(TwoPianos&&frame!=null){
+                for(int h=0;h<2;h++)if(midi.IsAudible&&frame.Voices.Any(v=>v.Track==tracks[h]))handLast[i][h]=now;
+                bool right=now-handLast[i][0]<.8,left=now-handLast[i][1]<.8;
+                labels[i].text=PartName(i).ToUpperInvariant()+(right&&left?"  <size=20>BOTH HANDS</size>":right?"  <size=20>RIGHT HAND</size>":left?"  <size=20>LEFT HAND</size>":"");
+            }
             labels[i].style.left=bounds[i].xMin*Screen.width+20;labels[i].style.top=(1-bounds[i].yMax)*Screen.height+54;
-            badges[i].style.left=bounds[i].xMin*Screen.width+20;badges[i].style.top=(1-bounds[i].yMax)*Screen.height+78;
+            badges[i].style.left=bounds[i].xMin*Screen.width+20;badges[i].style.top=(1-bounds[i].yMax)*Screen.height+(TwoPianos?106:78);
         }
         frameIndex=lo;lastSeek=midi.SeekRevision;last=now;lastAudible=midi.IsAudible;
     }

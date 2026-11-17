@@ -1,0 +1,18 @@
+{
+ "chapters": [
+  {"title": "One key, two pianos", "scenes": [
+    {"name": "A both pianos, the opening", "l": [1,13], "c": [1,10], "lead": 2.1, "mask": "L_rh L_lh C_rh C_lh"}]},
+  {"title": "Swap the hands", "scenes": [
+    {"name": "B1 Liszt melody over Chopin bass", "l": [3,7], "c": [1,4], "mask": "L_rh C_lh"},
+    {"name": "B2 Chopin melody over Liszt bass", "l": [3,7], "c": [1,4], "mask": "C_rh L_lh"}]},
+  {"title": "Simple and free", "scenes": [
+    {"name": "T1 Liszt alone, the return", "l": [18,23], "mask": "L_rh L_lh"},
+    {"name": "T2 Chopin alone, the flights", "c": [10,15], "mask": "C_rh C_lh"}]},
+  {"title": "The same dream in A", "scenes": [
+    {"name": "D1 Liszt alone, A major", "l": [30,40], "mask": "L_rh L_lh"},
+    {"name": "D2 Chopin alone, the chromatic dream", "c": [17,22], "mask": "C_rh C_lh"}]},
+  {"title": "The cadenza and the close", "scenes": [
+    {"name": "E1 both, to the cadenza", "l": [53,55], "dur": 10.5, "c": [72,74], "mask": "L_rh L_lh C_rh C_lh"},
+    {"name": "E2 both, the cadenza and the last chord", "l": [56,61], "dur": 24.0, "c": [75,77], "mask": "L_rh L_lh C_rh C_lh"}]}
+ ]
+}

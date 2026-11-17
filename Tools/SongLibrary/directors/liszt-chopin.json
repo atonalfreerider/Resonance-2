@@ -1,0 +1,223 @@
+{
+  "title": "Liszt and Chopin: two pianos in D flat",
+  "bundle": "Liszt-and-Chopin-two-pianos*",
+  "assets": "SongLibraryData/scores/chopin-op10-3",
+  "narrativeStyle": "John's directed two-piano comparison: Chopin's Nocturne Op. 27 No. 2 laid on Liszt's Consolation No. 3, Liszt's clock as the base, hands traded between the two pieces",
+  "narrationTargetFraction": 0.66,
+  "narrator": {
+    "name": "JohnV4",
+    "provider": "elevenlabs",
+    "voice": "7NoxJCAEPTXbnfIvyaF6",
+    "language": "en-US",
+    "delivery": "calm, grounded documentary narration, downward inflection at sentence endings"
+  },
+  "sources": [
+    {
+      "id": "wiki-consolations",
+      "title": "Wikipedia: Consolations (Liszt), the two versions and Consolation No. 3",
+      "url": "https://en.wikipedia.org/wiki/Consolations_(Liszt)"
+    },
+    {
+      "id": "wiki-op27",
+      "title": "Wikipedia: Nocturnes, Op. 27 (Chopin)",
+      "url": "https://en.wikipedia.org/wiki/Nocturnes,_Op._27_(Chopin)"
+    },
+    {
+      "id": "friendship",
+      "title": "Interlude: Chopin and Liszt's friendship in ten facts",
+      "url": "https://interlude.hk/chopin-and-liszts-friendship-in-ten-facts/"
+    },
+    {
+      "id": "life",
+      "title": "Interlude: Life of Chopin, the controversial biography by Liszt",
+      "url": "https://interlude.hk/life-of-chopin-the-controversial-chopin-biography-by-liszt/"
+    },
+    {
+      "id": "scores",
+      "title": "The two MuseScore scores, rendered with MuseScore 4's piano; chord and bar facts measured from them",
+      "url": "https://musescore.org"
+    }
+  ],
+  "pictures": {
+    "delacroix": {
+      "file": "pictures/delacroix-1838.jpg",
+      "caption": "Chopin, painted by Eugène Delacroix in 1838",
+      "credit": "Eugène Delacroix, 1838 / Wikimedia Commons · Public domain",
+      "license": "Public domain",
+      "commonsPage": "https://commons.wikimedia.org/wiki/File:Eug%C3%A8ne_Ferdinand_Victor_Delacroix_043.jpg",
+      "placement": "right"
+    },
+    "lehmann": {
+      "file": "../liszt-chopin/pictures/lehmann-1839.jpg",
+      "caption": "Liszt, painted by Henri Lehmann in 1839",
+      "credit": "Henri Lehmann, 1839 / Wikimedia Commons · Public domain",
+      "license": "Public domain",
+      "commonsPage": "https://commons.wikimedia.org/wiki/File:Liszt_(Lehmann_portrait).jpg",
+      "placement": "right"
+    },
+    "danhauser": {
+      "file": "../liszt-chopin/pictures/danhauser-1840.jpg",
+      "caption": "Liszt at the piano among friends, by Josef Danhauser, 1840",
+      "credit": "Josef Danhauser, 1840 / Wikimedia Commons · Public domain",
+      "license": "Public domain",
+      "commonsPage": "https://commons.wikimedia.org/wiki/File:Josef_Danhauser_Liszt_am_Fl%C3%BCgel_1840_01.jpg",
+      "placement": "right"
+    },
+    "radziwill": {
+      "file": "../liszt-chopin/pictures/radziwill-salon.jpg",
+      "caption": "Chopin playing in the Radziwill salon, a print after Henryk Siemiradzki's painting",
+      "credit": "Print after H. Siemiradzki (1887), Bibliothèque nationale de France / Wikimedia Commons · Public domain",
+      "license": "Public domain",
+      "commonsPage": "https://commons.wikimedia.org/wiki/File:Fr%C3%A9d%C3%A9ric_Chopin_chez_les_Radziwill_-_d%27apr%C3%A8s_le_tableau_de_Hendrik_Siemiradzki_(1887)_-_btv1b8416507t.jpg",
+      "placement": "right"
+    },
+    "hanfstaengl": {
+      "file": "../liszt-chopin/pictures/liszt-1858.jpg",
+      "caption": "Liszt, photographed by Franz Hanfstaengl in 1858",
+      "credit": "Franz Hanfstaengl, 1858 / Wikimedia Commons · Public domain",
+      "license": "Public domain",
+      "commonsPage": "https://commons.wikimedia.org/wiki/File:Franz_Liszt_1858.jpg",
+      "placement": "right"
+    }
+  },
+  "cues": [
+    {
+      "start": 0.0,
+      "end": 7.6,
+      "concertoFocus": "balanced",
+      "view": "Torus",
+      "narrationStart": 0.8,
+      "text": "Two pianos in D flat: Liszt's Consolation No. 3 above",
+      "speech": "Two pianos, one key: D flat major. Above, Liszt's Consolation Number Three.",
+      "sourceIds": [
+        "wiki-consolations",
+        "wiki-op27"
+      ],
+      "picture": "lehmann"
+    },
+    {
+      "start": 7.6,
+      "end": 19.0,
+      "concertoFocus": "balanced",
+      "view": "Torus",
+      "text": "Chopin's Nocturne Op. 27 No. 2 below",
+      "speech": "Below, Chopin's Nocturne, opus twenty seven. He wrote it in the mid eighteen thirties. Liszt published his in eighteen fifty, after Chopin died.",
+      "sourceIds": [
+        "wiki-consolations",
+        "wiki-op27"
+      ],
+      "picture": "delacroix",
+      "narrationStart": 7.9
+    },
+    {
+      "start": 19.0,
+      "end": 38.758,
+      "concertoFocus": "balanced",
+      "view": "Torus",
+      "picture": "danhauser",
+      "text": "So the debt runs from Chopin to Liszt: the same chord underneath, the same F rising out of it",
+      "speech": "So the debt runs from Chopin to Liszt. Liszt had sat in the hall at Chopin's Paris debut in eighteen thirty two. Here, nearly twenty years later, he writes his own prayer in the very same key, over the very same rocking chord.",
+      "sourceIds": [
+        "friendship",
+        "wiki-consolations"
+      ]
+    },
+    {
+      "start": 39.558,
+      "end": 54.5,
+      "concertoFocus": "balanced",
+      "view": "Torus",
+      "text": "The hands trade places: Liszt's right hand over Chopin's left",
+      "speech": "Now the hands trade places. Liszt's right hand sings above Chopin's left hand. The chord underneath is the same, so the tune simply fits. Nothing clashes, because both composers built the melody on the same D flat chord.",
+      "sourceIds": [
+        "scores"
+      ]
+    },
+    {
+      "start": 54.5,
+      "end": 69.371,
+      "concertoFocus": "balanced",
+      "view": "Torus",
+      "text": "And back: Chopin's right hand over Liszt's left",
+      "speech": "And back again. Chopin's right hand, more ornate, floats over Liszt's left. The line is more decorated, but the ground beneath it holds. In these opening bars the two pieces are very nearly interchangeable.",
+      "sourceIds": [
+        "scores"
+      ]
+    },
+    {
+      "start": 70.171,
+      "end": 88.1,
+      "concertoFocus": "piano",
+      "view": "Torus",
+      "text": "Liszt keeps it simple: the tune returns an octave higher",
+      "speech": "Liszt keeps it simple. When his tune returns, he lifts it an octave, adds a few notes, and lets it sing. The beauty is in the plainness.",
+      "sourceIds": [
+        "scores"
+      ]
+    },
+    {
+      "start": 88.1,
+      "end": 110.965,
+      "concertoFocus": "orchestra",
+      "view": "Torus",
+      "narrationStart": 89.3,
+      "text": "Chopin cannot leave a melody alone: flights that sound improvised",
+      "speech": "Chopin cannot leave a melody alone. The left hand rocks on, but the right hand drifts into flights of notes, as if he were improvising at the keyboard. Liszt admired exactly this freedom, and wrote about Chopin's rubato in his biography.",
+      "sourceIds": [
+        "life",
+        "wiki-op27"
+      ],
+      "picture": "radziwill"
+    },
+    {
+      "start": 111.765,
+      "end": 144.6,
+      "concertoFocus": "piano",
+      "view": "Torus",
+      "narrationStart": 113.0,
+      "text": "Liszt wanders away from D flat toward A",
+      "speech": "Both pieces leave home, and Liszt wanders toward a distant key, around A, before he returns to D flat as if nothing had happened. Even this detour is gentle, a lullaby that wanders and comes home.",
+      "sourceIds": [
+        "scores"
+      ]
+    },
+    {
+      "start": 144.6,
+      "end": 167.798,
+      "concertoFocus": "orchestra",
+      "view": "Torus",
+      "narrationStart": 145.8,
+      "text": "Chopin goes further: chromatic harmony, a free right hand",
+      "speech": "Chopin goes further. His harmony slides through sharps and flats, the same home, but a stranger road, and the right hand is free once more. Where Liszt is plain, Chopin is restless.",
+      "sourceIds": [
+        "scores"
+      ]
+    },
+    {
+      "start": 168.598,
+      "end": 179.1,
+      "concertoFocus": "balanced",
+      "view": "Torus",
+      "narrationStart": 169.2,
+      "text": "Both pianos climb toward a cadenza",
+      "speech": "Now both pianos climb together toward a cadenza, a free flourish before the end.",
+      "sourceIds": [
+        "scores"
+      ]
+    },
+    {
+      "start": 179.1,
+      "end": 203.098,
+      "concertoFocus": "balanced",
+      "view": "Torus",
+      "narrationStart": 180.0,
+      "text": "The same cascade to a high E flat, and the same D flat chord",
+      "speech": "Each pianist runs a cascade up to the same high E flat, and settles back into D flat. Liszt published his biography of Chopin in eighteen fifty two. This piece had already said what it wanted to say.",
+      "sourceIds": [
+        "life",
+        "scores"
+      ],
+      "picture": "hanfstaengl"
+    }
+  ]
+}

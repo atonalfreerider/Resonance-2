@@ -94,3 +94,9 @@ SongLibraryData/
 
 # Recorded videos (Tools > Resonance > Record)
 /Recordings/Videos/
+
+# Song-specific assets (pictures, screenshots, scores, rendered audio) stay out of git
+/Recordings/*.jpg
+/Recordings/*.png
+/Recordings/wheel-screenshots/
+/Tools/SongLibrary/liszt_chopin/__pycache__/
