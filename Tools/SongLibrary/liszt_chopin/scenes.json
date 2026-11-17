@@ -22,6 +22,7 @@
     {"name": "G Chopin alone, the climax and the dolce", "c": [58,68], "mask": "C_rh C_lh"}]},
   {"title": "The cadenza and the close", "scenes": [
     {"name": "G2 Chopin alone, toward the cadenza", "c": [69,74], "mask": "C_rh C_lh"},
-    {"name": "E both, the cadenza and the last chord", "l": [56,61], "dur": 24.0, "c": [75,77], "mask": "L_rh L_lh C_rh C_lh"}]}
+    {"name": "E both, the cadenza", "l": [56,60], "c": [75,76], "mask": "L_rh L_lh C_rh C_lh"},
+    {"name": "F both, the last chord together", "l": [61,61], "c": [77,77], "dur": 6.0, "lratio": 1.0, "cratio": 1.0, "mask": "L_rh L_lh C_rh C_lh"}]}
  ]
 }

@@ -1,0 +1,368 @@
+{
+ "title": "Rachmaninoff: bells, passion and dance",
+ "narrativeStyle": "John's directed listening tour: ecclesiastical, romantic and Russian folk perspectives",
+ "narrationTargetFraction": 0.6666666667,
+ "narrator": {
+  "name": "JohnV4",
+  "provider": "elevenlabs",
+  "voice": "7NoxJCAEPTXbnfIvyaF6",
+  "language": "en-US",
+  "delivery": "calm, grounded documentary narration, downward inflection at sentence endings"
+ },
+ "sources": [
+  {
+   "id": "bells",
+   "title": "RSNO: Rachmaninov Piano Concerto No. 2, programme notes by Julian Haylock",
+   "url": "https://www.rsno.org.uk/wp-content/uploads/2023/11/Rachmaninov-Piano-Concerto-No2-91011-Nov-2023.pdf"
+  },
+  {
+   "id": "origins",
+   "title": "Barbican / Symphony Orchestra: Rachmaninov, February 2026 programme",
+   "url": "https://www.barbican.org.uk/sites/default/files/documents/2026-02/Montero%20plays%20Rachmaninov%27s%20Second%20Piano%20Concerto_SO_27_Feb.pdf"
+  }
+ ],
+ "pictures": {},
+ "cues": [
+  {
+   "start": 0,
+   "end": 13,
+   "concertoFocus": "piano-only",
+   "narrationStart": 2,
+   "text": "The bells of Novgorod",
+   "speech": "The bells of Novgorod. Rachmaninoff grew up around this ancient Russian city, where church bells left a lasting impression. Here, Arthur Rubinstein gives those deep, ringing sounds a voice.",
+   "sourceIds": [
+    "bells",
+    "origins"
+   ],
+   "picture": "bells",
+   "narrationEnd": 11.8276
+  },
+  {
+   "start": 13,
+   "end": 26.1145,
+   "concertoFocus": "piano-only",
+   "text": "A low F tolls beneath changing chords",
+   "speech": "Listen to the low F in the left hand, tolling beneath the chords like a church bell. Above it, individual voices shift by small steps. The harmony changes its shade while the pulse stays rooted, gradually opening a door.",
+   "melodyTarget": "piano",
+   "annotationTarget": "note",
+   "annotationLabel": "Left hand: low F",
+   "narrationEnd": 24.7706,
+   "annotationMidiPitch": 29
+  },
+  {
+   "start": 26.1145,
+   "end": 38,
+   "concertoFocus": "orchestra",
+   "text": "The orchestra enters. Listen to its long melody.",
+   "narrate": false,
+   "melodyTarget": "orchestra"
+  },
+  {
+   "start": 38,
+   "end": 59,
+   "concertoFocus": "orchestra",
+   "text": "Three languages: church, passion and dance",
+   "speech": "The orchestra answers with a strong, expansive melody, while the piano becomes a moving current beneath it. We'll follow three musical languages through this movement: the ecclesiastical sound of bells and chant, the passionate richness of Romantic harmony, and the rhythmic vitality we can hear as Russian folk dance. They continually mix.",
+   "sourceIds": [
+    "bells"
+   ],
+   "melodyTarget": "orchestra",
+   "annotationTarget": "melody",
+   "annotationLabel": "The orchestral theme",
+   "narrationEnd": 56.8555
+  },
+  {
+   "start": 59,
+   "end": 82,
+   "concertoFocus": "balanced",
+   "text": "A chant-like line over a restless piano",
+   "speech": "Listen through the ecclesiastical lens. This broad melody has the gravity of a chant, suggesting something larger than one person. Its white line moves beside the piano's restless current. The orchestra gives us a steady voice; the piano gives that stillness an undercurrent of motion.",
+   "sourceIds": [
+    "bells"
+   ],
+   "picture": "composer",
+   "narrationEnd": 75.033
+  },
+  {
+   "start": 82,
+   "end": 104,
+   "concertoFocus": "piano",
+   "text": "The piano steps forward",
+   "speech": "As the piano steps forward, our attention turns from a public voice toward a private one. Hear the long melody and the restless detail around it. Romantic expression lives in that contrast: a calm surface, with notes beneath it searching, circling, and pressing onward.",
+   "melodyTarget": "piano",
+   "narrationEnd": 97.9314
+  },
+  {
+   "start": 104,
+   "end": 125,
+   "concertoFocus": "balanced",
+   "text": "The pulse acquires a dance-like lift",
+   "speech": "The rhythm becomes quicker and more pointed. Listen for the lift in each little gesture, and the way one answers another. This is our folk perspective: a feeling of feet, movement, and shared energy. We can hear a dance without identifying a borrowed folk tune.",
+   "annotationTarget": "melody",
+   "annotationLabel": "Short, rhythmic gestures",
+   "melodyTarget": "both",
+   "narrationEnd": 118.5772
+  },
+  {
+   "start": 125,
+   "end": 143,
+   "concertoFocus": "piano",
+   "text": "A lyrical piano voice opens the second theme",
+   "speech": "The piano opens a more intimate space. Its line asks us to follow a breath rather than a beat. This is the Romantic voice at its most direct. The surrounding notes create an atmosphere in which each arrival feels tender, and each departure reluctant.",
+   "melodyTarget": "piano",
+   "narrationEnd": 139.7526
+  },
+  {
+   "start": 143,
+   "end": 160,
+   "concertoFocus": "piano",
+   "text": "Listen to the piano's lyrical phrase.",
+   "narrate": false
+  },
+  {
+   "start": 160,
+   "end": 180,
+   "concertoFocus": "piano",
+   "text": "Expressive dissonance inside the harmony",
+   "speech": "Added tones and chromatic movement give these chords emotional pressure. Imagine passion spilling beyond the neat shape of an ordinary chord. That describes the feeling. The notes are carefully composed: their friction makes the eventual release more expressive, as a dissonant voice finally finds its resting place.",
+   "melodyTarget": "piano",
+   "picture": "composer",
+   "narrationEnd": 177.6226
+  },
+  {
+   "start": 180,
+   "end": 197,
+   "concertoFocus": "balanced",
+   "text": "The melody passes between two voices",
+   "speech": "Watch the instruments exchange roles. One holds the melody while the other fills the space, then the balance shifts. Neither has to disappear for the other to speak. The white lines let us follow each voice separately, while the surrounding colors preserve their common harmony.",
+   "melodyTarget": "both",
+   "annotationTarget": "melody",
+   "annotationLabel": "Two voices, one harmonic space",
+   "narrationEnd": 194.9493
+  },
+  {
+   "start": 197,
+   "end": 216,
+   "concertoFocus": "balanced",
+   "uncoil": true,
+   "text": "A brief look at the circle of fifths",
+   "speech": "For a moment, the toruses unfold into the circle of fifths. Follow the same lines in this open shape. Their relationships remain, but harmonic distance becomes easier to see. A note can belong to its surrounding chord, or pull against it. Then we return to the coiled view.",
+   "melodyTarget": "both",
+   "narrationEnd": 212.7074
+  },
+  {
+   "start": 216,
+   "end": 237,
+   "concertoFocus": "orchestra",
+   "text": "A larger voice gathers around the piano",
+   "speech": "The orchestra gathers around the piano, making an individual expression feel communal. Notice that the lyrical quality survives as the texture grows. Our Romantic and ecclesiastical perspectives overlap: an intimate phrase becomes a broad declaration, yet keeps its warmth. Follow the melody through the changing weight around it.",
+   "melodyTarget": "orchestra",
+   "picture": "recordshop",
+   "narrationEnd": 234.2263
+  },
+  {
+   "start": 237,
+   "end": 258,
+   "concertoFocus": "balanced",
+   "text": "Let the closing phrase speak for itself.",
+   "narrate": false
+  },
+  {
+   "start": 258,
+   "end": 281,
+   "concertoFocus": "balanced",
+   "text": "The development breaks the themes into gestures",
+   "speech": "The movement begins to work on its ideas. Longer melodies give way to fragments, repeated gestures, and changing combinations of instruments. Listen for familiar shapes in an unsettled setting. Dance-like rhythm, Romantic restlessness, and the weight of the opening are now influencing each other.",
+   "melodyTarget": "both",
+   "narrationEnd": 274.1231
+  },
+  {
+   "start": 281,
+   "end": 302,
+   "concertoFocus": "orchestra",
+   "text": "The orchestra takes the foreground",
+   "speech": "The orchestra steps forward, with the piano behind it. A short idea gains energy through repetition and exchange. Hear how the phrase becomes a question of momentum: where the next accent lands, how the answer changes, and how the ensemble gathers force. Follow its line through the shifting texture.",
+   "melodyTarget": "orchestra",
+   "annotationTarget": "melody",
+   "annotationLabel": "Follow the orchestra",
+   "narrationEnd": 297.1364
+  },
+  {
+   "start": 302,
+   "end": 322,
+   "concertoFocus": "piano",
+   "text": "The piano answers with motion",
+   "speech": "The piano answers with streams of notes. Watch the melody inside that activity. Romantic abundance is more than a large number of notes. It fills the space between important arrivals, keeping the emotional line alive while the harmony moves. The foreground changes, but the conversation continues.",
+   "melodyTarget": "piano",
+   "annotationTarget": "melody",
+   "annotationLabel": "The line within the piano's motion",
+   "narrationEnd": 319.0123
+  },
+  {
+   "start": 322,
+   "end": 343,
+   "concertoFocus": "balanced",
+   "text": "Rhythmic exchanges suggest a dance",
+   "speech": "The smaller gestures feel physical again. Accents give the music a spring, and the exchange between piano and orchestra suggests dancing partners. This is the folk language in our map. It brings movement and energy, even as the unsettled harmony keeps the larger melody out of reach.",
+   "melodyTarget": "both",
+   "narrationEnd": 338.1879
+  },
+  {
+   "start": 343,
+   "end": 365,
+   "concertoFocus": "balanced",
+   "text": "The three languages begin to converge",
+   "speech": "Repetition changes its meaning: what first felt playful now feels urgent. Piano and orchestra both contribute to the rising pressure. We are moving toward the opening theme's return, but the journey has altered it. Its next statement will carry the force of everything gathered here.",
+   "melodyTarget": "both",
+   "narrationEnd": 358.3742
+  },
+  {
+   "start": 365,
+   "end": 383.16,
+   "concertoFocus": "orchestra",
+   "text": "The approach to the great return. Music alone.",
+   "narrate": false,
+   "melodyTarget": "orchestra"
+  },
+  {
+   "start": 383.16,
+   "end": 398,
+   "concertoFocus": "orchestra",
+   "text": "The great march: the orchestral theme returns",
+   "speech": "The great return. The orchestral melody becomes a march: broad, commanding, almost imperial in its weight. Follow its white line. Through our ecclesiastical lens, the solemn opening voice now sounds monumental. The piano gives that declaration its driving strength.",
+   "melodyTarget": "orchestra",
+   "annotationTarget": "melody",
+   "annotationLabel": "The orchestral march melody",
+   "narrationEnd": 396.6949
+  },
+  {
+   "start": 398,
+   "end": 406.11,
+   "concertoFocus": "orchestra",
+   "text": "Stay with the orchestral crest.",
+   "narrate": false,
+   "melodyTarget": "orchestra"
+  },
+  {
+   "start": 406.11,
+   "end": 425,
+   "concertoFocus": "piano",
+   "text": "The piano receives the release",
+   "speech": "As that great statement releases, the piano comes forward. The space becomes personal again, but its solemn character remains. Here, Romantic tenderness and ecclesiastical gravity seem inseparable. Listen to the piano's phrasing, and to the quieter orchestral voice beside it. The music opens inward after the public declaration.",
+   "melodyTarget": "piano",
+   "narrationEnd": 423.1394
+  },
+  {
+   "start": 425,
+   "end": 444,
+   "concertoFocus": "balanced",
+   "text": "Three lines: two piano voices and one orchestral voice",
+   "speech": "Listen in three layers. The piano's right hand has an upper voice and an inner voice moving independently. Beside them, the orchestra carries another line. The arrows separate their paths. They share the harmony but need not arrive together: several voices expressing one passage, each with its own direction.",
+   "melodyTarget": "three",
+   "annotationTarget": "melody",
+   "annotationLabel": "Piano upper \u00c3\u0192\u00e2\u20ac\u0161\u00c3\u201a\u00c2\u00b7 piano inner \u00c3\u0192\u00e2\u20ac\u0161\u00c3\u201a\u00c2\u00b7 orchestra",
+   "narrationEnd": 442.1299
+  },
+  {
+   "start": 444,
+   "end": 461,
+   "concertoFocus": "piano",
+   "text": "A more intimate second crest",
+   "speech": "The piano builds a more intimate second crest. Hear the melody emerge from the fullness, then begin to settle. Romantic intensity and solemn gravity meet in the same phrase. The release matters as much as the rise: the texture thins, leaving room for a quieter answer.",
+   "melodyTarget": "piano",
+   "narrationEnd": 459.3073
+  },
+  {
+   "start": 461,
+   "end": 468.25,
+   "concertoFocus": "orchestra",
+   "text": "The piano falls away. Listen for the quiet answer.",
+   "narrate": false,
+   "melodyTarget": "orchestra"
+  },
+  {
+   "start": 468.25,
+   "end": 487,
+   "concertoFocus": "orchestra",
+   "text": "The orchestra alone: horns within a gentler texture",
+   "speech": "The piano falls silent. Listen for the horns within the gentler orchestral texture, and for the singing line that keeps the movement connected. After so many notes and such a large climax, restraint changes our listening. A sustained tone or a small turn can now feel enormous.",
+   "melodyTarget": "orchestra",
+   "annotationTarget": "melody",
+   "annotationLabel": "The quiet orchestral line",
+   "narrationEnd": 484.4329
+  },
+  {
+   "start": 487,
+   "end": 499.81,
+   "concertoFocus": "orchestra",
+   "text": "Give the orchestra this space. Music alone.",
+   "narrate": false,
+   "melodyTarget": "orchestra"
+  },
+  {
+   "start": 499.81,
+   "end": 516.88,
+   "concertoFocus": "piano",
+   "text": "The piano returns and the energy rebuilds",
+   "speech": "The piano returns and motion rebuilds. This lyrical language now follows the march and its release. That history changes the phrase. The music remembers its earlier tenderness, while each new gesture prepares the final surge. Watch the piano take the foreground as the orchestra supports its return.",
+   "melodyTarget": "piano",
+   "picture": "composer",
+   "narrationEnd": 515.1794
+  },
+  {
+   "start": 516.88,
+   "end": 537,
+   "concertoFocus": "balanced",
+   "uncoil": true,
+   "text": "The shared harmony, briefly unfolded",
+   "speech": "We unfold the toruses once more to see their shared harmony. The instruments occupy separate spaces, yet belong to one musical world. Notice a note leaning away, then settling. These small movements help a familiar phrase keep its identity while its emotional color changes. Listen to their connection.",
+   "melodyTarget": "both",
+   "narrationEnd": 534.3241
+  },
+  {
+   "start": 537,
+   "end": 548.8,
+   "concertoFocus": "piano",
+   "text": "A breath before the final ascent",
+   "speech": "The music takes a breath. Stay with the piano as the texture loosens. Quiet gives the larger gestures their meaning, and this sense of space makes the next rise possible. Let the phrase settle before its energy returns.",
+   "melodyTarget": "piano",
+   "narrationEnd": 547.5716
+  },
+  {
+   "start": 548.8,
+   "end": 565,
+   "concertoFocus": "piano",
+   "text": "Romantic phrases gather their final strength",
+   "speech": "The piano gathers strength. Hear the expressive turns inside its phrase and the abundance around it. The Romantic voice still carries the solemn depth of the opening. What began as a tolling bell has become a range of feeling, from hesitation to confidence, preparing one final release.",
+   "melodyTarget": "piano",
+   "narrationEnd": 563.3831
+  },
+  {
+   "start": 565,
+   "end": 582,
+   "concertoFocus": "balanced",
+   "text": "The duet turns toward the finish",
+   "speech": "Piano and orchestra move together toward the finish. Their exchanges compress and the pulse becomes decisive. Dance-like energy returns. Listen to the broad shape of the phrase and the lively gestures inside it. One gives direction; the other gives forward lift. The two voices are gathering into a single drive.",
+   "melodyTarget": "both",
+   "picture": "recordshop",
+   "narrationEnd": 580.3036
+  },
+  {
+   "start": 582,
+   "end": 596,
+   "concertoFocus": "balanced",
+   "text": "Bells, passion and dance converge",
+   "speech": "Bells and chant, Romantic richness, and the vitality of dance have come together. The ending leaves energy in motion, ready for the two movements that follow. We'll let piano and orchestra carry it to the final chord.",
+   "melodyTarget": "both",
+   "narrationEnd": 594.3313
+  },
+  {
+   "start": 596,
+   "end": 614.2839,
+   "concertoFocus": "balanced",
+   "text": "The final drive. Music alone.",
+   "narrate": false,
+   "melodyTarget": "both"
+  }
+ ]
+}

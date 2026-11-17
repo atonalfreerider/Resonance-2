@@ -10,7 +10,7 @@ public sealed class SongRecordingCaptions : MonoBehaviour
     SongDirector director;SongNarration narration;MidiPlayer midi;VisualizationViews views;
     readonly List<Label> labels=new();
     string text="";string[] words=Array.Empty<string>();float[] ends=Array.Empty<float>();
-    int first=-1,last=-1,lit=-1;float total;
+    int first=-1,last=-1,lit=-1;float total,shownTop=-1;
     public void Bind(VisualElement ui)
     {
         root=ui;director=GetComponent<SongDirector>();narration=GetComponent<SongNarration>();midi=GetComponent<MidiPlayer>();views=GetComponent<VisualizationViews>();
@@ -25,7 +25,7 @@ public sealed class SongRecordingCaptions : MonoBehaviour
     {
         var cue=director.CurrentCue;var segment=narration.SegmentFor(director.CueIndex);
         bool show=RecordingMode.Active&&cue!=null&&segment!=null&&midi.Position>=segment.start&&midi.Position<segment.end;
-        card.style.display=show?DisplayStyle.Flex:DisplayStyle.None;if(!show)return;
+        card.style.display=show?DisplayStyle.Flex:DisplayStyle.None;if(!show){shownTop=-1;return;}
         string spoken=string.IsNullOrWhiteSpace(cue.speech)?cue.text:cue.speech;
         if(text!=spoken)
         {
@@ -54,6 +54,9 @@ public sealed class SongRecordingCaptions : MonoBehaviour
         bool duet=portrait&&pair!=null&&pair.SplitActive&&pair.Piano!=null&&pair.Orchestra!=null&&pair.Piano.gameObject.activeInHierarchy&&pair.Orchestra.gameObject.activeInHierarchy;
         float captionTop=height*RecordingMode.CaptionTop;
         if(duet){float centre=height*(1-(pair.PianoViewport.center.y+pair.OrchestraViewport.center.y)*.5f);float cardHeight=card.resolvedStyle.height;if(!float.IsFinite(cardHeight)||cardHeight<1)cardHeight=80;captionTop=centre-cardHeight*.5f;}
+        // One torus filling the frame (the other silent for a long while): the captions stand in the lower third, easing there.
+        if(portrait&&pair!=null&&pair.SplitActive&&pair.SoloTarget)captionTop=height*.7f;
+        shownTop=shownTop<0?captionTop:Mathf.Lerp(shownTop,captionTop,1-Mathf.Exp(-Time.unscaledDeltaTime*3.5f));captionTop=shownTop;
         card.style.top=portrait?new StyleLength(captionTop):new StyleLength(StyleKeyword.Auto);
         card.style.bottom=portrait?new StyleLength(StyleKeyword.Auto):new StyleLength(22);
         foreach(var label in labels)label.style.fontSize=size;

@@ -82,6 +82,8 @@ def main():
             if l:
                 l0, l1 = bars('L', *l)
                 dur = sc.get('dur', l1 - l0)
+                if 'lratio' in sc:
+                    l1 = l0 + dur / sc['lratio']
             else:
                 c0, c1 = bars('C', *c)
                 dur = (c1 - c0) * sc.get('ratio', 1.0)
@@ -89,6 +91,8 @@ def main():
                          L=dict(src0=l0, src1=l1, ratio=dur / (l1 - l0)) if l else None)
             if c:
                 c0, c1 = bars('C', *c)
+                if 'cratio' in sc:
+                    c1 = c0 + (dur - lead) / sc['cratio']
                 scene['C'] = dict(src0=c0, src1=c1, ratio=(dur - lead) / (c1 - c0))
             timeline.append(scene)
             cursor += dur
@@ -152,6 +156,27 @@ def main():
                     midi_notes[p].append((ds, de, n['p'], n['v']))
         report.append({k: sc[k] for k in ('chapter', 'name', 'dst0', 'dst1', 'lead', 'mask')} |
                       ({'chopinStretch': round(sc['C']['ratio'], 3)} if 'C' in sc else {}))
+    # Level the scenes: a hand or two alone sounds quieter than four, so each scene is lifted toward the loudest scenes'
+    # loudness (never cut, at most +9 dB), with a ramp across each join.
+    rms = []
+    for sc in timeline:
+        seg = mix[int(sc['dst0'] * SR):int(sc['dst1'] * SR)]
+        rms.append(float(np.sqrt(np.mean(seg * seg))) if len(seg) else 0.0)
+    target = .8 * max(rms)
+    gains = [float(np.clip(target / max(r, 1e-6), 1.0, 2.4)) for r in rms]
+    for i, sc in enumerate(timeline):            # a short scene (the last chord dying away) keeps the level of the one before it
+        if i and sc['dst1'] - sc['dst0'] < 8:
+            gains[i] = gains[i - 1]
+    knots_t, knots_g = [0.0], [gains[0]]
+    for sc, g in zip(timeline, gains):
+        knots_t += [sc['dst0'] + .6, sc['dst1'] - .6]
+        knots_g += [g, g]
+    knots_t.append(total + 1)
+    knots_g.append(gains[-1])
+    env = np.interp(np.arange(len(mix)) / SR, knots_t, knots_g).astype('float32')
+    mix *= env[:, None]
+    for sc, r, g in zip(timeline, rms, gains):
+        print(f"level {sc['name']:<40} rms {20 * np.log10(max(r, 1e-6)):6.1f} dB  gain x{g:.2f}")
     peak = float(np.abs(mix).max())
     mix *= .89 / peak
     wav = OUT / 'recording.wav'

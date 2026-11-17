@@ -130,7 +130,7 @@
       "end": 19.0,
       "view": "Torus",
       "text": "Chopin's Nocturne Op. 27 No. 2 below",
-      "speech": "Below, Chopin's Nocturne, opus twenty seven. He wrote it in the mid eighteen thirties. Liszt published his in eighteen fifty, after Chopin died.",
+      "speech": "Below, Chopin's Nocturne, opus twenty seven. He wrote it in the mid 1830s. Liszt published his in 1850, after Chopin died.",
       "sourceIds": [
         "wiki-consolations",
         "wiki-op27"
@@ -143,7 +143,7 @@
       "end": 38.758,
       "view": "Torus",
       "text": "So the debt runs from Chopin to Liszt: the same chord underneath, the same F rising out of it",
-      "speech": "So the debt runs from Chopin to Liszt. Liszt had sat in the hall at Chopin's Paris debut in eighteen thirty two. Here, nearly twenty years later, he writes his own prayer in the very same key, over the very same rocking chord.",
+      "speech": "So the debt runs from Chopin to Liszt. Liszt had sat in the hall at Chopin's Paris debut in 1832. Here, nearly twenty years later, he writes his own prayer in the very same key, over the very same rocking chord.",
       "sourceIds": [
         "friendship",
         "wiki-consolations"
@@ -342,8 +342,8 @@
       "start": 352.154,
       "end": 376.188,
       "view": "Torus",
-      "text": "The left hand rocks between D flat and its dominant",
-      "speech": "From here the left hand simply rocks between D flat and its dominant, bar after bar, while the right hand floats above. Then the cadenza begins. In bars seventy one and seventy three it leans on the dominant, and seventy two and seventy four answer on D flat.",
+      "text": "The left hand rocks between a low D flat and a low A flat; Chopin alone",
+      "speech": "From here the left hand simply rocks between a low D flat and a low A flat, bar after bar, while the right hand floats above. Liszt has nothing like it, so Chopin plays these bars alone, until the endings meet.",
       "sourceIds": [
         "scores"
       ],
@@ -351,10 +351,10 @@
     },
     {
       "start": 376.188,
-      "end": 400.188,
+      "end": 400.077,
       "view": "Torus",
-      "text": "Both cadenzas climb to the same high E flat; the D flat chord closes",
-      "speech": "Now both pianos run the cadenza together, a cascade up to the same high E flat, and settle into D flat. Two years before Liszt published his life of Chopin, he had already written his answer in music.",
+      "text": "The endings line up: the same high E flat, one last D flat chord together",
+      "speech": "Now the endings line up. Both cadenzas climb to the same high E flat, and the last D flat chord lands together. Two years before Liszt published his life of Chopin, he had already written his answer in music.",
       "sourceIds": [
         "life",
         "scores"
@@ -366,5 +366,128 @@
   "portraits": {
     "Liszt": "../liszt-chopin/pictures/lehmann-1839.jpg",
     "Chopin": "../chopin-op10-3/pictures/delacroix-1838.jpg"
-  }
+  },
+  "duckFloor": 0.3,
+  "arrows": [
+    {
+      "cue": 2,
+      "word": "rocking",
+      "nth": 0,
+      "torus": 0,
+      "target": "chord",
+      "label": "D♭ · the same chord",
+      "dur": 3.8,
+      "pitchClass": 1
+    },
+    {
+      "cue": 2,
+      "word": "rocking",
+      "nth": 0,
+      "torus": 1,
+      "target": "chord",
+      "label": "D♭ · the same chord",
+      "dur": 3.8,
+      "pitchClass": 1
+    },
+    {
+      "cue": 7,
+      "word": "far",
+      "nth": 0,
+      "torus": 1,
+      "target": "chord",
+      "label": "A · far from home",
+      "dur": 3.8,
+      "pitchClass": 9
+    },
+    {
+      "cue": 11,
+      "word": "drifts",
+      "nth": 0,
+      "torus": 0,
+      "target": "chord",
+      "label": "drifts toward A",
+      "dur": 3.8,
+      "pitchClass": 9
+    },
+    {
+      "cue": 13,
+      "word": "a",
+      "nth": 0,
+      "torus": 1,
+      "target": "chord",
+      "label": "A",
+      "dur": 3.0,
+      "pitchClass": 9
+    },
+    {
+      "cue": 13,
+      "word": "e",
+      "nth": 0,
+      "torus": 1,
+      "target": "chord",
+      "label": "E",
+      "dur": 3.0,
+      "pitchClass": 4
+    },
+    {
+      "cue": 19,
+      "word": "low",
+      "nth": 0,
+      "torus": 1,
+      "target": "note",
+      "label": "a low D♭",
+      "dur": 3.2,
+      "midiPitch": 37
+    },
+    {
+      "cue": 19,
+      "word": "low",
+      "nth": 1,
+      "torus": 1,
+      "target": "note",
+      "label": "a low A♭",
+      "dur": 3.2,
+      "midiPitch": 44
+    },
+    {
+      "cue": 20,
+      "word": "high",
+      "nth": 0,
+      "torus": 0,
+      "target": "note",
+      "label": "high E♭",
+      "dur": 4.0,
+      "midiPitch": 99
+    },
+    {
+      "cue": 20,
+      "word": "high",
+      "nth": 0,
+      "torus": 1,
+      "target": "note",
+      "label": "high E♭",
+      "dur": 4.0,
+      "midiPitch": 99
+    },
+    {
+      "cue": 20,
+      "word": "chord",
+      "nth": 0,
+      "torus": 0,
+      "target": "chord",
+      "label": "D♭ · home together",
+      "dur": 4.5,
+      "pitchClass": 1
+    },
+    {
+      "cue": 20,
+      "word": "chord",
+      "nth": 0,
+      "torus": 1,
+      "target": "chord",
+      "label": "D♭ · home together",
+      "dur": 4.5,
+      "pitchClass": 1
+    }
+  ]
 }

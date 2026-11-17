@@ -9,7 +9,8 @@ public class Chord : MonoBehaviour
     public int segmentCount = 48;
     public float waveFrequency = 12f, amplitudeScale = .012f;
     LineRenderer line;
-    Vector3[] basis, animated;
+    Vector3[] basis, animated, localBasis;
+    Transform pose;   // the torus this line belongs to: a curved line is kept in its frame, so it moves with the torus
     bool curved;
     TonalDominance dominance;
     Color startHue,endHue;
@@ -35,28 +36,33 @@ public class Chord : MonoBehaviour
     public void Init(Note a, Note b, LineRenderer renderer)
     {
         Note1 = a; Note2 = b; line = renderer;
-        dominance=GetComponentInParent<TonalDominance>();
+        dominance=GetComponentInParent<TonalDominance>();pose=transform.parent;
         line.useWorldSpace = true;
         line.alignment = LineAlignment.View;
         line.widthCurve = AnimationCurve.Linear(0, 1, 1, 1);
         curved = false;
+        line.enabled = false;   // a new line is hidden until its first LateUpdate has placed it (it would draw once at the origin, full width)
         release.Clear();attackAge=10;releaseAge=0;
         Resize(segmentCount + 1);
     }
     void Resize(int count)
     {
-        if (basis == null || basis.Length != count) { basis = new Vector3[count]; animated = new Vector3[count]; }
+        if (basis == null || basis.Length != count) { basis = new Vector3[count]; animated = new Vector3[count]; localBasis = new Vector3[count]; }
         line.positionCount = count;
     }
     public void Fifth(List<Vector3> points)
     {
+        // The route arrives in world space, computed from the torus as it stood a moment ago; kept in the torus's own
+        // frame it follows the torus when that moves before the frame is drawn (a split view's layout).
         Resize(points.Count); points.CopyTo(basis); curved = true;
+        for (int i = 0; i < basis.Length; i++) localBasis[i] = pose != null ? pose.InverseTransformPoint(basis[i]) : basis[i];
     }
     void LateUpdate()
     {
         using var perf=Perf.Chords.Auto();
         if (Note1 == null || Note2 == null || basis == null) return;
         release.Advance(Time.unscaledDeltaTime,releaseSeconds);
+        if (curved && pose != null) for (int i = 0; i < basis.Length; i++) basis[i] = pose.TransformPoint(localBasis[i]);
         if (!curved) for (int i = 0; i < basis.Length; i++)
             basis[i] = Vector3.Lerp(Note1.transform.position, Note2.transform.position, i / (float)(basis.Length - 1));
         float fade=peak>0?release.Level/peak:0;
@@ -81,6 +87,7 @@ public class Chord : MonoBehaviour
             animated[i] = basis[i] + amp*envelope*(perpendicular*wave+second*(.45f*Mathf.Sin(t*1.21f-phase*.8f)));
         }
         line.SetPositions(animated);
+        line.enabled = true;
     }
     void OnDestroy() { if (line != null && line.sharedMaterial != null) Destroy(line.sharedMaterial); }
 }

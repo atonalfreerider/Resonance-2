@@ -1,0 +1,318 @@
+{
+  "title": "Rachmaninoff: enchantment, shadow and release",
+  "narrativeStyle": "John's directed second-movement tour: Romantic enchantment, emotional shadow, catharsis and the bridge between movements",
+  "narrationTargetFraction": 0.5,
+  "narrator": {
+    "name": "JohnV4",
+    "provider": "elevenlabs",
+    "voice": "7NoxJCAEPTXbnfIvyaF6",
+    "language": "en-US",
+    "delivery": "calm, grounded documentary narration, downward inflection at sentence endings"
+  },
+  "sources": [
+    {
+      "id": "history",
+      "title": "LA Philharmonic: programme notes by Harlow Robinson",
+      "url": "https://www.laphil.com/works/piano-concerto-no-2-in-c-minor-op-18"
+    },
+    {
+      "id": "voices",
+      "title": "Indianapolis Symphony Orchestra: Rachmaninoff Concerto No. 2 programme notes",
+      "url": "https://www.indianapolissymphony.org/backstage/program-notes/rachmaninoff-concerto-no-2-in-c-minor/"
+    },
+    {
+      "id": "score",
+      "title": "Prepared MuseScore score and Rubinstein recording: measured key regions and instrument entrances",
+      "url": "https://imslp.org/wiki/Piano_Concerto_No.2,_Op.18_(Rachmaninoff,_Sergei)"
+    }
+  ],
+  "pictures": {},
+  "cues": [
+    {
+      "start": 0,
+      "end": 26.006158,
+      "concertoFocus": "orchestra",
+      "narrationStart": 2,
+      "text": "From C minor toward E major: a bridge between movements",
+      "speech": "The orchestra opens a doorway into a new world. After the first movement's C minor, these quiet chords lead us toward E major. The change of key matters: Rachmaninoff connects the movements while changing their emotional light.",
+      "sourceIds": [
+        "history"
+      ],
+      "melodyTarget": "orchestra",
+      "narrationEnd": 15.071666
+    },
+    {
+      "start": 26.006158,
+      "end": 46.303,
+      "concertoFocus": "piano",
+      "text": "The piano's soft arpeggios",
+      "speech": "The piano begins its soft, repeating arpeggios. They can remind us of the Moonlight Sonata: a steady current beneath a singing voice. Here, Rachmaninoff makes the texture his own. The spacing, the inner voices, and the harmonic detail create a particularly rich enchantment.",
+      "melodyTarget": "piano",
+      "narrationEnd": 43.147926
+    },
+    {
+      "start": 46.303,
+      "end": 62.26,
+      "concertoFocus": "orchestra",
+      "text": "A solitary flute sings above the piano",
+      "speech": "A solitary flute now carries the first melody. The piano supports it gently, giving the phrase a continuous bed of motion. One clear voice seems to float above all those piano notes, making the texture feel both intimate and spacious.",
+      "sourceIds": [
+        "voices"
+      ],
+      "melodyTarget": "orchestra",
+      "annotationTarget": "melody",
+      "annotationLabel": "The solo flute",
+      "narrationEnd": 60.345079
+    },
+    {
+      "start": 62.26,
+      "end": 84,
+      "concertoFocus": "orchestra",
+      "text": "The clarinet receives the phrase",
+      "speech": "The melody passes into the clarinet. The flute's lighter sound becomes warmer and more inward. Rachmaninoff keeps the piano's current flowing underneath, so the exchange feels continuous, as though one voice has quietly become another.",
+      "sourceIds": [
+        "voices"
+      ],
+      "melodyTarget": "orchestra",
+      "annotationTarget": "melody",
+      "annotationLabel": "Flute to clarinet",
+      "narrationEnd": 75.366
+    },
+    {
+      "start": 84,
+      "end": 106,
+      "concertoFocus": "piano",
+      "text": "The piano answers the woodwinds",
+      "speech": "Now listen to the piano's answer. What began as accompaniment becomes part of the singing conversation. Piano and orchestra enchant us together: each voice remembers the other's phrase and gives it a new inflection.",
+      "melodyTarget": "piano",
+      "narrationEnd": 96.409445
+    },
+    {
+      "start": 106,
+      "end": 128,
+      "concertoFocus": "piano",
+      "text": "Listen to the hypnotic exchange.",
+      "narrate": false
+    },
+    {
+      "start": 128,
+      "end": 156,
+      "concertoFocus": "orchestra",
+      "text": "Two voices, one continuous phrase",
+      "speech": "The phrasing is hypnotic because something stays constant while something else changes. The piano keeps its gentle motion; the melody rises, falls, and breathes above it. Notice how the two toruses share the same harmonic orientation.",
+      "narrationEnd": 142.155851
+    },
+    {
+      "start": 156,
+      "end": 181,
+      "concertoFocus": "piano",
+      "text": "Romantic richness, with a solemn undertone",
+      "speech": "We are still in the Romantic language: a singing line surrounded by a richness of detail. You may also hear an ecclesiastical overtone in the stillness and the broad, reverent pacing. That is a way of listening, rather than a claim that he is quoting a church chant.",
+      "narrationEnd": 171.244419
+    },
+    {
+      "start": 181,
+      "end": 200.071,
+      "concertoFocus": "orchestra",
+      "text": "Let the phrase breathe. Music alone.",
+      "narrate": false
+    },
+    {
+      "start": 200.071,
+      "end": 224,
+      "concertoFocus": "piano",
+      "text": "Writing again: 1900 and 1901",
+      "speech": "This music belongs to Rachmaninoff's return to composition after a difficult period of depression. He completed the second and third movements in 1900, before finishing the first in 1901. The concerto was dedicated to Doctor Nikolai Dahl, who had helped him recover his confidence.",
+      "sourceIds": [
+        "history"
+      ],
+      "picture": "composer",
+      "narrationEnd": 216.268001
+    },
+    {
+      "start": 224,
+      "end": 243.673,
+      "concertoFocus": "piano",
+      "text": "Brightness begins to gather a shadow.",
+      "narrate": false
+    },
+    {
+      "start": 243.673,
+      "end": 265,
+      "concertoFocus": "piano",
+      "text": "The tonal landscape turns toward minor",
+      "speech": "The harmony turns toward minor, and the piano's motion begins to feel more urgent. Watch its torus change with the tonal landscape. We can hear this passage as the shadow of depression interrupting an earlier euphoria. That is our emotional interpretation. The musical facts are the changing harmony, the quicker pulse, and the growing pressure inside the phrase.",
+      "melodyTarget": "piano",
+      "annotationTarget": "melody",
+      "annotationLabel": "The piano in a minor region",
+      "narrationEnd": 264.046357
+    },
+    {
+      "start": 265,
+      "end": 281.052,
+      "concertoFocus": "piano",
+      "text": "Listen through the growing urgency.",
+      "narrate": false
+    },
+    {
+      "start": 281.052,
+      "end": 301,
+      "concertoFocus": "orchestra",
+      "text": "The central section gathers force",
+      "speech": "The central section gathers force. What was a quiet current becomes a more insistent pulse, and the exchanges grow sharper. The music seems compelled to go through this unsettled space before it can emerge elsewhere.",
+      "narrationEnd": 293.821881
+    },
+    {
+      "start": 301,
+      "end": 327,
+      "concertoFocus": "piano",
+      "text": "A familiar pattern moves a whole step",
+      "speech": "A familiar pattern returns at a different pitch level. Listen for the whole-step displacement, and watch where its notes fall on the piano torus. A repeated shape can keep its identity while its surroundings change. This is one of Rachmaninoff's ways of sustaining a strong idea: repetition gives us recognition, while transposition changes what that recognition feels like.",
+      "melodyTarget": "piano",
+      "narrationEnd": 321.624226
+    },
+    {
+      "start": 327,
+      "end": 351.001,
+      "concertoFocus": "orchestra",
+      "text": "Hear the theme press onward. Music alone.",
+      "narrate": false
+    },
+    {
+      "start": 351.001,
+      "end": 375,
+      "concertoFocus": "piano",
+      "uncoil": true,
+      "text": "The displayed tonal center settles in C major",
+      "speech": "The tonal center now settles in C major. We briefly unfold the toruses to make the new relationships easier to follow. E and C are a major third apart; that larger tonal move is distinct from the whole-step repetition we just heard. Notice how familiar gestures can sound changed when a different chord becomes their point of rest.",
+      "narrationEnd": 369.623944
+    },
+    {
+      "start": 375,
+      "end": 390.517,
+      "concertoFocus": "piano",
+      "text": "Chords travel, then circle back",
+      "speech": "As we coil again, follow the movement from one chord to the next. Rachmaninoff keeps exploring, yet the phrase circles back toward its principal harmonies. The torus helps us see that balance between departure and return.",
+      "narrationEnd": 387.779283
+    },
+    {
+      "start": 390.517,
+      "end": 413.556,
+      "concertoFocus": "piano",
+      "text": "The piano alone: turning back toward E",
+      "speech": "The orchestra falls away, leaving the piano in the foreground. Soon the displayed tonal center turns back toward E major. Watch the torus twist, and listen for the brighter harmonic footing. A return to major can feel like an emotional opening, even while the piano remains restless. The music has found a route home through its unsettled middle.",
+      "melodyTarget": "piano",
+      "narrationEnd": 409.529775
+    },
+    {
+      "start": 413.556,
+      "end": 436,
+      "concertoFocus": "orchestra",
+      "text": "The emotional outburst. Music alone.",
+      "narrate": false
+    },
+    {
+      "start": 436,
+      "end": 454.949,
+      "concertoFocus": "piano",
+      "text": "Urgency and a flash of dance-like energy",
+      "speech": "There is a flash of dance-like energy inside this urgent passage. We can hear it through the Russian folk lens we used in the first movement: buoyant rhythm and decisive gestures. The Romantic abundance is still there, too. Rachmaninoff blends these characters, so a burst of rhythmic life can grow out of an intensely lyrical world.",
+      "narrationEnd": 454.092921
+    },
+    {
+      "start": 454.949,
+      "end": 479,
+      "concertoFocus": "piano",
+      "text": "Long piano arcs after the surge",
+      "speech": "After the surge, the piano has the space to stretch its arpeggios into long arcs. The orchestra recedes completely while the keyboard carries the movement forward. Hear the range of the hands, and the way a line can emerge from a whole field of notes. Abundance becomes a way of shaping the breath of the music.",
+      "melodyTarget": "piano",
+      "narrationEnd": 472.662602
+    },
+    {
+      "start": 479,
+      "end": 505.177,
+      "concertoFocus": "piano",
+      "text": "The piano alone. Listen to its long arcs.",
+      "narrate": false
+    },
+    {
+      "start": 505.177,
+      "end": 519.5,
+      "concertoFocus": "orchestra",
+      "text": "The partners begin to reconnect",
+      "speech": "Piano and orchestra begin to reconnect. The intense motion starts to release, and the familiar lyrical world comes back into view. We have carried the opening's enchantment through a much more unsettled landscape.",
+      "melodyTarget": "orchestra",
+      "narrationEnd": 517.318002
+    },
+    {
+      "start": 519.5,
+      "end": 537.742,
+      "concertoFocus": "piano",
+      "text": "A final piano passage before the theme returns.",
+      "narrate": false
+    },
+    {
+      "start": 537.742,
+      "end": 558,
+      "concertoFocus": "orchestra",
+      "text": "The main Romantic theme returns",
+      "speech": "The main Romantic theme returns, and its familiarity now carries the memory of everything in between. The orchestra gives the melody its breadth; the piano surrounds it with motion and color. This final return will carry us toward the movement's closing release. Follow the orchestra's line, while keeping the piano's answering detail in view.",
+      "melodyTarget": "orchestra",
+      "annotationTarget": "melody",
+      "annotationLabel": "The returning orchestral theme",
+      "narrationEnd": 556.825585
+    },
+    {
+      "start": 558,
+      "end": 583,
+      "concertoFocus": "piano",
+      "text": "Passion in the piano's inner voices",
+      "speech": "Watch the piano's inner voices. The richness comes from notes that lean against the harmony, then find their resolution. We might picture passion spilling across the keyboard, as if the hands could hardly contain it. But these extra notes are deliberately composed. Their dissonance and release give the broad orchestral melody a more intensely human feeling.",
+      "melodyTarget": "piano",
+      "narrationEnd": 577.96496
+    },
+    {
+      "start": 583,
+      "end": 609,
+      "concertoFocus": "orchestra",
+      "text": "Let piano and orchestra build together.",
+      "narrate": false
+    },
+    {
+      "start": 609,
+      "end": 631,
+      "concertoFocus": "piano",
+      "text": "Romantic tension becomes release",
+      "speech": "The phrase builds through Romantic tension toward release. Hear the piano's abundance against the orchestra's sustained voice. The beauty comes from their cooperation, and from the patience with which Rachmaninoff lets the harmony arrive. Stay with the direction of the whole phrase.",
+      "narrationEnd": 624.692406
+    },
+    {
+      "start": 631,
+      "end": 655,
+      "concertoFocus": "orchestra",
+      "text": "The closing glow of E major",
+      "speech": "The closing stretch gathers the tenderness that made this movement so enduring. Its lyrical world has reached far beyond the concert hall; this movement also inspired the song All by Myself. Here, in the concerto, the melody belongs to a larger journey. Piano and orchestra have brought us through enchantment, shadow, and renewed warmth, toward a deeply felt release.",
+      "sourceIds": [
+        "history"
+      ],
+      "picture": "recordshop",
+      "melodyTarget": "orchestra",
+      "narrationEnd": 652.438005
+    },
+    {
+      "start": 655,
+      "end": 678,
+      "concertoFocus": "piano",
+      "text": "A quiet bridge toward the finale",
+      "speech": "The Romantic voice has absorbed the movement's solemn depth and its moments of urgency. E major has become a place of arrival, and the quiet ending leaves room for the energy of the third movement. We will let Rubinstein and the orchestra carry the last phrase without words.",
+      "narrationEnd": 670.377629
+    },
+    {
+      "start": 678,
+      "end": 710.5496145,
+      "concertoFocus": "orchestra",
+      "text": "The final phrase and its release. Music alone.",
+      "narrate": false
+    }
+  ]
+}

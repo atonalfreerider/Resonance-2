@@ -28,6 +28,26 @@ public sealed class ConcertoTori : MonoBehaviour
     float PanelHeight=>ui!=null&&ui.layout.height>1?ui.layout.height:Screen.height;
     readonly VisualElement[] portraits=new VisualElement[2];readonly Texture2D[] portraitTextures=new Texture2D[2];readonly float[] portraitAlpha=new float[2];
     const float PortraitMargin=.17f,TitleHeight=92;
+    // A torus that jumps (a new layout, a seek, the first frames of a tour) shows no aurora until it has stood still for a moment:
+    // a chord volume placed against the old pose would flash, detached, in the space between the two.
+    readonly Vector3[] lastPosition=new Vector3[2];readonly float[] lastSize=new float[2],settleUntil=new float[2];
+    // A torus silent for more than QuietSeconds (two pianos) is hidden, its partner centred and enlarged: the intervals come from the notes.
+    const double QuietSeconds=15,QuietMargin=1.5;
+    readonly float[] presence={1,1},bigScale={1f,1f};readonly List<(double a,double b)>[] quiet={new(),new()};PreparedPatternSong quietFor;bool soloTarget;
+    // True while one of the two pianos is hidden for a long silence: the other fills the frame and the captions drop to the lower third.
+    public bool SoloTarget=>soloTarget;
+    void BuildQuiet()
+    {
+        for(int g=0;g<2;g++){
+            quiet[g].Clear();var tracks=g==0?midi.HarmonicPrepared.PianoTracks:midi.HarmonicPrepared.OrchestraTracks;double run=-1;
+            foreach(var f in source.Frames){
+                bool on=false;foreach(var v in f.Voices)if(Array.IndexOf(tracks,v.Track)>=0){on=true;break;}
+                if(!on){if(run<0)run=f.Time;}
+                else if(run>=0){if(f.Time-run>QuietSeconds)quiet[g].Add((run+QuietMargin,f.Time-QuietMargin));run=-1;}
+            }
+        }
+        quietFor=source;
+    }
     readonly double[][] handLast={new[]{-9.0,-9.0},new[]{-9.0,-9.0}};
     string PartName(int group){var names=midi.HarmonicPrepared.TrackNames;var tracks=group==0?midi.HarmonicPrepared.PianoTracks:midi.HarmonicPrepared.OrchestraTracks;
         if(names==null||tracks.Length<2||tracks[0]>=names.Length||!names[tracks[0]].EndsWith(" RH",StringComparison.Ordinal))return null;return names[tracks[0]].Substring(0,names[tracks[0]].Length-3);}
@@ -56,6 +76,7 @@ public sealed class ConcertoTori : MonoBehaviour
             var badge=new PartBadge(i==0||TwoPianos){name=i==0?"piano-part-badge":"orchestra-part-badge",pickingMode=PickingMode.Ignore};badge.style.position=Position.Absolute;badge.style.width=92;badge.style.height=36;root.Add(badge);badges[i]=badge;
             if(TwoPianos)MakePortrait(i,root);
         }
+        if(TwoPianos&&GetComponent<TourArrows>()==null)gameObject.AddComponent<TourArrows>().Bind(root,GetComponent<SongDirector>()?.Folder);
     }
     void MakePortrait(int i,VisualElement root)
     {
@@ -111,17 +132,27 @@ public sealed class ConcertoTori : MonoBehaviour
         else if(Focus!=requested&&now-focusSince>=12){Focus=requested;focusSince=now;}
         lastDirected=directing;
         var viewport=views.PanelHidden?new Rect(0,0,1,1):new Rect(views.SceneRect.x/Screen.width,1-views.SceneRect.yMax/Screen.height,views.SceneRect.width/Screen.width,views.SceneRect.height/Screen.height);
-        var target=DirectedLayout(viewport,vertical,Focus);if(portraits[0]!=null||portraits[1]!=null)for(int k=0;k<2;k++)target[k]=PortraitInset(target[k]);
+        bool two=TwoPianos;var hide=new bool[2];
+        if(two){
+            if(quietFor!=source)BuildQuiet();
+            for(int g=0;g<2;g++){foreach(var q in quiet[g])if(now>=q.a&&now<q.b){hide[g]=true;break;}}
+            if(hide[0]&&hide[1])hide[0]=hide[1]=false;
+        }
+        soloTarget=hide[0]!=hide[1];int keep=hide[0]?1:0;
+        var target=DirectedLayout(viewport,vertical,Focus);
+        if(soloTarget)target[keep]=viewport;
+        if(portraits[0]!=null||portraits[1]!=null)for(int k=0;k<2;k++)if(!(soloTarget&&k==keep))target[k]=PortraitInset(target[k]);
         bool custom=activeCue?.melodyTarget=="three"||activeCue?.directedMelody==true;
-        float easing=1-Mathf.Exp(-Mathf.Min(Time.unscaledDeltaTime,.1f)*.6f);
+        float easing=1-Mathf.Exp(-Mathf.Min(Time.unscaledDeltaTime,.1f)*(two?1.1f:.6f));
         for(int i=0;i<2;i++)bounds[i]=seek||director?.Directing!=true?target[i]:Lerp(bounds[i],target[i],easing);
         for(int i=0;i<2;i++){
             var shape=shapes[i];var tracks=i==0?midi.HarmonicPrepared.PianoTracks:midi.HarmonicPrepared.OrchestraTracks;
-            bool hidden=(i==1&&Focus=="piano-only")||(i==0&&Focus=="orchestra-only");
+            presence[i]=seek||director?.Directing!=true?(hide[i]?0:1):Mathf.MoveTowards(presence[i],hide[i]?0:1,Mathf.Min(Time.unscaledDeltaTime,.1f)/.9f);
+            bool hidden=(i==1&&Focus=="piano-only")||(i==0&&Focus=="orchestra-only")||(two&&presence[i]<=.002f);
             shape.gameObject.SetActive(!hidden);
             labels[i].style.display=hidden?DisplayStyle.None:DisplayStyle.Flex;badges[i].style.display=labels[i].style.display;
+            labels[i].style.opacity=badges[i].style.opacity=presence[i];
             shape.GetComponent<FeaturedInstrument>().SetDirectedMelody(custom?(i==0?director.Current.pianoMelody:director.Current.orchestraMelody):null);
-            var aurora=shape.GetComponent<ChordAurora>();if(aurora!=null)aurora.HeightScale=.38f;
             shape.UseSharedSynth(owner.Synth);shape.MinorMode=owner.MinorMode;shape.UseFlats=owner.UseFlats;
             shape.ShowSurfaces=owner.ShowSurfaces;shape.ShowDiagonals=owner.ShowDiagonals;shape.ShowStructure=owner.ShowStructure;shape.ShowRegisters=owner.ShowRegisters;
             shape.SoundingOnly=owner.SoundingOnly;shape.DiatonicStrip=owner.DiatonicStrip;shape.ShowHarmonics=owner.ShowHarmonics;shape.FieldDensity=owner.FieldDensity;
@@ -133,10 +164,15 @@ public sealed class ConcertoTori : MonoBehaviour
             // A small shared-clock drift keeps the duet alive without changing either torus's orientation.
             float drift=director?.Directing==true&&!owner.Uncoiled?(float)Math.Sin(now*.065+i*Math.PI)*.012f:0;
             var position=master.ViewportToWorldPoint(new Vector3(bounds[i].center.x+drift,bounds[i].center.y,depth));
+            bool jumped=seek||lastSize[i]<=0||Vector3.Distance(position,lastPosition[i])>.3f;lastPosition[i]=position;
             if(shape.transform.position!=position||shape.transform.rotation!=owner.transform.rotation)shape.transform.SetPositionAndRotation(position,owner.transform.rotation);
             var a=master.ViewportToWorldPoint(new Vector3(bounds[i].xMin,bounds[i].yMin,depth));var b=master.ViewportToWorldPoint(new Vector3(bounds[i].xMax,bounds[i].yMax,depth));
             float size=Mathf.Min(Mathf.Abs(Vector3.Dot(b-a,master.transform.right)),Mathf.Abs(Vector3.Dot(b-a,master.transform.up)));
-            var scale=Vector3.one*size*.38f/2.25f;   // a little inside the half, so lines and arcs stay out of the space betweenif(shape.transform.localScale!=scale)shape.transform.localScale=scale;
+            float wantScale=soloTarget&&i==keep?Mathf.Min(1.3f,size*.49f/2.25f):1f;   // the torus is 1 at its natural size; alone it grows to fill the framebigScale[i]=seek||director?.Directing!=true?wantScale:Mathf.Lerp(bigScale[i],wantScale,easing);
+            var scale=Vector3.one*bigScale[i]*Mathf.Max(.001f,Mathf.SmoothStep(0,1,presence[i]));if(lastSize[i]>0&&Mathf.Abs(scale.x/lastSize[i]-1)>.1f)jumped=true;lastSize[i]=scale.x;
+            if(jumped)settleUntil[i]=Time.unscaledTime+.6f;
+            {var aurora=shape.GetComponent<ChordAurora>();if(aurora!=null)aurora.HeightScale=.38f*Mathf.Clamp01(1-(settleUntil[i]-Time.unscaledTime)/.6f);}
+            if(shape.transform.localScale!=scale)shape.transform.localScale=scale;
             shape.MatchVisualPose(owner);
             shape.UpdateText();
             if(seek)shape.ClearVisualMemory();
@@ -150,7 +186,7 @@ public sealed class ConcertoTori : MonoBehaviour
                 bool right=now-handLast[i][0]<.8,left=now-handLast[i][1]<.8;
                 labels[i].text=PartName(i).ToUpperInvariant()+(right&&left?"  <size=20>BOTH HANDS</size>":right?"  <size=20>RIGHT HAND</size>":left?"  <size=20>LEFT HAND</size>":"");
             }
-            float panelW=PanelWidth,panelH=PanelHeight;bool upper=bounds[i].center.y>=.5f;
+            float panelW=PanelWidth,panelH=PanelHeight;bool upper=bounds[i].center.y>=.45f;
             // Titles sit at the top of the upper torus's half and near the bottom of the lower one (clear of the captions).
             float labelTop=TwoPianos?(upper?(1-bounds[i].yMax)*panelH+36:(1-bounds[i].yMin)*panelH-panelH*.125f):(1-bounds[i].yMax)*panelH+54;
             if(portraits[i]!=null){
