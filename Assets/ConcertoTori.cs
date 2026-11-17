@@ -20,6 +20,14 @@ public sealed class ConcertoTori : MonoBehaviour
     public void SetFocus(string focus){if(!new[]{"balanced","piano","orchestra","piano-only","orchestra-only"}.Contains(focus))throw new ArgumentException("Invalid concerto focus");ManualFocus=focus;focusSince=-1;}
     // Two pianos (Liszt and Chopin): both groups are hands of a named piano ("Liszt RH", "Liszt LH"), so each torus
     // is titled by its pianist and names the hands sounding in it, held 0.8 s after their last note.
+    // Two pianos: each pianist's portrait (portraits/<name>.jpg in the song's folder) stands beside the torus and
+    // comes up once that torus sounds; the torus gives it a margin on its left.
+    // The UI is laid out in panel units (the panel scales with the screen), not in screen pixels.
+    VisualElement ui;
+    float PanelWidth=>ui!=null&&ui.layout.width>1?ui.layout.width:Screen.width;
+    float PanelHeight=>ui!=null&&ui.layout.height>1?ui.layout.height:Screen.height;
+    readonly VisualElement[] portraits=new VisualElement[2];readonly Texture2D[] portraitTextures=new Texture2D[2];readonly float[] portraitAlpha=new float[2];
+    const float PortraitMargin=.17f,TitleHeight=92;
     readonly double[][] handLast={new[]{-9.0,-9.0},new[]{-9.0,-9.0}};
     string PartName(int group){var names=midi.HarmonicPrepared.TrackNames;var tracks=group==0?midi.HarmonicPrepared.PianoTracks:midi.HarmonicPrepared.OrchestraTracks;
         if(names==null||tracks.Length<2||tracks[0]>=names.Length||!names[tracks[0]].EndsWith(" RH",StringComparison.Ordinal))return null;return names[tracks[0]].Substring(0,names[tracks[0]].Length-3);}
@@ -36,7 +44,7 @@ public sealed class ConcertoTori : MonoBehaviour
     void Create()
     {
         backgroundCamera=Resources.FindObjectsOfTypeAll<Camera>().FirstOrDefault(c=>c.name=="Screen clear"&&c.gameObject.scene==gameObject.scene);
-        var root=GetComponent<UIDocument>().rootVisualElement;
+        var root=GetComponent<UIDocument>().rootVisualElement;ui=root;
         for(int i=0;i<2;i++){
             var go=new GameObject(i==0?"Piano torus":"Orchestra torus");go.SetActive(false);go.transform.position=new Vector3(100+i*100,0,0);
             var shape=go.AddComponent<Main>();shape.VisualOnly=true;shape.VisualCamera=master;shape.BloomMat=owner.BloomMat;shape.UseSharedSynth(owner.Synth);
@@ -46,8 +54,25 @@ public sealed class ConcertoTori : MonoBehaviour
             var label=new Label(TwoPianos?PartName(i).ToUpperInvariant():i==0?"PIANO":"ORCHESTRA"){name=i==0?"piano-torus-label":"orchestra-torus-label",pickingMode=PickingMode.Ignore};
             label.style.position=Position.Absolute;label.style.color=new Color(.9f,.95f,1);label.style.fontSize=TwoPianos?34:14;label.style.letterSpacing=TwoPianos?5:3;if(TwoPianos)label.style.unityFontStyleAndWeight=FontStyle.Bold;label.enableRichText=true;root.Add(label);labels[i]=label;
             var badge=new PartBadge(i==0||TwoPianos){name=i==0?"piano-part-badge":"orchestra-part-badge",pickingMode=PickingMode.Ignore};badge.style.position=Position.Absolute;badge.style.width=92;badge.style.height=36;root.Add(badge);badges[i]=badge;
+            if(TwoPianos)MakePortrait(i,root);
         }
     }
+    void MakePortrait(int i,VisualElement root)
+    {
+        var folder=GetComponent<SongDirector>()?.Folder;if(string.IsNullOrEmpty(folder))return;
+        string file=System.IO.Path.Combine(folder,"portraits",PartName(i).ToLowerInvariant()+".jpg");if(!System.IO.File.Exists(file))return;
+        var texture=new Texture2D(2,2,TextureFormat.RGBA32,true);if(!texture.LoadImage(System.IO.File.ReadAllBytes(file),true)){Destroy(texture);return;}
+        texture.filterMode=FilterMode.Bilinear;portraitTextures[i]=texture;
+        var box=new VisualElement{name=(i==0?"piano":"orchestra")+"-portrait",pickingMode=PickingMode.Ignore};
+        box.style.position=Position.Absolute;box.style.opacity=0;box.style.backgroundImage=new StyleBackground(texture);
+        box.style.backgroundSize=new BackgroundSize(BackgroundSizeType.Cover);box.style.backgroundPositionY=new BackgroundPosition(BackgroundPositionKeyword.Top);
+        var border=new Color(.78f,.86f,.95f,.55f);box.style.borderTopWidth=box.style.borderBottomWidth=box.style.borderLeftWidth=box.style.borderRightWidth=1.5f;
+        box.style.borderTopColor=box.style.borderBottomColor=box.style.borderLeftColor=box.style.borderRightColor=border;
+        box.style.borderTopLeftRadius=box.style.borderTopRightRadius=box.style.borderBottomLeftRadius=box.style.borderBottomRightRadius=10;
+        root.Add(box);portraits[i]=box;
+    }
+    // Room for the portrait on the torus's left.
+    static Rect PortraitInset(Rect r)=>new Rect(r.x+r.width*PortraitMargin,r.y,r.width*(1-PortraitMargin),r.height);
     void LateUpdate()
     {
         bool active=midi.Loaded&&midi.HarmonicPrepared?.PianoConcerto==true&&views.Current==VisualizationViews.View.Torus&&!VrSession.Active;
@@ -86,7 +111,7 @@ public sealed class ConcertoTori : MonoBehaviour
         else if(Focus!=requested&&now-focusSince>=12){Focus=requested;focusSince=now;}
         lastDirected=directing;
         var viewport=views.PanelHidden?new Rect(0,0,1,1):new Rect(views.SceneRect.x/Screen.width,1-views.SceneRect.yMax/Screen.height,views.SceneRect.width/Screen.width,views.SceneRect.height/Screen.height);
-        var target=DirectedLayout(viewport,vertical,Focus);
+        var target=DirectedLayout(viewport,vertical,Focus);if(portraits[0]!=null||portraits[1]!=null)for(int k=0;k<2;k++)target[k]=PortraitInset(target[k]);
         bool custom=activeCue?.melodyTarget=="three"||activeCue?.directedMelody==true;
         float easing=1-Mathf.Exp(-Mathf.Min(Time.unscaledDeltaTime,.1f)*.6f);
         for(int i=0;i<2;i++)bounds[i]=seek||director?.Directing!=true?target[i]:Lerp(bounds[i],target[i],easing);
@@ -96,6 +121,7 @@ public sealed class ConcertoTori : MonoBehaviour
             shape.gameObject.SetActive(!hidden);
             labels[i].style.display=hidden?DisplayStyle.None:DisplayStyle.Flex;badges[i].style.display=labels[i].style.display;
             shape.GetComponent<FeaturedInstrument>().SetDirectedMelody(custom?(i==0?director.Current.pianoMelody:director.Current.orchestraMelody):null);
+            var aurora=shape.GetComponent<ChordAurora>();if(aurora!=null)aurora.HeightScale=.38f;
             shape.UseSharedSynth(owner.Synth);shape.MinorMode=owner.MinorMode;shape.UseFlats=owner.UseFlats;
             shape.ShowSurfaces=owner.ShowSurfaces;shape.ShowDiagonals=owner.ShowDiagonals;shape.ShowStructure=owner.ShowStructure;shape.ShowRegisters=owner.ShowRegisters;
             shape.SoundingOnly=owner.SoundingOnly;shape.DiatonicStrip=owner.DiatonicStrip;shape.ShowHarmonics=owner.ShowHarmonics;shape.FieldDensity=owner.FieldDensity;
@@ -110,7 +136,7 @@ public sealed class ConcertoTori : MonoBehaviour
             if(shape.transform.position!=position||shape.transform.rotation!=owner.transform.rotation)shape.transform.SetPositionAndRotation(position,owner.transform.rotation);
             var a=master.ViewportToWorldPoint(new Vector3(bounds[i].xMin,bounds[i].yMin,depth));var b=master.ViewportToWorldPoint(new Vector3(bounds[i].xMax,bounds[i].yMax,depth));
             float size=Mathf.Min(Mathf.Abs(Vector3.Dot(b-a,master.transform.right)),Mathf.Abs(Vector3.Dot(b-a,master.transform.up)));
-            var scale=Vector3.one*size*.42f/2.25f;if(shape.transform.localScale!=scale)shape.transform.localScale=scale;
+            var scale=Vector3.one*size*.38f/2.25f;   // a little inside the half, so lines and arcs stay out of the space betweenif(shape.transform.localScale!=scale)shape.transform.localScale=scale;
             shape.MatchVisualPose(owner);
             shape.UpdateText();
             if(seek)shape.ClearVisualMemory();
@@ -124,8 +150,24 @@ public sealed class ConcertoTori : MonoBehaviour
                 bool right=now-handLast[i][0]<.8,left=now-handLast[i][1]<.8;
                 labels[i].text=PartName(i).ToUpperInvariant()+(right&&left?"  <size=20>BOTH HANDS</size>":right?"  <size=20>RIGHT HAND</size>":left?"  <size=20>LEFT HAND</size>":"");
             }
-            labels[i].style.left=bounds[i].xMin*Screen.width+20;labels[i].style.top=(1-bounds[i].yMax)*Screen.height+54;
-            badges[i].style.left=bounds[i].xMin*Screen.width+20;badges[i].style.top=(1-bounds[i].yMax)*Screen.height+(TwoPianos?106:78);
+            float panelW=PanelWidth,panelH=PanelHeight;bool upper=bounds[i].center.y>=.5f;
+            // Titles sit at the top of the upper torus's half and near the bottom of the lower one (clear of the captions).
+            float labelTop=TwoPianos?(upper?(1-bounds[i].yMax)*panelH+36:(1-bounds[i].yMin)*panelH-panelH*.125f):(1-bounds[i].yMax)*panelH+54;
+            if(portraits[i]!=null){
+                bool sounding=midi.IsAudible&&!hidden&&(now-handLast[i][0]<1.2||now-handLast[i][1]<1.2);
+                portraitAlpha[i]=Mathf.MoveTowards(portraitAlpha[i],sounding?1:0,Mathf.Min(Time.unscaledDeltaTime,.1f)*(sounding?1.2f:.7f));
+                if(seek&&!sounding)portraitAlpha[i]=0;
+                float pw=panelW,ph=panelH;float w=Mathf.Round(pw*(vertical?.15f:.1f)),h=Mathf.Round(w*1.3f);
+                portraits[i].style.width=w;portraits[i].style.height=h;
+                // Beside its torus, on its left: under the title for the upper torus, above it for the lower one (the lower
+                // half's top is where the caption stands), and always inside the frame.
+                float px=Mathf.Clamp(bounds[i].xMin*pw-w-10,8,pw-w-8);
+                float py=Mathf.Clamp(upper?labelTop+TitleHeight:labelTop-h-8,8,ph-h-ph*.12f);
+                portraits[i].style.left=px;portraits[i].style.top=py;
+                portraits[i].style.opacity=Mathf.SmoothStep(0,1,portraitAlpha[i]);portraits[i].style.display=portraitAlpha[i]>.002f?DisplayStyle.Flex:DisplayStyle.None;
+            }
+            labels[i].style.left=bounds[i].xMin*panelW+20;labels[i].style.top=labelTop;
+            badges[i].style.left=bounds[i].xMin*panelW+20;badges[i].style.top=labelTop+(TwoPianos?46:24);
         }
         frameIndex=lo;lastSeek=midi.SeekRevision;last=now;lastAudible=midi.IsAudible;
     }
@@ -168,6 +210,6 @@ public sealed class ConcertoTori : MonoBehaviour
             }
         }
     }
-    void DisposeVisuals(){for(int i=0;i<2;i++){labels[i]?.RemoveFromHierarchy();labels[i]=null;badges[i]?.RemoveFromHierarchy();badges[i]=null;if(shapes[i]!=null){shapes[i].gameObject.SetActive(false);Destroy(shapes[i].gameObject);}shapes[i]=null;}source=null;}
+    void DisposeVisuals(){for(int i=0;i<2;i++){portraits[i]?.RemoveFromHierarchy();portraits[i]=null;if(portraitTextures[i]!=null)Destroy(portraitTextures[i]);portraitTextures[i]=null;portraitAlpha[i]=0;labels[i]?.RemoveFromHierarchy();labels[i]=null;badges[i]?.RemoveFromHierarchy();badges[i]=null;if(shapes[i]!=null){shapes[i].gameObject.SetActive(false);Destroy(shapes[i].gameObject);}shapes[i]=null;}source=null;}
     void OnDestroy(){if(SplitActive&&master!=null){master.orthographic=previousOrthographic;master.orthographicSize=previousSize;master.clearFlags=previousClear;master.backgroundColor=previousBackground;master.ResetProjectionMatrix();if(backgroundCamera!=null)backgroundCamera.enabled=backgroundEnabled;}DisposeVisuals();}
 }

@@ -13,7 +13,7 @@ using UnityEngine;
 public sealed class KeyShiftIndicator : MonoBehaviour
 {
     Main main;LineRenderer rail,ticks,mark;Material glow;readonly TextBox[] names=new TextBox[12];
-    float shown;int target=-1,from=-1,direction,steps;Vector3 anchor;bool wasChanging;
+    float shown;int target=-1,from=-1,direction,steps;Vector3 anchor,anchorOffset;float anchorScale=1;bool wasChanging;
     const float Pitch=.13f,Tick=.05f,Fade=.5f;const int Points=41;
     static readonly Color Metal=new(.5f,.72f,.74f);
     readonly Vector3[] points=new Vector3[Points];readonly Vector3[] tickPoints=new Vector3[36];readonly Gradient gradient=new();readonly GradientAlphaKey[] alphas=new GradientAlphaKey[8];
@@ -46,11 +46,14 @@ public sealed class KeyShiftIndicator : MonoBehaviour
     {
         if(main==null)return;
         bool changing=main.KeyChanging&&main.currentKey!=main.KeyFrom;
-        if(changing&&!wasChanging){anchor=main.LabelPosition(main.KeyFrom);from=main.KeyFrom;target=main.currentKey;steps=Semitones(from,target);direction=steps==0?0:steps>0?1:-1;}
+        if(changing&&!wasChanging){anchor=main.LabelPosition(main.KeyFrom);anchorOffset=anchor-main.transform.position;anchorScale=Mathf.Max(1e-4f,main.transform.lossyScale.x);from=main.KeyFrom;target=main.currentKey;steps=Semitones(from,target);direction=steps==0?0:steps>0?1:-1;}
         wasChanging=changing;
         float want=changing?1:0;
         shown=Main.ReducedMotion?want:Mathf.MoveTowards(shown,want,Time.unscaledDeltaTime/(changing?.2f:Fade));
         if(shown<=0||target<0){if(rail.positionCount>0){rail.positionCount=ticks.positionCount=mark.positionCount=0;foreach(var n in names)n.gameObject.SetActive(false);}return;}
+        // The scale stands where the label was, but it travels and scales with its torus (a torus that glides to a new
+        // place in a split view takes its scale with it); it still never turns with the torus.
+        anchor=main.transform.position+anchorOffset*(main.transform.lossyScale.x/anchorScale);
         float scale=Mathf.Max(.5f,main.transform.lossyScale.x);
         // The scale slides with the turn, by the semitones between the keys, so the new key
         // arrives at the edge (the anchor) as the turn completes.

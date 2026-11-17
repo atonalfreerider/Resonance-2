@@ -5,14 +5,23 @@
   {"title": "Swap the hands", "scenes": [
     {"name": "B1 Liszt melody over Chopin bass", "l": [3,7], "c": [1,4], "mask": "L_rh C_lh"},
     {"name": "B2 Chopin melody over Liszt bass", "l": [3,7], "c": [1,4], "mask": "C_rh L_lh"}]},
-  {"title": "Simple and free", "scenes": [
-    {"name": "T1 Liszt alone, the return", "l": [18,23], "mask": "L_rh L_lh"},
-    {"name": "T2 Chopin alone, the flights", "c": [10,15], "mask": "C_rh C_lh"}]},
-  {"title": "The same dream in A", "scenes": [
-    {"name": "D1 Liszt alone, A major", "l": [30,40], "mask": "L_rh L_lh"},
-    {"name": "D2 Chopin alone, the chromatic dream", "c": [17,22], "mask": "C_rh C_lh"}]},
+  {"title": "The bridge and the flights", "scenes": [
+    {"name": "T1 Liszt alone, his bridge", "l": [14,17], "mask": "L_rh L_lh"},
+    {"name": "T2 Chopin alone, the flights", "c": [11,16], "mask": "C_rh C_lh"}]},
+  {"title": "Chopin's dream in A", "scenes": [
+    {"name": "D1 Chopin alone, the first dream", "c": [17,25], "mask": "C_rh C_lh"}]},
+  {"title": "The theme returns", "scenes": [
+    {"name": "R both pianos, the return", "l": [18,27], "c": [26,33], "mask": "L_rh L_lh C_rh C_lh"}]},
+  {"title": "Liszt's dream in A", "scenes": [
+    {"name": "D2 Liszt alone, the middle", "l": [28,43], "mask": "L_rh L_lh"}]},
+  {"title": "Chopin's second dream", "scenes": [
+    {"name": "D3 Chopin alone, the second dream", "c": [34,45], "mask": "C_rh C_lh"}]},
+  {"title": "The last return", "scenes": [
+    {"name": "Z both pianos, the last return", "l": [44,55], "dur": 41.0, "c": [46,57], "mask": "L_rh L_lh C_rh C_lh"}]},
+  {"title": "Chopin's long goodbye", "scenes": [
+    {"name": "G Chopin alone, the climax and the dolce", "c": [58,68], "mask": "C_rh C_lh"}]},
   {"title": "The cadenza and the close", "scenes": [
-    {"name": "E1 both, to the cadenza", "l": [53,55], "dur": 10.5, "c": [72,74], "mask": "L_rh L_lh C_rh C_lh"},
-    {"name": "E2 both, the cadenza and the last chord", "l": [56,61], "dur": 24.0, "c": [75,77], "mask": "L_rh L_lh C_rh C_lh"}]}
+    {"name": "G2 Chopin alone, toward the cadenza", "c": [69,74], "mask": "C_rh C_lh"},
+    {"name": "E both, the cadenza and the last chord", "l": [56,61], "dur": 24.0, "c": [75,77], "mask": "L_rh L_lh C_rh C_lh"}]}
  ]
 }

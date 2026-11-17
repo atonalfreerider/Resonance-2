@@ -5,6 +5,7 @@
 """
 import argparse
 import json
+import shutil
 from pathlib import Path
 
 from common import ROOT, atomic_json
@@ -17,7 +18,12 @@ def build(bundle=None):
     library = ROOT / 'PreparedSongs/Library'
     bundle = Path(bundle).resolve() if bundle else max(library.glob(director['bundle']), key=lambda p: p.stat().st_mtime)
     assets = ROOT / director['assets']
-    draft = {k: v for k, v in director.items() if k not in ('bundle', 'assets')}
+    draft = {k: v for k, v in director.items() if k not in ('bundle', 'assets', 'portraits')}
+    # Each pianist's portrait, shown beside their torus (ConcertoTori): portraits/<name>.jpg in the bundle.
+    portraits = bundle / 'portraits'
+    portraits.mkdir(exist_ok=True)
+    for name, file in director.get('portraits', {}).items():
+        shutil.copyfile((assets / file).resolve(), portraits / f'{name.lower()}.jpg')
     for picture in draft['pictures'].values():
         picture['file'] = str((assets / picture['file']).resolve())
     for cue in draft['cues']:

@@ -9,6 +9,10 @@ public sealed class ChordAurora : MonoBehaviour
     readonly float[] previous=new float[96],attacks=new float[96];
     public bool SingleNote=>current>=0&&volumes[current].Note>=0;
     public int EmitterNote=>current<0?-1:volumes[current].Note;
+    // How far the aurora rises off the chord's triangle, as a share of its usual height: a torus drawn in a split view
+    // (ConcertoTori) keeps it short so that it stays within its own half of the screen.
+    public float HeightScale=1;
+    static readonly int HeightScaleId=Shader.PropertyToID("_HeightScale");
     public float Crosswind {get;private set;}
     public float Shock {get;private set;}
     public void Strike(int index,float velocity){if(index>=0&&index<96)attacks[index]=Mathf.Max(attacks[index],velocity);}
@@ -174,7 +178,7 @@ public sealed class ChordAurora : MonoBehaviour
             v.Material.SetColor("_Hue",hue);
             if(layer==current&&drive>.003f){if(Shock>v.LastShock+.025f)v.PulseAge=0;v.LastShock=Shock;v.Material.SetVector("_Drive",new Vector4(levels.x,levels.y,levels.z,Shock*loudness));v.Material.SetVector("_Wind",new Vector4(wind.x,wind.y,wind.z,solo>=0?1:0));}
             v.PulseAge+=Time.unscaledDeltaTime;v.Material.SetFloat("_Pulse",v.PulseAge);
-            v.Material.SetFloat("_ShapeOpacity",main.CoiledVisibility);v.Material.SetVector("_Wave",new Vector4(phase,v.Energy,v.Age,v.Dying?1:0));
+            v.Material.SetFloat("_ShapeOpacity",main.CoiledVisibility);v.Material.SetFloat(HeightScaleId,HeightScale);v.Material.SetVector("_Wave",new Vector4(phase,v.Energy,v.Age,v.Dying?1:0));
 
         }
     }

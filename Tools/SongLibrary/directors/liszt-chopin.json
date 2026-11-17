@@ -47,14 +47,6 @@
       "commonsPage": "https://commons.wikimedia.org/wiki/File:Eug%C3%A8ne_Ferdinand_Victor_Delacroix_043.jpg",
       "placement": "right"
     },
-    "lehmann": {
-      "file": "../liszt-chopin/pictures/lehmann-1839.jpg",
-      "caption": "Liszt, painted by Henri Lehmann in 1839",
-      "credit": "Henri Lehmann, 1839 / Wikimedia Commons · Public domain",
-      "license": "Public domain",
-      "commonsPage": "https://commons.wikimedia.org/wiki/File:Liszt_(Lehmann_portrait).jpg",
-      "placement": "right"
-    },
     "danhauser": {
       "file": "../liszt-chopin/pictures/danhauser-1840.jpg",
       "caption": "Liszt at the piano among friends, by Josef Danhauser, 1840",
@@ -71,6 +63,14 @@
       "commonsPage": "https://commons.wikimedia.org/wiki/File:Fr%C3%A9d%C3%A9ric_Chopin_chez_les_Radziwill_-_d%27apr%C3%A8s_le_tableau_de_Hendrik_Siemiradzki_(1887)_-_btv1b8416507t.jpg",
       "placement": "right"
     },
+    "bisson": {
+      "file": "../liszt-chopin/pictures/chopin-bisson-1849.jpg",
+      "caption": "Chopin, photographed by Louis-Auguste Bisson in 1849",
+      "credit": "Louis-Auguste Bisson, 1849 / Wikimedia Commons · Public domain",
+      "license": "Public domain",
+      "commonsPage": "https://commons.wikimedia.org/wiki/File:Fr%C3%A9d%C3%A9ric_Chopin_by_Bisson,_1849.png",
+      "placement": "right"
+    },
     "hanfstaengl": {
       "file": "../liszt-chopin/pictures/liszt-1858.jpg",
       "caption": "Liszt, photographed by Franz Hanfstaengl in 1858",
@@ -78,27 +78,56 @@
       "license": "Public domain",
       "commonsPage": "https://commons.wikimedia.org/wiki/File:Franz_Liszt_1858.jpg",
       "placement": "right"
+    },
+    "liszt-scheffer": {
+      "file": "../liszt-chopin/pictures/liszt-biow-1843.jpg",
+      "caption": "Liszt, photographed in 1843",
+      "credit": "Daguerreotype, 1843 / Wikimedia Commons · Public domain",
+      "license": "Public domain",
+      "commonsPage": "https://commons.wikimedia.org/wiki/File:Liszt_in_1843.jpg",
+      "placement": "right"
+    },
+    "chopin-scheffer": {
+      "file": "../liszt-chopin/pictures/chopin-scheffer-1847.jpg",
+      "caption": "Chopin, painted by Ary Scheffer in 1847",
+      "credit": "Ary Scheffer, 1847 / Wikimedia Commons · Public domain",
+      "license": "Public domain",
+      "commonsPage": "https://commons.wikimedia.org/wiki/File:Ary_Scheffer_Chopin_portrait_Dordrecht_Museum_1847.jpg",
+      "placement": "right"
+    },
+    "wodzinska": {
+      "file": "../liszt-chopin/pictures/chopin-wodzinska-1836.jpg",
+      "caption": "Chopin, drawn by Maria Wodzińska in 1836",
+      "credit": "Maria Wodzińska, 1836 / Wikimedia Commons · Public domain",
+      "license": "Public domain",
+      "commonsPage": "https://commons.wikimedia.org/wiki/File:Wodzi%C5%84ska_Fryderyk_Chopin.jpg",
+      "placement": "right"
+    },
+    "op10": {
+      "file": "../liszt-chopin/pictures/op10-dedication.jpg",
+      "caption": "The title page of Chopin's Études Op. 10: dedicated to his friend J. Liszt",
+      "credit": "Bibliothèque nationale de France / Wikimedia Commons · Public domain",
+      "license": "Public domain",
+      "commonsPage": "https://commons.wikimedia.org/wiki/File:Etudes_pour_le_piano_-_Op._10_-_par_Fr%C3%A9d._Chopin_;_d%C3%A9di%C3%A9es_%C3%A0_son_ami_J._Liszt_-_bpt6k3177812_(11_of_76).jpg",
+      "placement": "right"
     }
   },
   "cues": [
     {
       "start": 0.0,
       "end": 7.6,
-      "concertoFocus": "balanced",
       "view": "Torus",
-      "narrationStart": 0.8,
       "text": "Two pianos in D flat: Liszt's Consolation No. 3 above",
       "speech": "Two pianos, one key: D flat major. Above, Liszt's Consolation Number Three.",
       "sourceIds": [
-        "wiki-consolations",
-        "wiki-op27"
+        "wiki-consolations"
       ],
-      "picture": "lehmann"
+      "concertoFocus": "balanced",
+      "narrationStart": 0.8
     },
     {
       "start": 7.6,
       "end": 19.0,
-      "concertoFocus": "balanced",
       "view": "Torus",
       "text": "Chopin's Nocturne Op. 27 No. 2 below",
       "speech": "Below, Chopin's Nocturne, opus twenty seven. He wrote it in the mid eighteen thirties. Liszt published his in eighteen fifty, after Chopin died.",
@@ -106,118 +135,236 @@
         "wiki-consolations",
         "wiki-op27"
       ],
-      "picture": "delacroix",
+      "concertoFocus": "balanced",
       "narrationStart": 7.9
     },
     {
       "start": 19.0,
       "end": 38.758,
-      "concertoFocus": "balanced",
       "view": "Torus",
-      "picture": "danhauser",
       "text": "So the debt runs from Chopin to Liszt: the same chord underneath, the same F rising out of it",
       "speech": "So the debt runs from Chopin to Liszt. Liszt had sat in the hall at Chopin's Paris debut in eighteen thirty two. Here, nearly twenty years later, he writes his own prayer in the very same key, over the very same rocking chord.",
       "sourceIds": [
         "friendship",
         "wiki-consolations"
-      ]
+      ],
+      "concertoFocus": "balanced",
+      "picture": "danhauser"
     },
     {
       "start": 39.558,
-      "end": 54.5,
-      "concertoFocus": "balanced",
+      "end": 54.465,
       "view": "Torus",
       "text": "The hands trade places: Liszt's right hand over Chopin's left",
-      "speech": "Now the hands trade places. Liszt's right hand sings above Chopin's left hand. The chord underneath is the same, so the tune simply fits. Nothing clashes, because both composers built the melody on the same D flat chord.",
+      "speech": "Now the hands trade places. Liszt's right hand sings above Chopin's left. The chord underneath is the same, so the tune simply fits. Both left hands play twelve notes a bar, rocking through D flat, F and A flat.",
       "sourceIds": [
         "scores"
-      ]
+      ],
+      "concertoFocus": "balanced"
     },
     {
-      "start": 54.5,
+      "start": 54.465,
       "end": 69.371,
-      "concertoFocus": "balanced",
       "view": "Torus",
       "text": "And back: Chopin's right hand over Liszt's left",
-      "speech": "And back again. Chopin's right hand, more ornate, floats over Liszt's left. The line is more decorated, but the ground beneath it holds. In these opening bars the two pieces are very nearly interchangeable.",
+      "speech": "And back again. Chopin's right hand, more ornate, floats over Liszt's left. The line is more decorated, but the ground beneath it holds. Both scores are marked with pedal, so the harmony blurs and rings.",
       "sourceIds": [
         "scores"
-      ]
+      ],
+      "concertoFocus": "balanced"
     },
     {
       "start": 70.171,
-      "end": 88.1,
-      "concertoFocus": "piano",
+      "end": 82.097,
       "view": "Torus",
-      "text": "Liszt keeps it simple: the tune returns an octave higher",
-      "speech": "Liszt keeps it simple. When his tune returns, he lifts it an octave, adds a few notes, and lets it sing. The beauty is in the plainness.",
+      "text": "Liszt's four-bar bridge: the left hand drops out",
+      "speech": "Liszt's bridge is only four bars long, and the left hand drops out, so the melody stands alone. Then the rocking chord returns, and the theme begins again.",
       "sourceIds": [
         "scores"
-      ]
+      ],
+      "concertoFocus": "piano"
     },
     {
-      "start": 88.1,
-      "end": 110.965,
-      "concertoFocus": "orchestra",
+      "start": 82.097,
+      "end": 105.002,
       "view": "Torus",
-      "narrationStart": 89.3,
       "text": "Chopin cannot leave a melody alone: flights that sound improvised",
-      "speech": "Chopin cannot leave a melody alone. The left hand rocks on, but the right hand drifts into flights of notes, as if he were improvising at the keyboard. Liszt admired exactly this freedom, and wrote about Chopin's rubato in his biography.",
+      "speech": "Chopin cannot leave a melody alone. The left hand rocks on, but the right hand drifts into flights of notes, as if he were improvising at the keyboard. Liszt admired this freedom, and wrote about Chopin's rubato.",
       "sourceIds": [
         "life",
         "wiki-op27"
       ],
+      "concertoFocus": "orchestra",
       "picture": "radziwill"
     },
     {
-      "start": 111.765,
-      "end": 144.6,
-      "concertoFocus": "piano",
+      "start": 105.802,
+      "end": 122.0,
       "view": "Torus",
-      "narrationStart": 113.0,
-      "text": "Liszt wanders away from D flat toward A",
-      "speech": "Both pieces leave home, and Liszt wanders toward a distant key, around A, before he returns to D flat as if nothing had happened. Even this detour is gentle, a lullaby that wanders and comes home.",
+      "text": "Chopin leaves home: nine bars of sliding harmony",
+      "speech": "Now Chopin leaves home, and for nine bars his harmony slides through sharps and flats, far from D flat. Listen for E, A and B, notes that do not belong to D flat major.",
       "sourceIds": [
         "scores"
-      ]
-    },
-    {
-      "start": 144.6,
-      "end": 167.798,
+      ],
       "concertoFocus": "orchestra",
-      "view": "Torus",
-      "narrationStart": 145.8,
-      "text": "Chopin goes further: chromatic harmony, a free right hand",
-      "speech": "Chopin goes further. His harmony slides through sharps and flats, the same home, but a stranger road, and the right hand is free once more. Where Liszt is plain, Chopin is restless.",
-      "sourceIds": [
-        "scores"
-      ]
+      "picture": "bisson",
+      "take": 2
     },
     {
-      "start": 168.598,
-      "end": 179.1,
-      "concertoFocus": "balanced",
+      "start": 122.0,
+      "end": 140.404,
       "view": "Torus",
-      "narrationStart": 169.2,
-      "text": "Both pianos climb toward a cadenza",
-      "speech": "Now both pianos climb together toward a cadenza, a free flourish before the end.",
+      "text": "A dominant chord pulls him home; bar 26 copies bar 2",
+      "speech": "A dominant chord pulls him home, and the theme can return exactly as it first sounded. Chopin's returns are almost literal: bar twenty six is a copy of bar two.",
       "sourceIds": [
         "scores"
-      ]
+      ],
+      "concertoFocus": "orchestra",
+      "take": 1
     },
     {
-      "start": 179.1,
-      "end": 203.098,
-      "concertoFocus": "balanced",
+      "start": 141.204,
+      "end": 156.0,
       "view": "Torus",
-      "narrationStart": 180.0,
-      "text": "The same cascade to a high E flat, and the same D flat chord",
-      "speech": "Each pianist runs a cascade up to the same high E flat, and settles back into D flat. Liszt published his biography of Chopin in eighteen fifty two. This piece had already said what it wanted to say.",
+      "text": "The theme returns on both pianos",
+      "speech": "The theme returns, and now both pianos sing it at once. Liszt lifts his tune an octave higher and adds a few notes. Chopin plays his almost note for note, before the line starts to bloom.",
+      "sourceIds": [
+        "scores"
+      ],
+      "concertoFocus": "balanced",
+      "picture": "hanfstaengl"
+    },
+    {
+      "start": 156.0,
+      "end": 171.017,
+      "view": "Torus",
+      "text": "Same chord, same hour: plain and restless",
+      "speech": "Two ways of saying the same thing, over the same chord. Where Liszt is plain, Chopin is restless. Eight bars of Chopin's return match ten of Liszt's, and each lasts about half a minute.",
+      "sourceIds": [
+        "scores"
+      ],
+      "concertoFocus": "balanced",
+      "take": 2
+    },
+    {
+      "start": 171.817,
+      "end": 195.0,
+      "view": "Torus",
+      "text": "Liszt's great departure: ten bars toward A",
+      "speech": "Liszt's middle section is his great departure. For ten bars, from bar thirty one to forty, he drifts toward A, a distant key for a piece in D flat.",
+      "sourceIds": [
+        "scores"
+      ],
+      "concertoFocus": "piano",
+      "picture": "liszt-scheffer"
+    },
+    {
+      "start": 195.0,
+      "end": 219.519,
+      "view": "Torus",
+      "text": "D flat comes home; the simplicity is the point",
+      "speech": "Around bar forty one the flat keys return. D flat comes home, and the melody falls back into the cradle of the opening. The simplicity is the point. Liszt marks the piece lento placido: slow and placid.",
+      "sourceIds": [
+        "scores"
+      ],
+      "concertoFocus": "piano",
+      "take": 2
+    },
+    {
+      "start": 220.319,
+      "end": 242.0,
+      "view": "Torus",
+      "text": "Chopin's second episode: through A and E",
+      "speech": "Chopin's second episode wanders through A and E, with a right hand that is nearly all ornament. Chopin marks his nocturne lento sostenuto: slow and sustained.",
+      "sourceIds": [
+        "scores"
+      ],
+      "concertoFocus": "orchestra",
+      "picture": "chopin-scheffer"
+    },
+    {
+      "start": 242.0,
+      "end": 266.202,
+      "view": "Torus",
+      "text": "The rhythm loosens: rubato",
+      "speech": "Listen to how the rhythm loosens. A flowing figure like this is where pianists take rubato, stealing time and giving it back. Pianists often describe it as a singer decorating a line.",
+      "sourceIds": [
+        "life"
+      ],
+      "concertoFocus": "orchestra"
+    },
+    {
+      "start": 267.002,
+      "end": 288.0,
+      "view": "Torus",
+      "text": "The last return on both pianos",
+      "speech": "The last return. Chopin brings the theme back a third time, and Liszt does the same, a little slower now. Notice how little each has to change. The chord underneath was always enough.",
+      "sourceIds": [
+        "scores"
+      ],
+      "concertoFocus": "balanced"
+    },
+    {
+      "start": 288.0,
+      "end": 308.002,
+      "view": "Torus",
+      "text": "Chopin crowns it with a climb; Liszt is shorter: 61 bars to 77",
+      "speech": "Chopin crowns it with a long climb, and a run of notes that sounds improvised. Liszt's piece is far shorter, sixty one bars to seventy seven, and that is much of the difference between a consolation and a nocturne.",
+      "sourceIds": [
+        "scores"
+      ],
+      "concertoFocus": "balanced"
+    },
+    {
+      "start": 308.802,
+      "end": 330.0,
+      "view": "Torus",
+      "text": "Chopin's farewell: bars 58 to 68",
+      "speech": "Chopin keeps going. Bars fifty eight to sixty eight are his farewell: the music slows, thins out, and keeps almost returning to the theme. In bar sixty the bass drops to a very low A flat.",
+      "sourceIds": [
+        "scores"
+      ],
+      "concertoFocus": "orchestra",
+      "picture": "wodzinska"
+    },
+    {
+      "start": 330.0,
+      "end": 351.354,
+      "view": "Torus",
+      "text": "Fragments of the theme drift up",
+      "speech": "Fragments of the theme drift up out of the left hand, as if Chopin were remembering it. In bars sixty two to sixty four the right hand plays only three or four notes a bar.",
+      "sourceIds": [
+        "scores"
+      ],
+      "concertoFocus": "orchestra"
+    },
+    {
+      "start": 352.154,
+      "end": 376.188,
+      "view": "Torus",
+      "text": "The left hand rocks between D flat and its dominant",
+      "speech": "From here the left hand simply rocks between D flat and its dominant, bar after bar, while the right hand floats above. Then the cadenza begins. In bars seventy one and seventy three it leans on the dominant, and seventy two and seventy four answer on D flat.",
+      "sourceIds": [
+        "scores"
+      ],
+      "concertoFocus": "orchestra"
+    },
+    {
+      "start": 376.188,
+      "end": 400.188,
+      "view": "Torus",
+      "text": "Both cadenzas climb to the same high E flat; the D flat chord closes",
+      "speech": "Now both pianos run the cadenza together, a cascade up to the same high E flat, and settle into D flat. Two years before Liszt published his life of Chopin, he had already written his answer in music.",
       "sourceIds": [
         "life",
         "scores"
       ],
-      "picture": "hanfstaengl"
+      "concertoFocus": "balanced",
+      "picture": "op10"
     }
-  ]
+  ],
+  "portraits": {
+    "Liszt": "../liszt-chopin/pictures/lehmann-1839.jpg",
+    "Chopin": "../chopin-op10-3/pictures/delacroix-1838.jpg"
+  }
 }

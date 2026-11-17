@@ -25,7 +25,8 @@ OUT = DATA / 'build'
 SR = 44100
 PARTS = ('L_rh', 'L_lh', 'C_rh', 'C_lh')       # MIDI tracks 1..4: Liszt hands then Chopin hands
 GAP = 0.8                                      # silence between chapters (seconds)
-TAIL = 0.9                                     # a cut part rings out this long
+TAIL = 1.2                                     # a cut part rings out this long
+PRE = 0.8                                      # a part entering mid-chapter crossfades in over this long
 
 
 def scenes_and_chapters():
@@ -112,25 +113,31 @@ def main():
             else:
                 s0, s1, ratio = m['src0'], m['src1'], m['ratio']
                 d0, d1 = sc['dst0'] + sc['lead'], sc['dst1']
-            # audio: the scene's source span plus a ringing tail, stretched by ratio, faded out over the tail
+            # audio: a part that enters mid-chapter comes in over PRE seconds of the music just before its first bar
+            # (equal-power crossfade, so the bar still lands at full level); one that leaves rings out and fades.
             src = stems[p]
-            a, b = int(s0 * SR), int(min((s1 + TAIL / ratio), len(src) / SR) * SR)
+            first = si == 0 or timeline[si - 1]['chapter'] != sc['chapter']
+            prev = last.get(p)
+            continuing = prev is not None and abs(prev[0] - s0) < 1e-3 and abs(prev[1] - d0) < 1e-3
+            pre_src = 0.0 if (continuing or first) else min(PRE / ratio, s0, d0 / ratio)
+            pre = pre_src * ratio
+            a, b = int((s0 - pre_src) * SR), int(min((s1 + TAIL / ratio), len(src) / SR) * SR)
             seg = stretch(src[a:b], ratio)
-            n_main = int((d1 - d0) * SR)
-            fade_in = min(int(.006 * SR), len(seg))
-            seg[:fade_in] *= np.linspace(0, 1, fade_in)[:, None]
+            n_pre, n_main = int(round(pre * SR)), int(round((d1 - d0) * SR))
+            if pre > 0:
+                seg[:n_pre] *= np.sin(np.linspace(0, np.pi / 2, n_pre))[:, None]
+            elif not continuing:
+                fade_in = min(int((.12 if first else .006) * SR), len(seg))
+                seg[:fade_in] *= np.linspace(0, 1, fade_in)[:, None]
             nxt = next((t for t in timeline[si + 1:si + 2] if p in t['mask'] and t.get(side)), None)
             joins = nxt is not None and abs(nxt[side]['src0'] - s1) < 1e-3 and abs(nxt['dst0'] + (nxt['lead'] if side == 'C' else 0) - d1) < 1e-3
-            prev = last.get(p)
-            if prev is not None and abs(prev[0] - s0) < 1e-3 and abs(prev[1] - d0) < 1e-3:
-                seg[:fade_in] /= np.linspace(0, 1, fade_in)[:, None].clip(1e-6)   # continuing: no fade-in
             last[p] = (s1, d1)
-            tail = len(seg) - n_main
+            tail = len(seg) - (n_pre + n_main)
             if joins:
-                seg = seg[:n_main]
+                seg = seg[:n_pre + n_main]
             elif tail > 0:
-                seg[n_main:] *= np.linspace(1, 0, tail)[:, None] ** 2
-            start = int(d0 * SR)
+                seg[n_pre + n_main:] *= np.cos(np.linspace(0, np.pi / 2, tail))[:, None]
+            start = max(0, int(round((d0 - pre) * SR)))
             end = min(start + len(seg), len(mix))
             mix[start:end] += seg[:end - start]
             # MIDI: onsets inside the span, mapped by the same line; sounding length clipped to the scene's end
@@ -173,7 +180,7 @@ def main():
         mid.tracks.append(tr)
     mid.save(OUT / 'two-pianos.mid')
     (OUT / 'song.json').write_text(json.dumps(dict(Key=5, Minor=False, LeadVocalTrack=-1, KeySource='Authored scores: D-flat major',
-                                                     PianoConcerto=True, PianoTracks=[1, 2], OrchestraTracks=[3, 4],
+                                                     PianoConcerto=True, PianoTracks=[2, 3], OrchestraTracks=[4, 5],  # the aligner adds a tempo-map track before ours
                                                      SectionSource='Scenes of the comparison'), indent=1), encoding='utf-8')
     (OUT / 'timeline.json').write_text(json.dumps(dict(duration=total, chapters=chapters, scenes=report), indent=1), encoding='utf-8')
     for r in report:

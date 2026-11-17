@@ -1,6 +1,6 @@
 Shader "Resonance/ChordAurora"
 {
-    Properties { _ViewOpacity ("View opacity",Float)=1 _ShapeOpacity("Shape opacity",Float)=1 _Hue ("Wave color",Color)=(0,0.4,1,1) _Wave ("Phase energy release dying",Vector)=(0,0,0,0) }
+    Properties { _ViewOpacity ("View opacity",Float)=1 _ShapeOpacity("Shape opacity",Float)=1 _Hue ("Wave color",Color)=(0,0.4,1,1) _Wave ("Phase energy release dying",Vector)=(0,0,0,0) _HeightScale("Height scale",Float)=1 }
     SubShader
     {
         Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent+11" "RenderType"="Transparent" }
@@ -13,7 +13,7 @@ Shader "Resonance/ChordAurora"
             #pragma vertex Vert
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            float _ViewOpacity,_ShapeOpacity;float4 _Hue,_Wave,_Drive,_Wind;float _Pulse;
+            float _ViewOpacity,_ShapeOpacity;float4 _Hue,_Wave,_Drive,_Wind;float _Pulse,_HeightScale;
             // Chord volumes: the emitting surface as a 17 by 17 grid over the chord's triangle.
             float _UseGrid;float4 _GridPoint[289];float4 _GridNormal[289];
             struct A { float4 positionOS:POSITION;float3 normalOS:NORMAL;float2 uv:TEXCOORD0;float4 mode:TEXCOORD1;float4 field:TEXCOORD2; };
@@ -41,7 +41,7 @@ Shader "Resonance/ChordAurora"
                 float3 weights=float3(1-x,x*(1-u),x*u);
                 float localEnergy=saturate(dot(weights,_Drive.xyz))*energy;
                 float peak=lerp(.6+.4*abs(i.mode.y),pow(saturate(1-x),.4),_Wind.w);
-                float height=.35+4.5*sqrt(localEnergy)*peak;
+                float height=(.35+4.5*sqrt(localEnergy)*peak)*_HeightScale;
                 float spread=h*lerp(.38,.16,_Wind.w)*(.4+.6*x);
                 float distance=h*height;
                 float pressure=sin(distance*17-t*5.5);
@@ -50,7 +50,7 @@ Shader "Resonance/ChordAurora"
                 float rise=_Wave.w*_Wave.z*.35*h;
                 float3 local=anchor+normal*(.018+distance+displacement+rise)
                     +(tangent*cos(angle+t*.45)+bitangent*sin(angle+t*.45))*spread
-                    +_Wind.xyz*h*h*(.55+.45*sin(t*3-distance*2));
+                    +_Wind.xyz*_HeightScale*h*h*(.55+.45*sin(t*3-distance*2));
                 // Changing interference lobes, rather than rows of stretched rays.
                 float a=sin(x*12+u*7+distance*5)*cos(t*1.1);
                 float b=cos(u*13-x*4-distance*6)*sin(t*1.1);
